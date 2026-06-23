@@ -1,0 +1,28 @@
+package auth
+
+import (
+	"fmt"
+	"time"
+)
+
+const Banner = `
+██████╗ ██╗████████╗██╗    ██╗ █████╗ ██╗   ██╗███████╗
+██╔══██╗██║╚══██╔══╝██║    ██║██╔══██╗██║   ██║██╔════╝
+██████╔╝██║   ██║   ██║ █╗ ██║███████║██║   ██║█████╗
+██╔══██╗██║   ██║   ██║███╗██║██╔══██║╚██╗ ██╔╝██╔══╝
+██████╔╝██║   ██║   ╚███╔███╔╝██║  ██║ ╚████╔╝ ███████╗
+╚═════╝ ╚═╝   ╚═╝    ╚══╝╚══╝ ╚═╝  ╚═╝  ╚═══╝  ╚══════╝
+`
+
+// PrintLoginSuccess prints the Bitwave banner and structured login info.
+func PrintLoginSuccess(email string, expiresAt int64) {
+	fmt.Print(Banner)
+	fmt.Println()
+	if email != "" {
+		fmt.Printf("  Logged in as    %s\n", email)
+	} else {
+		fmt.Println("  Logged in successfully.")
+	}
+	fmt.Printf("  Token expires   %s\n", time.Unix(expiresAt, 0).Format("Mon Jan 2, 2006 3:04 PM MST"))
+	fmt.Println()
+}
