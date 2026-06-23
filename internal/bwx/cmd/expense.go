@@ -12,7 +12,7 @@ import (
 
 	"github.com/bitwave-io/bitwave-accounting-sdk/format"
 	"github.com/bitwave-io/bitwave-accounting-sdk/model"
-	"github.com/bitwave-io/bitwave-cli/pkg/expense"
+	"github.com/bitwave-io/bitwave-accounting-sdk/expense"
 )
 
 func newExpenseCmd() *cobra.Command {
