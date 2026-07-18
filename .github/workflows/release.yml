@@ -3,17 +3,13 @@ name: Release
 on:
   push:
     tags: ["v*"]
-  # Debug entry point: publishes one placeholder platform-package version with
-  # verbose HTTP logging to exercise the npm OIDC trusted-publishing exchange
-  # without cutting a release. Trusted publishers match on this workflow's
-  # filename, so the auth path is identical to a real release.
-  workflow_dispatch:
 
 permissions:
   contents: write
   # npm trusted publishing: the job exchanges a GitHub OIDC token for npm
   # publish rights — no NPM_TOKEN secret. Each published package must list
-  # this repo + workflow as a trusted publisher on npmjs.com.
+  # this repo + workflow (release.yml, publisher "GitHub Actions") as a
+  # trusted publisher on npmjs.com.
   id-token: write
 
 jobs:
@@ -24,7 +20,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: actions/setup-go@v5
-        if: github.event_name == 'push'
         with:
           go-version-file: go.mod
       # No registry-url here: that makes setup-node write an .npmrc with a
@@ -35,33 +30,13 @@ jobs:
           node-version: 24
       # Trusted publishing needs npm >= 11.5.1 for OIDC support.
       - run: npm install -g npm@latest && npm --version
-      - name: Debug npm OIDC (dispatch only)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          echo "GITHUB_ACTIONS=$GITHUB_ACTIONS"
-          echo "OIDC request url: ${ACTIONS_ID_TOKEN_REQUEST_URL:+present}"
-          echo "OIDC request token: ${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+present}"
-          npm config ls -l | grep -Ei "registry|auth" || true
-          mkdir -p /tmp/oidc-test && cd /tmp/oidc-test
-          cat > package.json <<'EOF'
-          {
-            "name": "bitwave",
-            "version": "0.0.3",
-            "description": "OIDC pipeline test placeholder — install a 0.x release, not this.",
-            "license": "AGPL-3.0-only",
-            "repository": { "type": "git", "url": "git+https://github.com/bitwave-io/bitwave-cli.git" }
-          }
-          EOF
-          npm publish --access public --tag oidc-test --loglevel http
       - name: Run tests
-        if: github.event_name == 'push'
         run: go test ./...
       # Builds all platforms, signs + notarizes darwin binaries when the
       # MACOS_* secrets are present (skips cleanly when absent), creates the
       # GitHub Release with archives + checksums, and pushes the Homebrew cask
       # to bitwave-io/homebrew-tap. See docs/RELEASING.md for secret setup.
       - uses: goreleaser/goreleaser-action@v6
-        if: github.event_name == 'push'
         with:
           distribution: goreleaser
           version: "~> v2"
@@ -75,5 +50,4 @@ jobs:
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
       - name: Publish to npm (OIDC trusted publishing)
-        if: github.event_name == 'push'
         run: node scripts/publish-npm.mjs
