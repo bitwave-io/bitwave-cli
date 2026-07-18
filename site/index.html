@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bitwave — take your books to the command line</title>
+<meta name="description" content="bitwave is the agent-first accounting platform: auditable double-entry books for AI agents and humans, run locally as plain text or shared in the Bitwave cloud.">
+<meta property="og:title" content="bitwave — take your books to the command line">
+<meta property="og:description" content="Agent-first accounting. Run locally, share in the cloud. Free and open source.">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg-raise: #11141b;
+    --terminal: #0d1017;
+    --border: #232936;
+    --text: #e6e9ef;
+    --muted: #8b94a7;
+    --accent: #35d4c7;
+    --accent-2: #7ee787;
+    --gold: #e3b341;
+    --mag: #d2a8ff;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); line-height: 1.55; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  header { border-bottom: 1px solid var(--border); }
+  nav { display: flex; align-items: center; gap: 24px; padding: 18px 0; }
+  .brand { font-family: var(--mono); font-weight: 700; font-size: 18px; color: var(--text); }
+  .brand span { color: var(--accent); }
+  nav .links { margin-left: auto; display: flex; gap: 20px; font-size: 14px; }
+  nav .links a { color: var(--muted); }
+  nav .links a:hover { color: var(--text); }
+
+  .hero { padding: 72px 0 40px; text-align: center; }
+  .hero h1 { font-size: clamp(32px, 6vw, 56px); letter-spacing: -0.02em; line-height: 1.1; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p.sub { margin: 18px auto 0; max-width: 640px; color: var(--muted); font-size: 18px; }
+
+  .installbox { margin: 36px auto 0; max-width: 720px; background: var(--bg-raise); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; text-align: left; }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tabs button { background: none; border: none; color: var(--muted); font-family: var(--sans); font-size: 14px; padding: 12px 18px; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tabs button.active { color: var(--text); border-bottom-color: var(--accent); }
+  .cmdline { display: flex; align-items: center; gap: 12px; padding: 18px; font-family: var(--mono); font-size: 15px; }
+  .cmdline code { flex: 1; overflow-x: auto; white-space: nowrap; color: var(--accent-2); }
+  .cmdline code::before { content: "$ "; color: var(--muted); }
+  .copy { background: var(--terminal); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 6px 12px; font-size: 12px; cursor: pointer; }
+  .copy:hover { color: var(--text); border-color: var(--muted); }
+  .verline { padding: 0 18px 14px; font-size: 13px; color: var(--muted); }
+
+  .terminal { margin: 56px auto 0; max-width: 860px; background: var(--terminal); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 80px rgba(0,0,0,.5); text-align: left; }
+  .term-bar { display: flex; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .term-body { padding: 20px 22px 26px; font-family: var(--mono); font-size: 14px; min-height: 300px; }
+  .term-desc { color: var(--muted); font-family: var(--sans); font-size: 14px; margin-bottom: 12px; min-height: 20px; }
+  .term-cmd { color: var(--text); white-space: pre-wrap; }
+  .term-cmd::before { content: "$ "; color: var(--accent); }
+  .cursor { display: inline-block; width: 8px; height: 15px; background: var(--accent); vertical-align: text-bottom; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .term-out { margin-top: 10px; color: var(--muted); white-space: pre; overflow-x: auto; }
+  .term-out .ok { color: var(--accent-2); }
+  .term-out .amt { color: var(--gold); }
+  .term-out .acct { color: var(--mag); }
+
+  section.features { padding: 88px 0 24px; }
+  .feature { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; padding: 44px 0; border-bottom: 1px solid var(--border); }
+  .feature:last-child { border-bottom: none; }
+  .feature h2 { font-size: 30px; letter-spacing: -0.01em; margin-bottom: 12px; }
+  .feature p { color: var(--muted); font-size: 16px; }
+  .feature p code, .feature li code { font-family: var(--mono); font-size: 14px; color: var(--accent-2); background: var(--bg-raise); padding: 1px 6px; border-radius: 4px; }
+  .feature .snippet { background: var(--terminal); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; font-family: var(--mono); font-size: 13px; color: var(--muted); white-space: pre; overflow-x: auto; }
+  .feature .snippet b { color: var(--text); font-weight: normal; }
+  .feature ul { color: var(--muted); margin: 12px 0 0 18px; }
+  .feature .cta { display: inline-block; margin-top: 16px; font-size: 15px; }
+  @media (max-width: 760px) { .feature { grid-template-columns: 1fr; } }
+
+  .bottom-install { text-align: center; padding: 72px 0 88px; }
+  .bottom-install h2 { font-size: 30px; margin-bottom: 8px; }
+  .bottom-install p { color: var(--muted); }
+
+  footer { border-top: 1px solid var(--border); padding: 36px 0 48px; font-size: 14px; color: var(--muted); }
+  footer .cols { display: flex; gap: 64px; flex-wrap: wrap; }
+  footer h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--text); margin-bottom: 10px; }
+  footer ul { list-style: none; }
+  footer li { margin: 6px 0; }
+  footer a { color: var(--muted); }
+  footer a:hover { color: var(--text); }
+  footer .fine { margin-top: 32px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <div class="brand"><span>~</span> bitwave</div>
+      <div class="links">
+        <a href="https://github.com/bitwave-io/bitwave-cli#readme">Manual</a>
+        <a href="https://github.com/bitwave-io/bitwave-cli/releases">Release notes</a>
+        <a href="https://github.com/bitwave-io/bitwave-cli">GitHub</a>
+        <a href="https://bitwave.io">Bitwave</a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <div class="hero">
+      <h1>Take your books to the<br><em>command line</em></h1>
+      <p class="sub">bitwave is the agent-first accounting platform. AI agents and humans keep
+      complete, auditable, double-entry books through one CLI — run locally as plain
+      text, or share in the Bitwave cloud. Free and open source.</p>
+
+      <div class="installbox" id="install-top">
+        <div class="tabs" role="tablist">
+          <button class="active" data-cmd="brew install bitwave-io/tap/bitwave">Homebrew</button>
+          <button data-cmd="npm install -g bitwave">npm</button>
+          <button data-cmd="curl -fsSL https://raw.githubusercontent.com/bitwave-io/bitwave-cli/main/install.sh | sh">Shell</button>
+          <button data-cmd="go install github.com/bitwave-io/bitwave-cli/cmd/bitwave@latest">Go</button>
+          <button data-cmd="npm install -g bitwave">Windows</button>
+        </div>
+        <div class="cmdline">
+          <code>brew install bitwave-io/tap/bitwave</code>
+          <button class="copy">Copy</button>
+        </div>
+        <div class="verline">Current version: <a class="ver" href="https://github.com/bitwave-io/bitwave-cli/releases/latest">latest</a>
+          · <a href="https://github.com/bitwave-io/bitwave-cli/releases/latest">Download binaries</a></div>
+      </div>
+
+      <div class="terminal">
+        <div class="term-bar"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span></div>
+        <div class="term-body">
+          <div class="term-desc" id="demo-desc"></div>
+          <div class="term-cmd"><span id="demo-cmd"></span><span class="cursor"></span></div>
+          <div class="term-out" id="demo-out"></div>
+        </div>
+      </div>
+    </div>
+
+    <section class="features">
+      <div class="feature">
+        <div>
+          <h2>Your entire accounting workflow</h2>
+          <p>Workspaces, journals, balance-checked entries, accounts, prices, expense
+          reports, and the full ledger-style report suite — <code>bal</code>,
+          <code>reg</code>, <code>equity</code>, <code>stats</code>, CSV export — from
+          one binary with no dependencies.</p>
+          <a class="cta" href="https://github.com/bitwave-io/bitwave-cli#readme">Read the manual →</a>
+        </div>
+        <div class="snippet">$ <b>bitwave bal</b>
+          $4875.64  <b>Assets:Checking</b>
+           $124.36  <b>Expenses:Groceries</b>
+         -$5000.00  <b>Income:Salary</b></div>
+      </div>
+
+      <div class="feature">
+        <div class="snippet">$ <b>bitwave je new --date 2026-05-29 --payee "AWS" \
+    --posting "Expenses:Cloud  $42.18" \
+    --posting "Assets:Checking -$42.18"</b>
+bitwave: workspace=/books (local) | org=acme | identity=agent-token (env)
+created default:20260529-001</div>
+        <div>
+          <h2>Built for agents</h2>
+          <p>Every command is non-interactive, every output is parseable, and every
+          write must balance before it lands. Agents authenticate with
+          <code>BITWAVE_AGENT_TOKEN</code>, see their operating context in a one-line
+          banner, and leave a replayable, diffable audit trail behind.</p>
+          <a class="cta" href="https://github.com/bitwave-io/bitwave-cli#agents-please-read">Agents, please read →</a>
+        </div>
+      </div>
+
+      <div class="feature">
+        <div>
+          <h2>Local or cloud, same surface</h2>
+          <p>Books live in a directory of plain-text journal files — diff them, blame
+          them, commit them. When more than one person (or agent) needs the books,
+          the same commands run against a shared workspace in the Bitwave cloud.
+          Flip one TOML field to switch; <code>bitwave migrate</code> moves you.</p>
+          <a class="cta" href="https://github.com/bitwave-io/bitwave-cli#cloud-mode">Cloud mode →</a>
+        </div>
+        <div class="snippet">$ <b>bitwave init --cloud --name "FY2026"</b>
+created cloud workspace ws_abc123 in org org_xyz789
+$ <b>bitwave share --to controller@acme.com</b>
+share link emailed ✓</div>
+      </div>
+
+      <div class="feature">
+        <div class="snippet">$ <b>bitwave je export | hledger -f - bal</b>
+$ <b>bitwave je import their-2025.beancount</b>
+imported 187 entries into journal `default`</div>
+        <div>
+          <h2>We ♥ plain-text accounting</h2>
+          <p>bitwave speaks the same journal grammar as <code>hledger</code>,
+          <code>ledger</code>, and (with a shim) <code>beancount</code> — every other
+          tool in the ecosystem can read, audit, and report on your books. The
+          engine is open source under MPL-2.0; the CLI is AGPL-3.0 and ready for
+          your contributions.</p>
+          <a class="cta" href="https://github.com/bitwave-io/bitwave-accounting-sdk">bitwave-accounting-sdk →</a>
+        </div>
+      </div>
+    </section>
+
+    <div class="bottom-install">
+      <h2>Install now, upgrade forever</h2>
+      <p><code style="font-family:var(--mono)">bitwave upgrade</code> keeps you current on every channel.</p>
+      <div class="installbox" id="install-bottom">
+        <div class="tabs" role="tablist">
+          <button class="active" data-cmd="brew install bitwave-io/tap/bitwave">Homebrew</button>
+          <button data-cmd="npm install -g bitwave">npm</button>
+          <button data-cmd="curl -fsSL https://raw.githubusercontent.com/bitwave-io/bitwave-cli/main/install.sh | sh">Shell</button>
+          <button data-cmd="go install github.com/bitwave-io/bitwave-cli/cmd/bitwave@latest">Go</button>
+          <button data-cmd="npm install -g bitwave">Windows</button>
+        </div>
+        <div class="cmdline">
+          <code>brew install bitwave-io/tap/bitwave</code>
+          <button class="copy">Copy</button>
+        </div>
+        <div class="verline">Current version: <a class="ver" href="https://github.com/bitwave-io/bitwave-cli/releases/latest">latest</a>
+          · <a href="https://github.com/bitwave-io/bitwave-cli/releases/latest">Download binaries</a></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <h3>Product</h3>
+        <ul>
+          <li><a href="https://github.com/bitwave-io/bitwave-cli#readme">Manual</a></li>
+          <li><a href="https://github.com/bitwave-io/bitwave-cli/releases">Releases</a></li>
+          <li><a href="https://www.npmjs.com/package/bitwave">npm package</a></li>
+          <li><a href="https://github.com/bitwave-io/homebrew-tap">Homebrew tap</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Build on it</h3>
+        <ul>
+          <li><a href="https://github.com/bitwave-io/bitwave-accounting-sdk">bitwave-accounting-sdk</a></li>
+          <li><a href="https://github.com/bitwave-io/bitwave-wallet-sdk">bitwave-wallet-sdk</a></li>
+        </ul>
+      </div>
+      <div>
+        <h3>Company</h3>
+        <ul>
+          <li><a href="https://bitwave.io">bitwave.io</a></li>
+          <li><a href="https://github.com/bitwave-io">GitHub</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="fine">© 2026 Bitwave. The bitwave CLI is open source under
+      <a href="https://github.com/bitwave-io/bitwave-cli/blob/main/LICENSE">AGPL-3.0</a>.</div>
+  </div>
+</footer>
+
+<script>
+  // Install tabs + copy.
+  document.querySelectorAll(".installbox").forEach(function (box) {
+    var code = box.querySelector(".cmdline code");
+    box.querySelectorAll(".tabs button").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        box.querySelectorAll(".tabs button").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        code.textContent = btn.dataset.cmd;
+      });
+    });
+    box.querySelector(".copy").addEventListener("click", function () {
+      navigator.clipboard.writeText(code.textContent).then(function () {
+        var b = box.querySelector(".copy");
+        b.textContent = "Copied!";
+        setTimeout(function () { b.textContent = "Copy"; }, 1200);
+      });
+    });
+  });
+
+  // Current version from GitHub, best-effort.
+  fetch("https://api.github.com/repos/bitwave-io/bitwave-cli/releases/latest")
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      if (j && j.tag_name) {
+        document.querySelectorAll(".ver").forEach(function (el) { el.textContent = j.tag_name; });
+      }
+    })
+    .catch(function () {});
+
+  // Cycling terminal demo.
+  var demos = [
+    {
+      desc: "Scaffold a workspace — everything runs against plain files in this directory",
+      cmd: 'bitwave init --name acme-2026 --base-currency USD',
+      out: '<span class="ok">created .bitwave.toml</span>'
+    },
+    {
+      desc: "Record a balance-checked entry — it must balance or it doesn't land",
+      cmd: 'bitwave je new --date 2026-05-29 --payee "AWS" \\\n    --posting "Expenses:Cloud  $42.18" \\\n    --posting "Assets:Checking -$42.18"',
+      out: '<span class="ok">created default:20260529-001</span>'
+    },
+    {
+      desc: "See the books",
+      cmd: 'bitwave bal',
+      out: '  <span class="amt">$4875.64</span>  <span class="acct">Assets:Checking</span>\n   <span class="amt">$124.36</span>  <span class="acct">Expenses:Cloud</span>\n <span class="amt">-$5000.00</span>  <span class="acct">Income:Salary</span>'
+    },
+    {
+      desc: "Pull on-chain history into balanced journal entries",
+      cmd: 'bitwave wallets sync --wallet treasury --network ethereum',
+      out: 'fetched 47 txs\n<span class="ok">appended 47 entries</span> (pending until confirmations clear)'
+    },
+    {
+      desc: "Your books, everyone's tools — pipe straight into hledger",
+      cmd: 'bitwave je export | hledger -f - bal',
+      out: '  <span class="amt">$4875.64</span>  <span class="acct">Assets:Checking</span>\n   <span class="amt">$124.36</span>  <span class="acct">Expenses:Cloud</span>'
+    },
+    {
+      desc: "Share the workspace through the Bitwave cloud",
+      cmd: 'bitwave share --to controller@acme.com',
+      out: '<span class="ok">share link emailed ✓</span>'
+    },
+    {
+      desc: "Stay current on every install channel",
+      cmd: 'bitwave upgrade',
+      out: 'self-updating 0.2.1 -> <span class="ok">v0.2.2</span>\n<span class="ok">upgraded to bitwave v0.2.2</span>'
+    }
+  ];
+
+  var di = 0, ci = 0, timer;
+  var descEl = document.getElementById("demo-desc");
+  var cmdEl = document.getElementById("demo-cmd");
+  var outEl = document.getElementById("demo-out");
+
+  function typeNext() {
+    var d = demos[di];
+    if (ci <= d.cmd.length) {
+      cmdEl.textContent = d.cmd.slice(0, ci);
+      ci += 1;
+      timer = setTimeout(typeNext, 28);
+    } else {
+      outEl.innerHTML = d.out;
+      timer = setTimeout(function () {
+        di = (di + 1) % demos.length;
+        ci = 0;
+        outEl.innerHTML = "";
+        descEl.textContent = demos[di].desc;
+        typeNext();
+      }, 3200);
+    }
+  }
+  descEl.textContent = demos[0].desc;
+  typeNext();
+</script>
+</body>
+</html>
