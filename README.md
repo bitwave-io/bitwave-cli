@@ -678,4 +678,7 @@ that this CLI depends on.
 
 ## License
 
-See repository.
+[GNU Affero General Public License v3.0](LICENSE). The SDKs this CLI is
+built on ([`bitwave-accounting-sdk`](https://github.com/bitwave-io/bitwave-accounting-sdk),
+[`bitwave-wallet-sdk`](https://github.com/bitwave-io/bitwave-wallet-sdk))
+are MPL-2.0 — link them into anything.
