@@ -118,4 +118,3 @@ func describeIdentity() string {
 	}
 	return fmt.Sprintf("identity=%s", email)
 }
-

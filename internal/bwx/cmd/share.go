@@ -213,4 +213,3 @@ func newSharesRevokeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&journalId, "journal", "", "Journal id (defaults to .bwx.toml default_journal)")
 	return cmd
 }
-

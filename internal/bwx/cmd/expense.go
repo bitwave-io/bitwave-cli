@@ -10,9 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/bitwave-io/bitwave-accounting-sdk/expense"
 	"github.com/bitwave-io/bitwave-accounting-sdk/format"
 	"github.com/bitwave-io/bitwave-accounting-sdk/model"
-	"github.com/bitwave-io/bitwave-accounting-sdk/expense"
 )
 
 func newExpenseCmd() *cobra.Command {

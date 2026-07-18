@@ -15,8 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/bitwave-io/bitwave-accounting-sdk/format"
-	"github.com/bitwave-io/bitwave-wallet-sdk/wallet"
 	"github.com/bitwave-io/bitwave-cli/internal/bwx/store"
+	"github.com/bitwave-io/bitwave-wallet-sdk/wallet"
 )
 
 // fakeBroadcaster is the test seam for runWalletsSend.

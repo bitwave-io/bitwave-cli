@@ -134,5 +134,3 @@ func TestExpenseReport_FormatCSV(t *testing.T) {
 		t.Errorf("CSV header missing:\n%s", out.String())
 	}
 }
-
-

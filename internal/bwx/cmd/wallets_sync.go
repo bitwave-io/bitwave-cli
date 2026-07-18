@@ -13,10 +13,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/bitwave-io/bitwave-accounting-sdk/model"
-	walletsync "github.com/bitwave-io/bitwave-wallet-sdk/sync"
-	"github.com/bitwave-io/bitwave-wallet-sdk/wallet"
 	"github.com/bitwave-io/bitwave-cli/internal/blockchainquery"
 	"github.com/bitwave-io/bitwave-cli/internal/bwx/store"
+	walletsync "github.com/bitwave-io/bitwave-wallet-sdk/sync"
+	"github.com/bitwave-io/bitwave-wallet-sdk/wallet"
 )
 
 // resolveSyncWallet looks up a wallet by id/name/address/keystore-path. Tries
