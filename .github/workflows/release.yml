@@ -6,6 +6,10 @@ on:
 
 permissions:
   contents: write
+  # npm trusted publishing: the job exchanges a GitHub OIDC token for npm
+  # publish rights — no NPM_TOKEN secret. Each published package must list
+  # this repo + workflow as a trusted publisher on npmjs.com.
+  id-token: write
 
 jobs:
   release:
@@ -19,8 +23,10 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           registry-url: "https://registry.npmjs.org"
+      # Trusted publishing needs npm >= 11.5.1 for OIDC support.
+      - run: npm install -g npm@latest && npm --version
       - name: Run tests
         run: go test ./...
       # Builds all platforms, signs + notarizes darwin binaries when the
@@ -40,7 +46,5 @@ jobs:
           MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
           MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
           MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-      - name: Publish to npm
+      - name: Publish to npm (OIDC trusted publishing)
         run: node scripts/publish-npm.mjs
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
