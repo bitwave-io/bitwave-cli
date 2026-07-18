@@ -41,7 +41,7 @@ Login (PKCE)
   Open browser → auth.bitwave.io/authorize?code_challenge=...&state=...
   Receive callback → validate state → extract code
   ExchangeCode(code, verifier) → POST /api/oauth/token
-  SaveCredentials() → ~/.wavie/credentials.json (0600)
+  SaveCredentials() → ~/.bitwave/credentials.json (0600)
 
 Each Command
   LoadCredentials()

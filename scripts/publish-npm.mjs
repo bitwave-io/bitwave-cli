@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Publish wavie to npm from a finished goreleaser run.
+// Publish bitwave to npm from a finished goreleaser run.
 //
 // Reads dist/artifacts.json, wraps each built binary in a platform package
-// (@bitwave-io/wavie-<os>-<arch>), publishes those, then publishes the main
-// @bitwave-io/wavie launcher (from npm/) with optionalDependencies pinned to
+// (@bitwave-io/bitwave-<os>-<arch>), publishes those, then publishes the main
+// @bitwave-io/bitwave launcher (from npm/) with optionalDependencies pinned to
 // the same version. Run from the repo root after `goreleaser release`.
 //
 //   node scripts/publish-npm.mjs [--dry-run]
@@ -22,11 +22,11 @@ const NPM_CPU = { amd64: "x64", arm64: "arm64" };
 
 const artifacts = JSON.parse(fs.readFileSync("dist/artifacts.json", "utf8"));
 const metadata = JSON.parse(fs.readFileSync("dist/metadata.json", "utf8"));
-const version = process.env.WAVIE_NPM_VERSION || metadata.version;
+const version = process.env.BITWAVE_NPM_VERSION || metadata.version;
 if (!version) throw new Error("no version in dist/metadata.json");
 
 const binaries = artifacts.filter(
-  (a) => a.type === "Binary" && a.name.startsWith("wavie")
+  (a) => a.type === "Binary" && a.name.startsWith("bitwave")
 );
 if (binaries.length === 0) throw new Error("no Binary artifacts in dist/");
 
@@ -42,9 +42,9 @@ for (const b of binaries) {
     console.log(`skipping unmapped platform ${b.goos}/${b.goarch}`);
     continue;
   }
-  const name = `${SCOPE}/wavie-${os}-${cpu}`;
-  const dir = path.join(outRoot, `wavie-${os}-${cpu}`);
-  const binName = os === "win32" ? "wavie.exe" : "wavie";
+  const name = `${SCOPE}/bitwave-${os}-${cpu}`;
+  const dir = path.join(outRoot, `bitwave-${os}-${cpu}`);
+  const binName = os === "win32" ? "bitwave.exe" : "bitwave";
   fs.mkdirSync(dir, { recursive: true });
   fs.copyFileSync(b.path, path.join(dir, binName));
   fs.chmodSync(path.join(dir, binName), 0o755);
@@ -54,7 +54,7 @@ for (const b of binaries) {
       {
         name,
         version,
-        description: `wavie binary for ${os}-${cpu}. Install @bitwave-io/wavie instead of this package.`,
+        description: `bitwave binary for ${os}-${cpu}. Install \`bitwave\` instead of this package.`,
         license: "AGPL-3.0-only",
         repository: {
           type: "git",
@@ -76,7 +76,7 @@ for (const b of binaries) {
 }
 
 // Main launcher package: npm/ contents + version + pinned optional deps.
-const mainDir = path.join(outRoot, "wavie");
+const mainDir = path.join(outRoot, "bitwave");
 fs.cpSync("npm", mainDir, { recursive: true });
 const pkg = JSON.parse(fs.readFileSync(path.join(mainDir, "package.json"), "utf8"));
 pkg.version = version;

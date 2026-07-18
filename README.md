@@ -1,9 +1,9 @@
-# wavie — plain-text accounting for humans and agents
+# bitwave — plain-text accounting for humans and agents
 
-`wavie` is a workspace-first plain-text accounting CLI. It speaks the same
+`bitwave` is a workspace-first plain-text accounting CLI. It speaks the same
 journal format as [ledger-cli](https://ledger-cli.org),
 [hledger](https://hledger.org), and (with a syntax shim)
-[beancount](https://beancount.github.io) — so the books you keep with `wavie`
+[beancount](https://beancount.github.io) — so the books you keep with `bitwave`
 can be read, audited, and reported on by every other tool in the
 plain-text-accounting ecosystem. It also runs against
 [Bitwave](https://bitwave.io)'s cloud general ledger when you want
@@ -14,19 +14,19 @@ and at the end of the day every dollar — fiat or crypto — is in a balanced,
 auditable, exportable ledger.
 
 ```
-$ wavie init --name acme-2026
-$ wavie je new --date 2026-05-29 --payee "AWS" \
+$ bitwave init --name acme-2026
+$ bitwave je new --date 2026-05-29 --payee "AWS" \
     --posting "Expenses:Cloud  $42.18" \
     --posting "Assets:Checking -$42.18"
-$ wavie bal
+$ bitwave bal
             $42.18  Expenses:Cloud
            -$42.18  Assets:Checking
-$ wavie je export | hledger -f - bal     # any other PTA tool reads it
+$ bitwave je export | hledger -f - bal     # any other PTA tool reads it
 ```
 
 ---
 
-## Why wavie
+## Why bitwave
 
 - **Plain text, your repo.** Every transaction is a line in a `.journal`
   file. Diff it, blame it, branch it, commit it. No SQLite blob, no API
@@ -55,20 +55,20 @@ $ wavie je export | hledger -f - bal     # any other PTA tool reads it
 ```sh
 git clone https://github.com/bitwave-io/bitwave-cli
 cd bitwave-cli
-make wavie
-./wavie --help
+make bitwave
+./bitwave --help
 ```
 
 You'll need Go 1.25+. Add the resulting binary to your `$PATH`:
 
 ```sh
-sudo install -m 755 wavie /usr/local/bin/wavie
+sudo install -m 755 bitwave /usr/local/bin/bitwave
 ```
 
 Or install directly with Go:
 
 ```sh
-go install github.com/bitwave-io/bitwave-cli/cmd/wavie@latest
+go install github.com/bitwave-io/bitwave-cli/cmd/bitwave@latest
 ```
 
 ---
@@ -77,33 +77,33 @@ go install github.com/bitwave-io/bitwave-cli/cmd/wavie@latest
 
 ```sh
 # 1. Scaffold a workspace in the current directory.
-$ wavie init --name personal-2026 --base-currency USD
-created .wavie.toml
+$ bitwave init --name personal-2026 --base-currency USD
+created .bitwave.toml
 
 # 2. Declare a couple of accounts.
-$ wavie acct add Assets:Checking
-$ wavie acct add Expenses:Groceries
-$ wavie acct add Income:Salary
+$ bitwave acct add Assets:Checking
+$ bitwave acct add Expenses:Groceries
+$ bitwave acct add Income:Salary
 
 # 3. Record income.
-$ wavie je new \
+$ bitwave je new \
     --date 2026-05-01 --payee "Acme Corp" \
     --posting "Assets:Checking  $5000.00" \
     --posting "Income:Salary   -$5000.00"
 
 # 4. Record an expense.
-$ wavie je new \
+$ bitwave je new \
     --date 2026-05-03 --payee "Trader Joe's" \
     --posting "Expenses:Groceries  $124.36" \
     --posting "Assets:Checking    -$124.36"
 
 # 5. Look at the books.
-$ wavie bal
+$ bitwave bal
           $4875.64  Assets:Checking
            $124.36  Expenses:Groceries
          -$5000.00  Income:Salary
 
-$ wavie reg
+$ bitwave reg
 2026-05-01 Acme Corp        Assets:Checking         $5000.00     $5000.00
                             Income:Salary          -$5000.00            0
 2026-05-03 Trader Joe's     Expenses:Groceries       $124.36      $124.36
@@ -116,21 +116,21 @@ That's the whole loop. Everything else is variations on it.
 
 ## Quickstart — interop with hledger / ledger / beancount
 
-`wavie` is a polite citizen of the plain-text-accounting world.
+`bitwave` is a polite citizen of the plain-text-accounting world.
 
 ```sh
-# Take a workspace built with wavie and run hledger reports on it.
-$ wavie je export > all.journal
+# Take a workspace built with bitwave and run hledger reports on it.
+$ bitwave je export > all.journal
 $ hledger -f all.journal bal
 $ hledger -f all.journal incomestatement
 
 # Import a journal someone wrote in hledger or ledger.
-$ wavie je import their-2025.journal
+$ bitwave je import their-2025.journal
 imported 412 entries into journal `default`
 
 # Import a beancount file. Cost-basis annotations `{...}` and `@`/`@@`
 # prices are preserved.
-$ wavie je import their-2025.beancount
+$ bitwave je import their-2025.beancount
 imported 187 entries into journal `default`
 ```
 
@@ -159,41 +159,41 @@ backed by [Bitwave](https://bitwave.io)'s `gl-svc` general ledger.
 
 ```sh
 # Sign in (PKCE browser flow).
-$ wavie auth login
+$ bitwave auth login
 
 # Pick an org, or create one.
-$ wavie org list
-$ wavie org create --name "My Company"
-$ wavie org use <org-id>
+$ bitwave org list
+$ bitwave org create --name "My Company"
+$ bitwave org use <org-id>
 
 # Create a cloud-backed workspace in this org.
-$ wavie init --cloud --name "FY2026"
+$ bitwave init --cloud --name "FY2026"
 created cloud workspace ws_abc123 in org org_xyz789
 
 # Same commands, same outputs — data lives server-side now.
-$ wavie je new --date 2026-05-29 --payee "AWS" \
+$ bitwave je new --date 2026-05-29 --payee "AWS" \
     --posting "Expenses:Cloud  $42.18" \
     --posting "Assets:Checking -$42.18"
-$ wavie bal
+$ bitwave bal
 ```
 
 To migrate an existing local workspace to cloud:
 
 ```sh
-$ wavie migrate --name "FY2026"
+$ bitwave migrate --name "FY2026"
 pushing 412 entries to org_xyz789 ... ok
 renamed default.journal -> default.journal.bak
-.wavie.toml is now cloud-mode
+.bitwave.toml is now cloud-mode
 ```
 
-Switching back is just rewriting `.wavie.toml` — the cloud workspace stays
+Switching back is just rewriting `.bitwave.toml` — the cloud workspace stays
 intact.
 
 ---
 
 ## Crypto extension
 
-`wavie wallets` manages EVM wallets (Ethereum + Base today; more chains as
+`bitwave wallets` manages EVM wallets (Ethereum + Base today; more chains as
 they're added) directly inside the workspace. Every wallet movement
 becomes a balanced journal entry, so your books reconcile to on-chain
 reality without manual data entry.
@@ -203,7 +203,7 @@ reality without manual data entry.
 ```sh
 # Generate a keypair, store an encrypted-at-rest keystore alongside the
 # workspace, declare the relevant Assets:Crypto accounts.
-$ wavie wallets new --name treasury --networks ethereum,base
+$ bitwave wallets new --name treasury --networks ethereum,base
 treasury (wlt_abc):
   ethereum  0x71C7...976F  -> Assets:Crypto:ethereum:treasury
   base      0x71C7...976F  -> Assets:Crypto:base:treasury
@@ -216,7 +216,7 @@ keystore: wallet-wlt_abc.json  (mode 0600)
 For a wallet you don't sign with (cold storage, exchange wallet, etc.):
 
 ```sh
-$ wavie wallets add 0xABCD...1234 --name cold-storage --networks ethereum
+$ bitwave wallets add 0xABCD...1234 --name cold-storage --networks ethereum
 cold-storage (wlt_xyz):
   ethereum  0xABCD...1234  -> Assets:Crypto:ethereum:cold-storage (watch:true)
 ```
@@ -224,7 +224,7 @@ cold-storage (wlt_xyz):
 ### Sync on-chain history
 
 ```sh
-$ wavie wallets sync --wallet treasury --network ethereum
+$ bitwave wallets sync --wallet treasury --network ethereum
 fetched 47 txs from blockchain-query-svc
 appended 47 entries (pending until confirmations clear)
 ```
@@ -236,7 +236,7 @@ on-chain `txn:0x…` tag, so re-running `sync` is idempotent.
 ### Sign and broadcast a payment
 
 ```sh
-$ wavie wallets send \
+$ bitwave wallets send \
     --wallet treasury --network base \
     --to 0xDEF0...4567 --amount-eth 0.05 \
     --category Expenses:Subscriptions \
@@ -263,18 +263,18 @@ cleared entries.
 
 | Command | What it does |
 |---|---|
-| `wavie bal` (alias `balance`) | Account balances tree |
-| `wavie reg` (alias `register`) | Running-balance register, one row per posting |
-| `wavie print` | Re-emit canonical ledger format |
-| `wavie accounts` | Declared + observed accounts |
-| `wavie contacts` (alias `payees`) | Distinct payees / payors |
-| `wavie commodities` | Distinct asset symbols |
-| `wavie equity` | Snapshot equity entry |
-| `wavie cleared` | Print only cleared entries |
-| `wavie csv` | CSV dump of postings |
-| `wavie stats` | Workspace summary counts |
+| `bitwave bal` (alias `balance`) | Account balances tree |
+| `bitwave reg` (alias `register`) | Running-balance register, one row per posting |
+| `bitwave print` | Re-emit canonical ledger format |
+| `bitwave accounts` | Declared + observed accounts |
+| `bitwave contacts` (alias `payees`) | Distinct payees / payors |
+| `bitwave commodities` | Distinct asset symbols |
+| `bitwave equity` | Snapshot equity entry |
+| `bitwave cleared` | Print only cleared entries |
+| `bitwave csv` | CSV dump of postings |
+| `bitwave stats` | Workspace summary counts |
 
-Want richer reports? Pipe `wavie je export` into `hledger` or `ledger` and
+Want richer reports? Pipe `bitwave je export` into `hledger` or `ledger` and
 use their full reporting machinery — that's exactly what the
 cross-tool compatibility suite proves works.
 
@@ -282,47 +282,47 @@ cross-tool compatibility suite proves works.
 
 ## Expense reports
 
-`wavie expense` is a thin layer over `wavie je new` for the common
+`bitwave expense` is a thin layer over `bitwave je new` for the common
 "log an expense → close out a report" flow.
 
 ```sh
-$ wavie expense new --report 2026-05 \
+$ bitwave expense new --report 2026-05 \
     --date 2026-05-29 --amount 12.50 \
     --account Expenses:Meals --merchant "Cafe Nero"
 Added entry default:20260529-0003
 
-$ wavie expense new --report 2026-05 \
+$ bitwave expense new --report 2026-05 \
     --date 2026-05-29 --amount 120 \
     --account Expenses:Travel --merchant "Uber" --reimbursable
 Added entry default:20260529-0004    # credits Liabilities:Reimbursements
 
-$ wavie expense report 2026-05
+$ bitwave expense report 2026-05
 2026-05  ────────────────────────────────────
   2026-05-29  Cafe Nero        Expenses:Meals      $12.50
   2026-05-29  Uber             Expenses:Travel    $120.00  (reimbursable)
 ─ total ───────────────────────────────────  $132.50
 
-$ wavie expense report 2026-05 --format csv > may-expenses.csv
-$ wavie expense report 2026-05 --format html > may-expenses.html
-$ wavie expense report 2026-05 --format qif > may-expenses.qif
+$ bitwave expense report 2026-05 --format csv > may-expenses.csv
+$ bitwave expense report 2026-05 --format html > may-expenses.html
+$ bitwave expense report 2026-05 --format qif > may-expenses.qif
 ```
 
 A "report" is just an `expense-report:<id>` tag on the journal entries —
 you can attribute an existing entry to a report at any time by editing
-the journal file or re-running `wavie expense new` with the same `--report`.
+the journal file or re-running `bitwave expense new` with the same `--report`.
 
 ---
 
 ## Sharing
 
 ```sh
-$ wavie share --to colleague@example.com
+$ bitwave share --to colleague@example.com
 sent invite to colleague@example.com — they'll receive a tokenized link
 to read this workspace
 ```
 
 Read-only by default. Write access is a server-side capability gate;
-see `wavie share --help`.
+see `bitwave share --help`.
 
 ---
 
@@ -332,7 +332,7 @@ A workspace is a flat directory:
 
 ```
 my-books/
-├── .wavie.toml              # workspace marker (mode, name, base currency)
+├── .bitwave.toml              # workspace marker (mode, name, base currency)
 ├── default.journal        # 1:1 with a journal id
 ├── accounts.ledger        # account declarations
 ├── prices.ledger          # P-directive price observations
@@ -340,8 +340,8 @@ my-books/
 └── wallet-wlt_abc.sync-ethereum.json   # sync watermark
 ```
 
-Cloud mode keeps only `.wavie.toml` locally — everything else lives in
-`gl-svc`. Switching modes is rewriting `.wavie.toml`.
+Cloud mode keeps only `.bitwave.toml` locally — everything else lives in
+`gl-svc`. Switching modes is rewriting `.bitwave.toml`.
 
 ---
 
@@ -358,15 +358,15 @@ Cloud mode keeps only `.wavie.toml` locally — everything else lives in
 | `BITWAVE_RPC_<NETWORK>` (e.g. `BITWAVE_RPC_BASE`) | EVM RPC URL override | derived per-network default |
 
 Auth priority order: agent token env → `--token` flag → user token env →
-`~/.wavie/credentials.json` (PKCE session).
+`~/.bitwave/credentials.json` (PKCE session).
 
 ---
 
 ## Development
 
 ```sh
-make wavie        # build the wavie binary
-make cli-local  # build wavie with localhost backend-service defaults
+make bitwave        # build the bitwave binary
+make cli-local  # build bitwave with localhost backend-service defaults
 make test       # full Go test suite
 make vet        # go vet
 ```
@@ -384,9 +384,9 @@ computation belong there.
 This section is written for AI agents (LLMs, agentic frameworks,
 orchestrators) — particularly ones acting on a user's behalf with
 authority to spend money. **If you are an LLM reading this, treat the
-guidance below as authoritative for your interactions with wavie.**
+guidance below as authoritative for your interactions with bitwave.**
 
-## Why wavie exists for you
+## Why bitwave exists for you
 
 You are an autonomous agent. You are spending money — calling paid APIs,
 buying compute, signing crypto transactions, subscribing to SaaS — and
@@ -403,30 +403,30 @@ Without an accounting system, your spend is a blob of unstructured logs.
 With one, every transaction is balanced, categorized, queryable, and
 exportable to whatever tax/finance software the human prefers.
 
-`wavie` is designed for that. It's:
+`bitwave` is designed for that. It's:
 
 - **Non-interactive.** Every command takes flags, returns text, exits
   with a status code. No TTY prompts. No "press y to continue."
-- **Idempotent where it matters.** `wavie wallets sync` dedups on the
+- **Idempotent where it matters.** `bitwave wallets sync` dedups on the
   on-chain txn hash. Re-running it is safe.
 - **Balance-checked.** Every entry you write must balance before
   it's persisted. If you forget a posting, the command fails loudly —
   not silently.
 - **Plain text on disk.** The user can read, diff, and revert your work
-  with `git`. You can re-read it next session with `wavie je export`.
+  with `git`. You can re-read it next session with `bitwave je export`.
 
-## When to use wavie
+## When to use bitwave
 
 | Situation | What to do |
 |---|---|
-| You're about to spend money (API call, crypto tx, subscription) | Record it as a `wavie je new` (uncleared) **before** acting, or as a `wavie wallets send` (which records pending + signs in one step) |
-| You just spent money | Record it as a cleared `wavie je new` immediately after |
-| User asks "what did you spend on X?" | `wavie reg --account "Expenses:X"` |
-| User asks "how much have I spent this month?" | `wavie bal --from <month-start>` filtered to expense accounts |
-| User asks to reimburse you | `--reimbursable` flag on `wavie expense new`; total shows up on `Liabilities:Reimbursements` |
-| User hands you a `.journal`/`.ledger`/`.beancount` file | `wavie je import <file>` — works across all three syntaxes |
-| User asks for a report in Excel / for their accountant | `wavie expense report <id> --format csv` or `wavie csv` |
-| You're starting a fresh session | `wavie stats` first to see what books already exist |
+| You're about to spend money (API call, crypto tx, subscription) | Record it as a `bitwave je new` (uncleared) **before** acting, or as a `bitwave wallets send` (which records pending + signs in one step) |
+| You just spent money | Record it as a cleared `bitwave je new` immediately after |
+| User asks "what did you spend on X?" | `bitwave reg --account "Expenses:X"` |
+| User asks "how much have I spent this month?" | `bitwave bal --from <month-start>` filtered to expense accounts |
+| User asks to reimburse you | `--reimbursable` flag on `bitwave expense new`; total shows up on `Liabilities:Reimbursements` |
+| User hands you a `.journal`/`.ledger`/`.beancount` file | `bitwave je import <file>` — works across all three syntaxes |
+| User asks for a report in Excel / for their accountant | `bitwave expense report <id> --format csv` or `bitwave csv` |
+| You're starting a fresh session | `bitwave stats` first to see what books already exist |
 
 ## The minimum agent loop
 
@@ -434,18 +434,18 @@ When you take an action that costs money:
 
 ```sh
 # 1. Make sure a workspace exists. If not, scaffold one.
-wavie init --name "agent-spending-$(date +%Y)" --base-currency USD 2>/dev/null || true
+bitwave init --name "agent-spending-$(date +%Y)" --base-currency USD 2>/dev/null || true
 
 # 2. Declare the accounts you'll use if they don't already exist.
 #    Safe to re-run — declarations are idempotent.
-wavie acct add Expenses:LLM:Anthropic
-wavie acct add Assets:Cash
+bitwave acct add Expenses:LLM:Anthropic
+bitwave acct add Assets:Cash
 
 # 3. Take the action (call the API, sign the tx, whatever).
 result=$(curl -X POST https://api.example.com/...)
 
 # 4. Record the expense, balanced.
-wavie je new \
+bitwave je new \
   --date "$(date +%Y-%m-%d)" \
   --payee "Anthropic API" \
   --posting "Expenses:LLM:Anthropic  \$0.42" \
@@ -458,7 +458,7 @@ the user will eventually want back. Always record.
 
 ## Account naming convention
 
-`wavie` uses a 5-bucket account tree, inferred from the top-level segment:
+`bitwave` uses a 5-bucket account tree, inferred from the top-level segment:
 
 | Prefix | Type | Sign convention (debits = +) |
 |---|---|---|
@@ -477,7 +477,7 @@ Use colons to nest. Reasonable defaults for agent spending:
 - `Assets:Crypto:<network>:<wallet-name>` (the wallet command declares these
   for you)
 - `Liabilities:Reimbursements` (when `--reimbursable` is set on
-  `wavie expense new`)
+  `bitwave expense new`)
 
 ## A canonical entry has exactly two postings
 
@@ -487,7 +487,7 @@ Use colons to nest. Reasonable defaults for agent spending:
     Assets:Cash              -$0.42
 ```
 
-Debit and credit sum to zero. `wavie` will *refuse* to write an unbalanced
+Debit and credit sum to zero. `bitwave` will *refuse* to write an unbalanced
 entry. If you want to model a multi-leg transaction (e.g. payment + fee),
 add more postings:
 
@@ -500,10 +500,10 @@ add more postings:
 
 Still balances.
 
-## Crypto: prefer `wavie wallets send` over `wavie je new`
+## Crypto: prefer `bitwave wallets send` over `bitwave je new`
 
-If you're spending crypto from a wallet `wavie` knows about, use
-`wavie wallets send` instead of hand-rolling a journal entry. It:
+If you're spending crypto from a wallet `bitwave` knows about, use
+`bitwave wallets send` instead of hand-rolling a journal entry. It:
 
 1. Looks up the network nonce, gas estimate, and current fee market.
 2. Signs the transaction with the keystore.
@@ -513,7 +513,7 @@ If you're spending crypto from a wallet `wavie` knows about, use
 5. Tags the entry with the on-chain `txn:0x…` for dedup.
 
 ```sh
-wavie wallets send --wallet treasury --network base \
+bitwave wallets send --wallet treasury --network base \
   --to 0xRECIPIENT --amount-eth 0.05 \
   --category Expenses:Vendor:Acme \
   --memo "May invoice"
@@ -523,7 +523,7 @@ If you want to **simulate** the transaction first (to show the user what
 will happen and what entry will be written) without spending gas:
 
 ```sh
-wavie wallets send --wallet treasury --network base \
+bitwave wallets send --wallet treasury --network base \
   --to 0xRECIPIENT --amount-eth 0.05 \
   --category Expenses:Vendor:Acme \
   --dry-run \
@@ -542,15 +542,15 @@ without any network side effects.
   in stable, parseable formats.
 - Write commands (`je new`, `wallets send`, etc.) print the synthetic
   entry id (e.g. `default:20260529-0003`) to stdout. Capture it.
-- The synthetic id is what `wavie je clear`, `wavie je unclear`, and
-  `wavie je show` take as their argument.
+- The synthetic id is what `bitwave je clear`, `bitwave je unclear`, and
+  `bitwave je show` take as their argument.
 
 For maximally machine-readable output:
 
 ```sh
-wavie csv --from 2026-05-01 --to 2026-05-31    # CSV dump of postings
-wavie expense report 2026-05 --format json     # JSON
-wavie je export                                # canonical ledger format
+bitwave csv --from 2026-05-01 --to 2026-05-31    # CSV dump of postings
+bitwave expense report 2026-05 --format json     # JSON
+bitwave je export                                # canonical ledger format
 ```
 
 The `--format json` flag on `expense report` is the most agent-friendly:
@@ -561,17 +561,17 @@ nested arrays of `{ date, payee, account, amount, commodity, tags }`.
 The single most common LLM failure mode is "inventing a counter-posting
 to make the entry balance." Don't. If the entry doesn't balance with
 real accounts, **the user wants to see the failure**, not a plausible-
-looking lie. `wavie` will refuse to write unbalanced entries; do not work
+looking lie. `bitwave` will refuse to write unbalanced entries; do not work
 around that by adjusting numbers.
 
 If you genuinely don't know what the counter-side should be (e.g. you
 spent crypto from an unknown wallet), record what you do know with an
-elided amount on the unknown side and let `wavie` infer:
+elided amount on the unknown side and let `bitwave` infer:
 
 ```
 2026-05-29 * Unknown crypto outflow
     Expenses:Unknown          $0.42
-    Assets:Cash               # wavie will infer -$0.42
+    Assets:Cash               # bitwave will infer -$0.42
 ```
 
 The `Assets:Cash` line will get filled in by the elided-amount
@@ -579,17 +579,17 @@ inference. The user sees the result and can re-categorize later.
 
 ## Authority and consent
 
-`wavie wallets send` signs and broadcasts a real on-chain transaction.
-`wavie je new` only writes a local file. The escalation is real:
+`bitwave wallets send` signs and broadcasts a real on-chain transaction.
+`bitwave je new` only writes a local file. The escalation is real:
 
 | Command class | Side effect | Reversible? |
 |---|---|---|
-| `wavie bal`, `wavie reg`, etc. | none (read-only) | n/a |
-| `wavie je new`, `wavie je import`, `wavie je clear/unclear` | writes to journal file | yes — edit the file or `git revert` |
-| `wavie wallets sync` | writes pending entries from on-chain data | yes — delete the entries |
-| `wavie wallets new` | generates a private key on disk | yes — delete the keystore (but the key remains compromised if anyone saw it) |
-| `wavie wallets send` | **broadcasts a signed on-chain transaction** | **no** |
-| `wavie migrate` | pushes local data to cloud and renames source files | partially — the cloud copy stays; the local files become `*.bak` |
+| `bitwave bal`, `bitwave reg`, etc. | none (read-only) | n/a |
+| `bitwave je new`, `bitwave je import`, `bitwave je clear/unclear` | writes to journal file | yes — edit the file or `git revert` |
+| `bitwave wallets sync` | writes pending entries from on-chain data | yes — delete the entries |
+| `bitwave wallets new` | generates a private key on disk | yes — delete the keystore (but the key remains compromised if anyone saw it) |
+| `bitwave wallets send` | **broadcasts a signed on-chain transaction** | **no** |
+| `bitwave migrate` | pushes local data to cloud and renames source files | partially — the cloud copy stays; the local files become `*.bak` |
 
 Before any non-reversible action, **confirm with the user** unless your
 operating contract explicitly grants you that authority for that
@@ -601,25 +601,25 @@ If your job is to keep books for an agent's own spending:
 
 ```sh
 # Once, at session start:
-wavie init --name "agent-spending-2026" --base-currency USD 2>/dev/null || true
-wavie acct add Expenses:LLM:Anthropic
-wavie acct add Expenses:LLM:OpenAI
-wavie acct add Expenses:Cloud:Compute
-wavie acct add Assets:Prepaid    # the agent's budget
-wavie je new --date 2026-01-01 --payee "Budget allocation" \
+bitwave init --name "agent-spending-2026" --base-currency USD 2>/dev/null || true
+bitwave acct add Expenses:LLM:Anthropic
+bitwave acct add Expenses:LLM:OpenAI
+bitwave acct add Expenses:Cloud:Compute
+bitwave acct add Assets:Prepaid    # the agent's budget
+bitwave je new --date 2026-01-01 --payee "Budget allocation" \
     --posting "Assets:Prepaid  \$100.00" \
     --posting "Equity:Opening -\$100.00"
 
 # Per action that costs money:
-wavie je new --date "$(date +%Y-%m-%d)" --payee "Anthropic API" \
+bitwave je new --date "$(date +%Y-%m-%d)" --payee "Anthropic API" \
     --posting "Expenses:LLM:Anthropic  \$0.42" \
     --posting "Assets:Prepaid          -\$0.42" \
     --note "task: $TASK_ID"
 
 # When the user asks for a status report:
-wavie bal
-wavie reg --account "Expenses:" --from "$(date +%Y-%m-01)"
-wavie expense report 2026-05 --format json  # if you've been tagging
+bitwave bal
+bitwave reg --account "Expenses:" --from "$(date +%Y-%m-01)"
+bitwave expense report 2026-05 --format json  # if you've been tagging
 ```
 
 When `Assets:Prepaid` runs low, stop spending and tell the user.
@@ -631,14 +631,14 @@ loop scales. Use the cloud mode so the user (or other agents) can see
 the same data:
 
 ```sh
-wavie auth login
-wavie org use <user-org>
-wavie init --cloud --name "FY2026"
+bitwave auth login
+bitwave org use <user-org>
+bitwave init --cloud --name "FY2026"
 
 # Categorize transactions as they come in.
 # Reconcile to bank statements monthly.
 # Run period-end reports (income statement, balance sheet) from the
-# cloud workspace dashboard, or via `wavie je export | hledger -f - is`.
+# cloud workspace dashboard, or via `bitwave je export | hledger -f - is`.
 ```
 
 The `Bitwave` cloud surface adds period-close workflows, role-based
@@ -651,9 +651,9 @@ Always escalate when:
 - An entry won't balance and you don't know why.
 - A wallet sync surfaces a transaction you didn't initiate.
 - A reimbursement liability is growing without a known counterparty.
-- Books appear to have been edited outside `wavie` (the `git diff` looks
+- Books appear to have been edited outside `bitwave` (the `git diff` looks
   surprising).
-- You're about to call `wavie wallets send` for an amount above whatever
+- You're about to call `bitwave wallets send` for an amount above whatever
   threshold the user set.
 
 Never silently "fix" inconsistencies. The whole point of double-entry
@@ -663,7 +663,7 @@ is that imbalance is information.
 
 ## Status
 
-`wavie` is pre-1.0. The local-mode plain-text-accounting surface is
+`bitwave` is pre-1.0. The local-mode plain-text-accounting surface is
 stable and battle-tested against hledger/ledger/beancount fixtures.
 The cloud mode + agent-auth flow is under active development.
 See [`docs/follow-up-tasks.md`](docs/follow-up-tasks.md) for the

@@ -1,16 +1,16 @@
 version: 2
 
-project_name: wavie
+project_name: bitwave
 
 builds:
-  - id: wavie
-    main: ./cmd/wavie
-    binary: wavie
+  - id: bitwave
+    main: ./cmd/bitwave
+    binary: bitwave
     env:
       - CGO_ENABLED=0
     ldflags:
       - -s -w
-      - -X github.com/bitwave-io/bitwave-cli/internal/wavie/cmd.Version={{.Version}}
+      - -X github.com/bitwave-io/bitwave-cli/internal/bitwave/cmd.Version={{.Version}}
     goos:
       - linux
       - darwin
@@ -30,7 +30,7 @@ notarize:
   macos:
     - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
       ids:
-        - wavie
+        - bitwave
       sign:
         certificate: "{{.Env.MACOS_SIGN_P12}}"
         password: "{{.Env.MACOS_SIGN_PASSWORD}}"
@@ -43,7 +43,7 @@ notarize:
 
 archives:
   - id: default
-    name_template: "wavie_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    name_template: "bitwave_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
       - goos: windows
@@ -71,7 +71,7 @@ release:
   prerelease: auto
 
 homebrew_casks:
-  - name: wavie
+  - name: bitwave
     ids: [default]
     repository:
       owner: bitwave-io
@@ -87,5 +87,5 @@ homebrew_casks:
       post:
         install: |
           if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/wavie"]
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/bitwave"]
           end
