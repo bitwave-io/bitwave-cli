@@ -177,8 +177,10 @@ All reports run against the cwd's workspace (local or cloud). Filters
 
 ## Close period
 
-`bitwave close run` is a stub today; the period-close orchestrator has not yet
-been ported into this CLI.
+The `bitwave close` command is currently unregistered (parked) — the
+period-close orchestrator has not yet been ported into this CLI. The command
+scaffolding remains in `internal/bitwave/cmd/close.go`; re-registering it in
+root.go brings it back.
 
 ## Environment variables
 
