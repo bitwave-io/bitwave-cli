@@ -66,7 +66,13 @@ Use --check to only report whether an update exists.`,
 				fmt.Fprintf(cmd.ErrOrStderr(), "installed via npm — running: npm install -g bitwave@latest\n")
 				return runPassthrough(cmd, "npm", "install", "-g", "bitwave@latest")
 			case update.MethodBrew:
-				fmt.Fprintf(cmd.ErrOrStderr(), "installed via Homebrew — running: brew upgrade bitwave\n")
+				// brew's auto-update is throttled (24h by default), so an
+				// explicit update is required or the tap may not know about
+				// the release this command just detected.
+				fmt.Fprintf(cmd.ErrOrStderr(), "installed via Homebrew — running: brew update && brew upgrade bitwave\n")
+				if err := runPassthrough(cmd, "brew", "update", "--quiet"); err != nil {
+					return err
+				}
 				return runPassthrough(cmd, "brew", "upgrade", "bitwave")
 			default:
 				fmt.Fprintf(cmd.ErrOrStderr(), "self-updating %s -> %s\n", current, latest)
