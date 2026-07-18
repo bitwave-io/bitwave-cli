@@ -50,26 +50,44 @@ $ bitwave je export | hledger -f - bal     # any other PTA tool reads it
 
 ## Install
 
-### From source (recommended pre-1.0)
+### Homebrew (macOS / Linux)
+
+```sh
+brew install bitwave-io/tap/bitwave
+```
+
+### npm
+
+```sh
+npm install -g bitwave
+```
+
+### Shell (macOS / Linux)
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/bitwave-io/bitwave-cli/main/install.sh | sh
+```
+
+Installs the latest release to `~/.local/bin` after verifying its
+checksum. Set `BITWAVE_VERSION=v0.x.y` / `BITWAVE_INSTALL_DIR=...` to
+override.
+
+### Go
+
+```sh
+go install github.com/bitwave-io/bitwave-cli/cmd/bitwave@latest
+```
+
+### From source
 
 ```sh
 git clone https://github.com/bitwave-io/bitwave-cli
 cd bitwave-cli
 make bitwave
-./bitwave --help
-```
-
-You'll need Go 1.25+. Add the resulting binary to your `$PATH`:
-
-```sh
 sudo install -m 755 bitwave /usr/local/bin/bitwave
 ```
 
-Or install directly with Go:
-
-```sh
-go install github.com/bitwave-io/bitwave-cli/cmd/bitwave@latest
-```
+You'll need Go 1.25+.
 
 ---
 
