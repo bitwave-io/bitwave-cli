@@ -26,7 +26,7 @@ func newShareCmd() *cobra.Command {
 read-only, and email the link to --to.
 
 Auth:
-  Local mode share is ANONYMOUS — no ` + "`bitwave auth login`" + ` required. gl-svc
+  Local mode share is ANONYMOUS — no ` + "`bitwave auth login`" + ` required. the cloud ledger
   accepts the zipped workspace upload from an unauthenticated client and
   delivers a magic-link invite. The recipient is the one who needs to be
   authenticated (they sign in via the magic link to adopt the workspace
@@ -74,7 +74,7 @@ Examples:
 			if cfg.Mode == config.ModeLocal {
 				// Local-mode share = upload the entire workspace (zip) so the
 				// recipient can adopt it into their org. The whole workspace
-				// goes — gl-svc has no way to know which journal entries the
+				// goes — the cloud ledger has no way to know which journal entries the
 				// shared journal references across the other ledger files,
 				// and shipping the whole thing keeps balance/price/account
 				// validation intact server-side. The recipient picks the
@@ -124,7 +124,7 @@ Examples:
 	cmd.Flags().StringVar(&journalId, "journal", "", "Journal id (defaults to .bitwave.toml default_journal)")
 	cmd.Flags().StringVar(&message, "message", "", "Optional message to include in the email")
 	cmd.Flags().IntVar(&ttlHours, "ttl", 168, "Lifetime of the share link in hours (default 7 days)")
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print what would be sent without contacting gl-svc")
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print what would be sent without contacting the cloud ledger")
 	return cmd
 }
 

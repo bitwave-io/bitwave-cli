@@ -1,5 +1,5 @@
 // Package store provides bitwave's workspace-aware storage interface plus its
-// local file-backed and cloud (gl-svc HTTP) implementations.
+// local file-backed and cloud (the cloud ledger HTTP) implementations.
 //
 // bitwave adds a per-call journal id everywhere a write happens, so a workspace
 // with multiple journals can be driven from the same CLI surface.

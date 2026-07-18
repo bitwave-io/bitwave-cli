@@ -7,7 +7,7 @@
 //   - accounts.ledger  — account declarations (local mode)
 //   - prices.ledger    — price observations (local mode)
 //
-// In cloud mode the journal/account/price data lives in gl-svc; the local
+// In cloud mode the journal/account/price data lives in the cloud ledger; the local
 // directory still holds .bitwave.toml as the workspace marker so cwd-aware
 // commands can find it.
 package config

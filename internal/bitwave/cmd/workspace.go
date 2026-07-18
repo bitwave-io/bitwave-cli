@@ -31,10 +31,11 @@ later commands (bitwave je, bitwave bal, ...) target the right workspace.`,
 	return cmd
 }
 
-// newWorkspaceAdoptCmd accepts a pending shared workspace from gl-svc. The
+// newWorkspaceAdoptCmd accepts a pending shared workspace from the cloud ledger. The
 // recipient must be logged in (PKCE or BITWAVE_TOKEN); auth is forwarded as
-// the bearer token. gl-svc starts a Temporal workflow that drains the
-// stashed zip into real ledger rows under the recipient's default org.
+// the bearer token. The cloud ledger starts an async server-side workflow
+// that drains the stashed zip into real ledger rows under the recipient's
+// default org.
 //
 // The command returns as soon as the workflow is scheduled — it doesn't wait
 // for hydration to finish. Hydration is idempotent and the row's Status

@@ -1,12 +1,15 @@
 # bitwave
 
-Plain-text accounting for humans and agents, by [Bitwave](https://bitwave.io).
+Agent-first accounting, by [Bitwave](https://bitwave.io) — run it locally,
+share it in the cloud.
 
-`bitwave` is a workspace-first double-entry accounting CLI that speaks the same
-journal format as [hledger](https://hledger.org),
-[ledger](https://ledger-cli.org), and (with a shim)
-[beancount](https://beancount.github.io) — with optional cloud persistence and
-EVM wallet sync so your on-chain activity lands in balanced, auditable books.
+`bitwave` is a double-entry accounting CLI built for AI agents and the humans
+who audit them: non-interactive commands, parseable output, balance-checked
+writes. Books live in plain-text journals compatible with
+[hledger](https://hledger.org), [ledger](https://ledger-cli.org), and (with a
+shim) [beancount](https://beancount.github.io), with optional cloud
+persistence and EVM wallet sync so on-chain activity lands in balanced,
+auditable books.
 
 ```sh
 npm install -g bitwave

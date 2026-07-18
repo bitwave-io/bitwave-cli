@@ -1,4 +1,4 @@
-// Package blockchainquery is a thin HTTP client for blockchain-query-svc.
+// Package blockchainquery is a thin HTTP client for the Bitwave blockchain query API.
 // It backs `bitwave wallets sync` — the per-wallet on-chain history pull that
 // builds local ledger entries.
 package blockchainquery
@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Client wraps the blockchain-query-svc address-scan endpoint.
+// Client wraps the blockchain query API address-scan endpoint.
 type Client struct {
 	BaseURL       string
 	TokenResolver func() (string, error)

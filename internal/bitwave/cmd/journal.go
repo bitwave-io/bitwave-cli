@@ -17,7 +17,7 @@ func newJournalCmd() *cobra.Command {
 		Short: "Manage journals within the current workspace",
 		Long: `Workspaces hold one or more journals. In local mode each journal is a
 <id>.journal file in the workspace dir; in cloud mode it's a row in
-gl-svc.
+the cloud ledger.
 
 ` + "`bitwave journal use`" + ` records a default journal id in .bitwave.toml so
 ` + "`bitwave je new`" + ` doesn't have to keep passing --journal.`,
@@ -164,7 +164,7 @@ func titleCase(s string) string {
 }
 
 // listJournals returns journal ids and parallel display names for the active
-// workspace. Cloud mode hits gl-svc; local mode reads files.
+// workspace. Cloud mode hits the cloud ledger; local mode reads files.
 func listJournals(cfg *config.Config, dir string) ([]string, []string, error) {
 	switch cfg.Mode {
 	case config.ModeLocal:

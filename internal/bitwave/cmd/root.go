@@ -1,9 +1,8 @@
 // Package cmd defines the bitwave CLI command tree.
 //
-// bitwave is a reshape of bw focused on plain-text accounting workflows that an
-// agent can drive end-to-end, plus delegation-friendly auth modalities. The
-// surface is intentionally narrower than bw: ledger verbs are top-level (bal,
-// reg, print, ...) and discovery-driven commands are not exposed.
+// bitwave is an agent-first accounting platform: workflows an agent (or a
+// human) can drive end-to-end, with delegation-friendly auth modalities.
+// Ledger verbs are top-level (bal, reg, print, ...).
 package cmd
 
 import (
@@ -23,8 +22,12 @@ var Version = "0.1.0-dev"
 func NewRootCmd() *cobra.Command {
 	root := &cobra.Command{
 		Use:   "bitwave",
-		Short: "Bitwave plain-text accounting CLI",
-		Long: `bitwave is the agent-friendly Bitwave CLI for plain-text accounting (PTA).
+		Short: "Agent-first accounting platform — run locally, share in the cloud",
+		Long: `bitwave is an agent-first accounting platform: AI agents and humans keep
+complete, auditable, double-entry books through one CLI. Everything runs
+locally against plain-text journal files (compatible with hledger, ledger,
+and beancount), and any workspace can be shared or persisted in the
+Bitwave cloud when more than one person — or agent — needs it.
 
 Every bitwave command operates on a workspace — a directory containing a
 .bitwave.toml marker plus one or more .journal files. Run ` + "`bitwave init`" + ` in the
@@ -36,7 +39,7 @@ Modes:
   - Local (default): files live on disk. No auth needed. ` + "`bitwave share`" + ` also
     works anonymously in local mode (the recipient is the one who signs in
     to adopt the workspace).
-  - Cloud (` + "`bitwave init --cloud`" + `): backed by gl-svc under your org. Requires
+  - Cloud (` + "`bitwave init --cloud`" + `): backed by the cloud ledger under your org. Requires
     ` + "`bitwave auth login`" + ` and ` + "`bitwave org use`" + `.
 
 Auth (used by cloud-mode commands; priority order):
@@ -69,6 +72,7 @@ Quickstart — raw double-entry journal:
   bitwave bal
 
 Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + examples.`,
+		Version:       Version,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(c *cobra.Command, _ []string) {
@@ -106,6 +110,8 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 		c.GroupID = group
 		root.AddCommand(c)
 	}
+
+	root.SetVersionTemplate("bitwave v{{.Version}}\n")
 
 	root.PersistentFlags().StringVar(&authURLFlag, "auth-url", "", "")
 	root.PersistentFlags().StringVar(&tokenFlag, "token", "", "Bitwave API token (env: BITWAVE_TOKEN)")

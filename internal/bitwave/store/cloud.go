@@ -12,7 +12,7 @@ import (
 )
 
 // Cloud is the bitwave-flavored cloud store. It composes the legacy
-// internal/ledger/store.CloudStore (which already speaks the gl-svc HTTP
+// internal/ledger/store.CloudStore (which already speaks the cloud ledger HTTP
 // protocol with per-call journal ids) with a workspaces.Client for journal
 // CRUD that the legacy store doesn't expose.
 type Cloud struct {

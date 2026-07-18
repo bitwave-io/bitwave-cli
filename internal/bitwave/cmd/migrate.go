@@ -17,7 +17,7 @@ func newMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Push a local workspace up to a new cloud workspace under the active org",
-		Long: `Migrate the cwd's local workspace to gl-svc:
+		Long: `Migrate the cwd's local workspace to the cloud ledger:
   1. Create a new LedgerWorkspace in the active org
   2. Push every journal's entries (and the accounts/prices) into it
   3. Rewrite .bitwave.toml to mode=cloud + the new ids

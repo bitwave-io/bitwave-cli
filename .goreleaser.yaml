@@ -79,7 +79,7 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Casks
     homepage: https://github.com/bitwave-io/bitwave-cli
-    description: Plain-text accounting for humans and agents, by Bitwave
+    description: Agent-first accounting platform — run locally, share in the cloud
     # Until the darwin binaries are signed + notarized (see notarize block
     # above), Gatekeeper quarantines cask-installed binaries; this hook clears
     # the attribute. Harmless once signing is live, but can be removed then.

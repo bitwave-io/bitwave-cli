@@ -1,4 +1,4 @@
-// Package shares is a thin HTTP client for the gl-svc-2 journal-share
+// Package shares is a thin HTTP client for the cloud ledger-2 journal-share
 // endpoints under /v1/orgs/{orgId}/journals/{journalId}/shares. It backs
 // the bitwave `journal share` subcommands.
 package shares

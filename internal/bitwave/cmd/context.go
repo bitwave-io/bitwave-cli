@@ -26,13 +26,13 @@ func resolveAuthURL() string {
 	return "https://auth.bitwave.io"
 }
 
-// defaultGLBaseURL is the build-time default for gl-svc. Production builds
+// defaultGLBaseURL is the build-time default for the cloud ledger. Production builds
 // keep the api4 default; local builds override via `-ldflags -X` (see the
 // `cli-local` Makefile target). Always overridable at runtime with
 // BITWAVE_BASE_URL_GL.
 var defaultGLBaseURL = "https://api4.bitwave.io"
 
-// defaultCoreBaseURL is the build-time default for core-svc. Same override
+// defaultCoreBaseURL is the build-time default for the Bitwave core API. Same override
 // rules as defaultGLBaseURL.
 var defaultCoreBaseURL = "https://api4.bitwave.io"
 

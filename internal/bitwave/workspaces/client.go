@@ -1,4 +1,4 @@
-// Package workspaces is a thin HTTP client for the gl-svc
+// Package workspaces is a thin HTTP client for the cloud ledger
 // /api/v1/orgs/{orgId}/ledger/workspaces endpoints. It backs the bitwave
 // workspace + journal commands.
 package workspaces
@@ -27,7 +27,7 @@ type Journal struct {
 	Description string `json:"description"`
 }
 
-// Client wraps gl-svc workspace + journal HTTP endpoints.
+// Client wraps the cloud ledger workspace + journal HTTP endpoints.
 type Client struct {
 	BaseURL       string
 	OrgId         string

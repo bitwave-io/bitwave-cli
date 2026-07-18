@@ -1,7 +1,7 @@
 {
   "name": "bitwave",
   "version": "0.0.2",
-  "description": "bitwave — plain-text accounting for humans and agents, by Bitwave. Speaks hledger/ledger/beancount, with optional cloud GL and EVM wallet sync.",
+  "description": "bitwave — agent-first accounting platform by Bitwave. Run locally against plain-text journals (hledger/ledger/beancount-compatible) or share in the cloud; EVM wallet sync included.",
   "license": "AGPL-3.0-only",
   "homepage": "https://github.com/bitwave-io/bitwave-cli#readme",
   "repository": {

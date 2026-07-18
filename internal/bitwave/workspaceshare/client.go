@@ -1,4 +1,4 @@
-// Package workspaceshare is the bitwave HTTP client for the gl-svc workspace
+// Package workspaceshare is the bitwave HTTP client for the cloud ledger workspace
 // share-and-adopt endpoints:
 //
 //   - POST /v1/workspaces:share          (multipart, unauthenticated)
@@ -24,7 +24,7 @@ import (
 	"time"
 )
 
-// UploadResponse is the JSON body gl-svc returns from /v1/workspaces:share.
+// UploadResponse is the JSON body the cloud ledger returns from /v1/workspaces:share.
 // The server blocks on the share workflow before responding, so the CLI sees
 // the final delivery status — the resolved recipient and whether the invite
 // email was sent — rather than just a workflow handle.
@@ -34,7 +34,7 @@ type UploadResponse struct {
 	EmailDelivered bool   `json:"emailDelivered"`
 }
 
-// AcceptResponse is the JSON body gl-svc returns from /v1/workspaces/{id}:accept.
+// AcceptResponse is the JSON body the cloud ledger returns from /v1/workspaces/{id}:accept.
 type AcceptResponse struct {
 	WorkspaceId   string `json:"workspaceId"`
 	WorkflowId    string `json:"workflowId"`

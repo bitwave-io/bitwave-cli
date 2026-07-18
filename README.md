@@ -1,13 +1,18 @@
-# bitwave — plain-text accounting for humans and agents
+# bitwave — agent-first accounting, local or cloud
 
-`bitwave` is a workspace-first plain-text accounting CLI. It speaks the same
-journal format as [ledger-cli](https://ledger-cli.org),
-[hledger](https://hledger.org), and (with a syntax shim)
-[beancount](https://beancount.github.io) — so the books you keep with `bitwave`
-can be read, audited, and reported on by every other tool in the
-plain-text-accounting ecosystem. It also runs against
-[Bitwave](https://bitwave.io)'s cloud general ledger when you want
-multi-user persistence and reporting.
+`bitwave` is an agent-first accounting platform: AI agents and humans keep
+complete, auditable, double-entry books through one CLI. Every command is
+non-interactive, every output is parseable, and every action is
+balance-checked — so an agent can drive the books end-to-end and a human
+can audit every step.
+
+It runs locally against plain-text journal files in the same format as
+[ledger-cli](https://ledger-cli.org), [hledger](https://hledger.org), and
+(with a syntax shim) [beancount](https://beancount.github.io) — your books
+stay yours, readable by every tool in the plain-text-accounting ecosystem.
+When more than one person — or agent — needs the books, any workspace can
+be shared or persisted in [Bitwave](https://bitwave.io)'s cloud general
+ledger with the exact same commands.
 
 The headline use case: you (or an AI agent acting for you) spend money,
 and at the end of the day every dollar — fiat or crypto — is in a balanced,
@@ -28,23 +33,24 @@ $ bitwave je export | hledger -f - bal     # any other PTA tool reads it
 
 ## Why bitwave
 
+- **Agent-first ergonomics.** Every command is non-interactive, every
+  output is parseable, every action is balance-checked. An agent's work
+  lands as replayable commands and diffable files. See
+  [Agents, please read](#agents-please-read).
+- **Real double-entry.** Every entry must balance before it's written.
+  Catches drift the moment you make it, not at month-end.
+- **Local *or* cloud, same surface.** Same commands work whether the
+  data lives in a directory of `.journal` files or in a cloud
+  `LedgerWorkspace`. Flip a TOML field to switch.
 - **Plain text, your repo.** Every transaction is a line in a `.journal`
   file. Diff it, blame it, branch it, commit it. No SQLite blob, no API
   lock-in.
-- **Real double-entry.** Every entry must balance before it's written.
-  Catches drift the moment you make it, not at month-end.
 - **Cross-tool compatible.** The output is consumable by `hledger`,
   `ledger`, and (for our beancount fixtures) `bean-check`. The compatibility
   suite that proves it lives in the
   [`bitwave-accounting-sdk`](https://github.com/bitwave-io/bitwave-accounting-sdk).
-- **Local *or* cloud, same surface.** Same commands work whether the
-  data lives in a directory of `.journal` files or in a cloud
-  `LedgerWorkspace`. Flip a TOML field to switch.
 - **Crypto-native, optional.** Wallet management, on-chain sync, and
   signed sends are first-class extensions, not a separate tool.
-- **Agent-first ergonomics.** Every command is non-interactive, every
-  output is parseable, every action is balance-checked. See
-  [Agents, please read](#agents-please-read).
 
 ---
 
@@ -173,7 +179,7 @@ The exhaustive matrix lives in the [`bitwave-accounting-sdk`](https://github.com
 ## Cloud mode
 
 Local workspaces are just files. Cloud workspaces are the same surface,
-backed by [Bitwave](https://bitwave.io)'s `gl-svc` general ledger.
+backed by [Bitwave](https://bitwave.io)'s cloud general ledger.
 
 ```sh
 # Sign in (PKCE browser flow).
@@ -243,7 +249,7 @@ cold-storage (wlt_xyz):
 
 ```sh
 $ bitwave wallets sync --wallet treasury --network ethereum
-fetched 47 txs from blockchain-query-svc
+fetched 47 txs from the blockchain indexer
 appended 47 entries (pending until confirmations clear)
 ```
 
@@ -359,7 +365,7 @@ my-books/
 ```
 
 Cloud mode keeps only `.bitwave.toml` locally — everything else lives in
-`gl-svc`. Switching modes is rewriting `.bitwave.toml`.
+`the cloud ledger`. Switching modes is rewriting `.bitwave.toml`.
 
 ---
 
@@ -370,9 +376,9 @@ Cloud mode keeps only `.bitwave.toml` locally — everything else lives in
 | `BITWAVE_AGENT_TOKEN` | Well-known agent identity token (highest priority) | — |
 | `BITWAVE_TOKEN` | Bearer token (CI / legacy) | — |
 | `BITWAVE_AUTH_URL` | Auth service URL | `https://auth.bitwave.io` |
-| `BITWAVE_BASE_URL_GL` | gl-svc base URL | `https://api4.bitwave.io` |
-| `BITWAVE_BASE_URL_CORE` | core-svc base URL (org list/create) | `https://api4.bitwave.io` |
-| `BITWAVE_BASE_URL_BLOCKCHAIN_QUERY` | blockchain-query-svc base URL | (production) |
+| `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL | `https://api4.bitwave.io` |
+| `BITWAVE_BASE_URL_CORE` | Core API base URL (org list/create) | `https://api4.bitwave.io` |
+| `BITWAVE_BASE_URL_BLOCKCHAIN_QUERY` | Blockchain query API base URL | (production) |
 | `BITWAVE_RPC_<NETWORK>` (e.g. `BITWAVE_RPC_BASE`) | EVM RPC URL override | derived per-network default |
 
 Auth priority order: agent token env → `--token` flag → user token env →

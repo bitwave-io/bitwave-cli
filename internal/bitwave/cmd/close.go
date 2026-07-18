@@ -15,15 +15,14 @@ func newCloseCmd() *cobra.Command {
 	return cmd
 }
 
-// newCloseRunStubCmd is a placeholder for bitwave close run. The orchestrator
-// currently lives inside the bw CLI's internal/cmd package; until it's
-// extracted into a shared location, point users at bw.
+// newCloseRunStubCmd is a placeholder for bitwave close run; the period-close
+// orchestrator has not been ported into this CLI yet.
 func newCloseRunStubCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "run",
-		Short: "Run a close checklist (delegates to `bw close run` for now)",
+		Short: "Run a close checklist (coming soon)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("bitwave close run is not yet wired up — use `bw close run` (same flags). The orchestrator will move into a shared package in a follow-up")
+			return fmt.Errorf("`bitwave close run` is not available yet — the period-close orchestrator ships in an upcoming release")
 		},
 	}
 }

@@ -55,7 +55,7 @@ func resolveSyncWallet(ctx context.Context, s store.Store, dir, ref string) (*wa
 }
 
 // syncFlags collects the user-facing controls. The defaults are tuned for
-// running an end-of-day sync against blockchain-query-svc.
+// running an end-of-day sync against the Bitwave blockchain query API.
 type syncFlags struct {
 	walletRef     string
 	networkName   string
@@ -73,8 +73,8 @@ func newWalletsSyncCmd() *cobra.Command {
 	var f syncFlags
 	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Pull on-chain history for a wallet via blockchain-query-svc and append entries",
-		Long: `Reads the wallet's transactions from blockchain-query-svc, transforms each
+		Short: "Pull on-chain history for a wallet via the Bitwave blockchain query API and append entries",
+		Long: `Reads the wallet's transactions from the Bitwave blockchain query API, transforms each
 into a ledger entry, and appends new ones to the workspace journal.
 
 Resumes from a per-(wallet, network) watermark stored alongside the keystore.
@@ -89,7 +89,7 @@ status; older blocks are marked cleared (*).`,
 	cmd.Flags().StringVar(&f.fromUnix, "from", "", "Start time (RFC3339 or YYYY-MM-DD); defaults to last watermark, or full history on the first sync")
 	cmd.Flags().IntVar(&f.limit, "limit", 200, "Server page size")
 	cmd.Flags().IntVar(&f.pageMax, "max-pages", 100, "Safety cap on pagination loops")
-	cmd.Flags().StringVar(&f.baseURL, "base-url", "", "Override blockchain-query-svc base URL")
+	cmd.Flags().StringVar(&f.baseURL, "base-url", "", "Override the Bitwave blockchain query API base URL")
 	cmd.Flags().StringVar(&f.journalFlag, "journal", "", "Journal id (defaults to workspace default)")
 	cmd.Flags().BoolVar(&f.dryRun, "dry-run", false, "Print what would be written without modifying the journal")
 	cmd.Flags().IntVar(&f.confirmations, "confirmations", 12, "Blocks of confirmation required before an entry is marked cleared")

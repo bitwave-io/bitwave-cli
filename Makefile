@@ -34,13 +34,13 @@ bitwave:
 	go build -ldflags "$(LDFLAGS)" -o $(BITWAVE_BIN) $(BITWAVE_SRC)
 
 # cli-local: build bitwave with localhost defaults for backend services.
-# Useful while running gl-svc / blockchain-query-svc next to it.
+# Useful while running the cloud ledger / the blockchain query API next to it.
 cli-local:
 	go build -ldflags "$(LOCAL_LDFLAGS)" -o $(BITWAVE_BIN) $(BITWAVE_SRC)
 	@echo "Built $(BITWAVE_BIN) with local defaults:"
-	@echo "  blockchain-query-svc -> $(LOCAL_BQ_URL)"
-	@echo "  gl-svc               -> $(LOCAL_GL_URL)"
-	@echo "  core-svc             -> $(LOCAL_CORE_URL)"
+	@echo "  the blockchain query API -> $(LOCAL_BQ_URL)"
+	@echo "  the cloud ledger               -> $(LOCAL_GL_URL)"
+	@echo "  the Bitwave core API             -> $(LOCAL_CORE_URL)"
 
 vet:
 	go vet ./...

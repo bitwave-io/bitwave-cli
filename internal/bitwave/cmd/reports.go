@@ -125,7 +125,7 @@ func newAccountsCmd() *cobra.Command {
 	return cmd
 }
 
-// newContactsCmd: ledger-cli's "payees" report — renamed because gl-svc uses
+// newContactsCmd: ledger-cli's "payees" report — renamed because the cloud ledger uses
 // the directionally-neutral "contacts" terminology (matching Xero/QuickBooks).
 func newContactsCmd() *cobra.Command {
 	cmd := &cobra.Command{

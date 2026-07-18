@@ -1,4 +1,4 @@
-// Package orgs is a thin HTTP client for the core-svc /v3/orgs endpoints. It
+// Package orgs is a thin HTTP client for the Bitwave core API /v3/orgs endpoints. It
 // powers `bw org list / create` and the picker in `bw org switch`.
 package orgs
 
@@ -73,7 +73,7 @@ func (c *Client) List() ([]Org, error) {
 	if err != nil {
 		return nil, err
 	}
-	// core-svc may return either {orgs: [...]} or [...] — accept both.
+	// the Bitwave core API may return either {orgs: [...]} or [...] — accept both.
 	var wrapper struct {
 		Orgs []Org `json:"orgs"`
 	}

@@ -1,9 +1,11 @@
 # bitwave — Agent Guide
 
-This repo builds **`bitwave`**, the agent-friendly Bitwave CLI for plain-text
-accounting (PTA). Workspace-first surface: each cwd holding `.bitwave.toml` is
+This repo builds **`bitwave`**, Bitwave's agent-first accounting platform:
+double-entry books that AI agents and humans drive through one CLI, running
+locally as plain text (hledger/ledger/beancount-compatible) or shared in the
+Bitwave cloud. Workspace-first surface: each cwd holding `.bitwave.toml` is
 either a local directory of plain `*.journal` / `*.ledger` files or a
-cloud-backed `LedgerWorkspace` in gl-svc. No discovery service is involved.
+cloud-backed `LedgerWorkspace` in the Bitwave cloud. No discovery service is involved.
 
 The double-entry accounting engine and cross-tool (hledger / ledger /
 beancount) compatibility layer live in the separate
@@ -25,7 +27,7 @@ A workspace is a flat directory containing:
 - `accounts.ledger` — account declarations (local mode)
 - `prices.ledger` — price observations (local mode)
 
-Cloud mode keeps only `.bitwave.toml` locally; everything else lives in gl-svc.
+Cloud mode keeps only `.bitwave.toml` locally; everything else lives in the Bitwave cloud.
 The CLI surface is the same for both modes — switching is just rewriting
 `.bitwave.toml`.
 
@@ -60,7 +62,7 @@ command.
 ## Journals
 
 Workspaces hold one or more journals. Local journals are `<id>.journal`
-files; cloud journals are gl-svc rows.
+files; cloud journals are cloud ledger rows.
 
 | Command | Description |
 |---|---|
@@ -127,7 +129,7 @@ watch-only wallets).
 | `bitwave wallets list` | Group declared wallet-tagged accounts by wallet id. |
 | `bitwave wallets show <name-or-id>` | Show one wallet's accounts and keystore path. |
 | `bitwave wallets send --wallet W --network base --to 0x… --amount-eth N [--category Expenses:…] [--contact P] [--memo M] [--rpc-url U] [--max-fee-gwei N] [--max-priority-fee-gwei N] [--gas-limit N] [--nonce N] [--dry-run] [--journal id]` | Sign + broadcast a value transfer; append a 3-posting `!` (pending) entry to the workspace's default journal. Postings: `--category` debit (amount), `Expenses:Crypto:Fees:<net>` debit (fee), `Assets:Crypto:<net>:<name>` credit (amount + fee). |
-| `bitwave wallets sync --wallet W --network ethereum [--from D] [--limit N] [--confirmations N] [--avg-block-secs N] [--base-url U] [--dry-run] [--journal id]` | Pull on-chain history via blockchain-query-svc and append entries. Resumes from a per-(wallet, network) watermark file (`wallet-<id>.sync-<net>.json`). Entries are `!` (pending) until `confirmations * avg-block-secs` have elapsed, then `*` (cleared). Dedups by `txn:` tag in entry notes. |
+| `bitwave wallets sync --wallet W --network ethereum [--from D] [--limit N] [--confirmations N] [--avg-block-secs N] [--base-url U] [--dry-run] [--journal id]` | Pull on-chain history via the Bitwave blockchain query API and append entries. Resumes from a per-(wallet, network) watermark file (`wallet-<id>.sync-<net>.json`). Entries are `!` (pending) until `confirmations * avg-block-secs` have elapsed, then `*` (cleared). Dedups by `txn:` tag in entry notes. |
 
 `send` selects a journal via the same rule as `bitwave je new`:
 explicit `--journal` → `default_journal` in `.bitwave.toml` → the only journal →
@@ -137,7 +139,7 @@ explicitly with `--dry-run` to skip the dial entirely.
 `BITWAVE_RPC_<NETWORK>` (e.g. `BITWAVE_RPC_BASE`) overrides the default RPC
 URL when `--rpc-url` is not passed.
 
-`sync` uses `BITWAVE_BASE_URL_BLOCKCHAIN_QUERY` (override the blockchain-query-svc
+`sync` uses `BITWAVE_BASE_URL_BLOCKCHAIN_QUERY` (override the blockchain query API
 endpoint) and authenticates with the same token resolver as the rest of bitwave.
 When the resolved URL points at `localhost`/`127.0.0.1`/`::1` the auth header is
 skipped entirely — local dev instances don't speak our PKCE flow. For a quick
@@ -185,8 +187,8 @@ been ported into this CLI.
 | `BITWAVE_AGENT_TOKEN` | Well-known agent identity token (highest priority) |
 | `BITWAVE_TOKEN` | Bearer token (CI/legacy) |
 | `BITWAVE_AUTH_URL` | Auth service URL (default `https://auth.bitwave.io`) |
-| `BITWAVE_BASE_URL_GL` | gl-svc base URL (default `https://api4.bitwave.io`) |
-| `BITWAVE_BASE_URL_CORE` | core-svc base URL (used for org list/create) |
+| `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL (default `https://api4.bitwave.io`) |
+| `BITWAVE_BASE_URL_CORE` | Core API base URL (used for org list/create) |
 
 ## Cross-tool compatibility & accounting internals
 
