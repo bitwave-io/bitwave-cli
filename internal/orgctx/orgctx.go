@@ -18,7 +18,7 @@ var ErrNoActiveOrg = errors.New("no active org")
 // Hint is the standard remediation message shown when ErrNoActiveOrg is hit.
 const Hint = "No active org. Run `bw org switch` to pick one, or `bw org create` to make a new one."
 
-// Active is the on-disk shape persisted to ~/.bw/config.json.
+// Active is the on-disk shape persisted to ~/.wavie/config.json.
 type Active struct {
 	OrgID   string `json:"orgId"`
 	OrgName string `json:"orgName,omitempty"`
@@ -33,10 +33,10 @@ func configPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".bw", "config.json"), nil
+	return filepath.Join(home, ".wavie", "config.json"), nil
 }
 
-// Load reads ~/.bw/config.json. Returns nil, ErrNoActiveOrg when no active
+// Load reads ~/.wavie/config.json. Returns nil, ErrNoActiveOrg when no active
 // org is set.
 func Load() (*Active, error) {
 	path, err := configPath()
@@ -60,7 +60,7 @@ func Load() (*Active, error) {
 	return f.Active, nil
 }
 
-// Save writes the active org to ~/.bw/config.json.
+// Save writes the active org to ~/.wavie/config.json.
 func Save(a *Active) error {
 	path, err := configPath()
 	if err != nil {

@@ -1,7 +1,7 @@
-# bwx — Agent Guide
+# wavie — Agent Guide
 
-This repo builds **`bwx`**, the agent-friendly Bitwave CLI for plain-text
-accounting (PTA). Workspace-first surface: each cwd holding `.bwx.toml` is
+This repo builds **`wavie`**, the agent-friendly Bitwave CLI for plain-text
+accounting (PTA). Workspace-first surface: each cwd holding `.wavie.toml` is
 either a local directory of plain `*.journal` / `*.ledger` files or a
 cloud-backed `LedgerWorkspace` in gl-svc. No discovery service is involved.
 
@@ -14,48 +14,48 @@ This repo is the CLI surface on top of both.
 
 ---
 
-# bwx — Plain-text accounting
+# wavie — Plain-text accounting
 
 ## Workspace layout
 
 A workspace is a flat directory containing:
 
-- `.bwx.toml` — workspace marker (mode, name, base currency, optional cloud ids, default journal)
+- `.wavie.toml` — workspace marker (mode, name, base currency, optional cloud ids, default journal)
 - One or more `<id>.journal` files (local mode); each maps 1:1 to a Journal
 - `accounts.ledger` — account declarations (local mode)
 - `prices.ledger` — price observations (local mode)
 
-Cloud mode keeps only `.bwx.toml` locally; everything else lives in gl-svc.
+Cloud mode keeps only `.wavie.toml` locally; everything else lives in gl-svc.
 The CLI surface is the same for both modes — switching is just rewriting
-`.bwx.toml`.
+`.wavie.toml`.
 
 ## Auth modalities (priority order)
 
 1. `BITWAVE_AGENT_TOKEN` env (well-known agent identity)
 2. `--token` flag
 3. `BITWAVE_TOKEN` env
-4. `~/.bw/credentials.json` (PKCE / delegated session, auto-refreshed)
+4. `~/.wavie/credentials.json` (PKCE / delegated session, auto-refreshed)
 
-`bwx auth login` runs the PKCE browser flow. `bwx auth delegate <email>`
-and `bwx auth agent create` are stubbed pending server-side support.
+`wavie auth login` runs the PKCE browser flow. `wavie auth delegate <email>`
+and `wavie auth agent create` are stubbed pending server-side support.
 
 ## Org context
 
-`bwx org use [orgId]` (formerly `bw org switch`), `bwx org current`,
-`bwx org list`, `bwx org create --name <n>`, `bwx org clear`. The active
-org is persisted at `~/.bw/config.json` and inherited by every cloud
+`wavie org use [orgId]` (formerly `bw org switch`), `wavie org current`,
+`wavie org list`, `wavie org create --name <n>`, `wavie org clear`. The active
+org is persisted at `~/.wavie/config.json` and inherited by every cloud
 command.
 
 ## Workspaces
 
 | Command | Description |
 |---|---|
-| `bwx init [--name N] [--base-currency USD]` | Scaffold an empty local workspace in cwd. |
-| `bwx init --cloud --name N [--base-currency USD]` | Create a cloud workspace under the active org and bind cwd to it. |
-| `bwx workspace list` | List cloud workspaces in the active org (cwd's pick is marked `*`). |
-| `bwx workspace use [id]` | Bind cwd to a cloud workspace (bare invocation = picker). |
-| `bwx workspace current` | Print the cwd's workspace id. |
-| `bwx workspace create --name N` | Create a cloud workspace without binding cwd. |
+| `wavie init [--name N] [--base-currency USD]` | Scaffold an empty local workspace in cwd. |
+| `wavie init --cloud --name N [--base-currency USD]` | Create a cloud workspace under the active org and bind cwd to it. |
+| `wavie workspace list` | List cloud workspaces in the active org (cwd's pick is marked `*`). |
+| `wavie workspace use [id]` | Bind cwd to a cloud workspace (bare invocation = picker). |
+| `wavie workspace current` | Print the cwd's workspace id. |
+| `wavie workspace create --name N` | Create a cloud workspace without binding cwd. |
 
 ## Journals
 
@@ -64,26 +64,26 @@ files; cloud journals are gl-svc rows.
 
 | Command | Description |
 |---|---|
-| `bwx journal list` | List journals; default journal marked `*`. |
-| `bwx journal new <id> [--name N] [--description D]` | Create a journal. Local mode just makes the file. |
-| `bwx journal use <id>` | Set `default_journal` in `.bwx.toml`. |
+| `wavie journal list` | List journals; default journal marked `*`. |
+| `wavie journal new <id> [--name N] [--description D]` | Create a journal. Local mode just makes the file. |
+| `wavie journal use <id>` | Set `default_journal` in `.wavie.toml`. |
 
-Journal selection for writes (`bwx je new`, `bwx je import`) follows:
-explicit `--journal <id>` → `default_journal` in `.bwx.toml` → the
+Journal selection for writes (`wavie je new`, `wavie je import`) follows:
+explicit `--journal <id>` → `default_journal` in `.wavie.toml` → the
 single journal in the workspace → fallback auto-create `default`. Two
 or more journals with no default and no `--journal` is an error.
 
-## Journal entries (`bwx je`)
+## Journal entries (`wavie je`)
 
 | Command | Description |
 |---|---|
-| `bwx je new --date D --payee P --posting "<Acct> <amt>" --posting "..." [--note N] [--check N] [--network N] [--txn ID] [--status uncleared\|pending\|cleared] [--journal <id>]` | Add a balance-checked entry. Defaults to **uncleared**. Tag flags compose into `key:value` memo. Returns the entry id. |
-| `bwx je clear <entry-id> [--posting <account>]` | Mark an entry (or one posting) cleared (`*`). |
-| `bwx je unclear <entry-id> [--posting <account>]` | Revert to uncleared. |
-| `bwx je list [--from D] [--to D] [--account A]` | One-line-per-entry listing. |
-| `bwx je show <entry-id>` | Print one entry as canonical ledger text. |
-| `bwx je import <file> [--journal <id>]` | Parse + balance-check a foreign `.ledger` file, append to a journal. |
-| `bwx je export [--out file] [--from D] [--to D] [--account A]` | Dump as canonical ledger text. |
+| `wavie je new --date D --payee P --posting "<Acct> <amt>" --posting "..." [--note N] [--check N] [--network N] [--txn ID] [--status uncleared\|pending\|cleared] [--journal <id>]` | Add a balance-checked entry. Defaults to **uncleared**. Tag flags compose into `key:value` memo. Returns the entry id. |
+| `wavie je clear <entry-id> [--posting <account>]` | Mark an entry (or one posting) cleared (`*`). |
+| `wavie je unclear <entry-id> [--posting <account>]` | Revert to uncleared. |
+| `wavie je list [--from D] [--to D] [--account A]` | One-line-per-entry listing. |
+| `wavie je show <entry-id>` | Print one entry as canonical ledger text. |
+| `wavie je import <file> [--journal <id>]` | Parse + balance-check a foreign `.ledger` file, append to a journal. |
+| `wavie je export [--out file] [--from D] [--to D] [--account A]` | Dump as canonical ledger text. |
 
 Synthetic entry ids are prefixed with the journal: `<journal>:<YYYYMMDD>-<seq>`.
 That prefix is what `clear`/`unclear` use to recover which file/journal to
@@ -93,14 +93,14 @@ rewrite.
 
 | Command | Description |
 |---|---|
-| `bwx acct add <Name> [--type asset\|liability\|equity\|income\|expense] [--note N]` | Declare an account. Type inferred from `Assets:*`-style prefix when omitted. |
-| `bwx acct list` | List declared + observed accounts. |
-| `bwx price add <date> <commodity> <price>` | Record a P-directive (e.g. `price add 2024-01-15 BTC $50000`). |
-| `bwx price list` | List price observations. |
+| `wavie acct add <Name> [--type asset\|liability\|equity\|income\|expense] [--note N]` | Declare an account. Type inferred from `Assets:*`-style prefix when omitted. |
+| `wavie acct list` | List declared + observed accounts. |
+| `wavie price add <date> <commodity> <price>` | Record a P-directive (e.g. `price add 2024-01-15 BTC $50000`). |
+| `wavie price list` | List price observations. |
 
 ## Wallets
 
-`bwx wallets` manages EVM wallets (ethereum + base) inside the workspace.
+`wavie wallets` manages EVM wallets (ethereum + base) inside the workspace.
 Two flavors:
 
 - **Locally-custodied** (`wallets new`): one keypair backs every supported
@@ -122,15 +122,15 @@ watch-only wallets).
 
 | Command | Description |
 |---|---|
-| `bwx wallets new --name N [--networks ethereum,base]` | Generate a keypair, write `wallet-<id>.json`, declare `Assets:Crypto:<net>:<name>` per network. |
-| `bwx wallets add <address> [--name N] [--networks ethereum,base] [--watch]` | Track an external EVM address (no keystore written; no signing). Declares `Assets:Crypto:<net>:<name>` accounts with `watch:true` tag. Use this for cold/external wallets you only need to read; pair with `sync`. |
-| `bwx wallets list` | Group declared wallet-tagged accounts by wallet id. |
-| `bwx wallets show <name-or-id>` | Show one wallet's accounts and keystore path. |
-| `bwx wallets send --wallet W --network base --to 0x… --amount-eth N [--category Expenses:…] [--contact P] [--memo M] [--rpc-url U] [--max-fee-gwei N] [--max-priority-fee-gwei N] [--gas-limit N] [--nonce N] [--dry-run] [--journal id]` | Sign + broadcast a value transfer; append a 3-posting `!` (pending) entry to the workspace's default journal. Postings: `--category` debit (amount), `Expenses:Crypto:Fees:<net>` debit (fee), `Assets:Crypto:<net>:<name>` credit (amount + fee). |
-| `bwx wallets sync --wallet W --network ethereum [--from D] [--limit N] [--confirmations N] [--avg-block-secs N] [--base-url U] [--dry-run] [--journal id]` | Pull on-chain history via blockchain-query-svc and append entries. Resumes from a per-(wallet, network) watermark file (`wallet-<id>.sync-<net>.json`). Entries are `!` (pending) until `confirmations * avg-block-secs` have elapsed, then `*` (cleared). Dedups by `txn:` tag in entry notes. |
+| `wavie wallets new --name N [--networks ethereum,base]` | Generate a keypair, write `wallet-<id>.json`, declare `Assets:Crypto:<net>:<name>` per network. |
+| `wavie wallets add <address> [--name N] [--networks ethereum,base] [--watch]` | Track an external EVM address (no keystore written; no signing). Declares `Assets:Crypto:<net>:<name>` accounts with `watch:true` tag. Use this for cold/external wallets you only need to read; pair with `sync`. |
+| `wavie wallets list` | Group declared wallet-tagged accounts by wallet id. |
+| `wavie wallets show <name-or-id>` | Show one wallet's accounts and keystore path. |
+| `wavie wallets send --wallet W --network base --to 0x… --amount-eth N [--category Expenses:…] [--contact P] [--memo M] [--rpc-url U] [--max-fee-gwei N] [--max-priority-fee-gwei N] [--gas-limit N] [--nonce N] [--dry-run] [--journal id]` | Sign + broadcast a value transfer; append a 3-posting `!` (pending) entry to the workspace's default journal. Postings: `--category` debit (amount), `Expenses:Crypto:Fees:<net>` debit (fee), `Assets:Crypto:<net>:<name>` credit (amount + fee). |
+| `wavie wallets sync --wallet W --network ethereum [--from D] [--limit N] [--confirmations N] [--avg-block-secs N] [--base-url U] [--dry-run] [--journal id]` | Pull on-chain history via blockchain-query-svc and append entries. Resumes from a per-(wallet, network) watermark file (`wallet-<id>.sync-<net>.json`). Entries are `!` (pending) until `confirmations * avg-block-secs` have elapsed, then `*` (cleared). Dedups by `txn:` tag in entry notes. |
 
-`send` selects a journal via the same rule as `bwx je new`:
-explicit `--journal` → `default_journal` in `.bwx.toml` → the only journal →
+`send` selects a journal via the same rule as `wavie je new`:
+explicit `--journal` → `default_journal` in `.wavie.toml` → the only journal →
 auto-create `default`. Fees + nonce default to RPC lookup; pass all three
 explicitly with `--dry-run` to skip the dial entirely.
 
@@ -138,7 +138,7 @@ explicitly with `--dry-run` to skip the dial entirely.
 URL when `--rpc-url` is not passed.
 
 `sync` uses `BITWAVE_BASE_URL_BLOCKCHAIN_QUERY` (override the blockchain-query-svc
-endpoint) and authenticates with the same token resolver as the rest of bwx.
+endpoint) and authenticates with the same token resolver as the rest of wavie.
 When the resolved URL points at `localhost`/`127.0.0.1`/`::1` the auth header is
 skipped entirely — local dev instances don't speak our PKCE flow. For a quick
 local build that bakes the localhost default in, run `make cli-local` (from
@@ -147,7 +147,7 @@ The leg classifier looks at the wallet's address against each row's `from`/`to`
 plus the per-token `from`/`to`/`isFee` fields; unknown ERC-20s fall through to a
 synthetic `TOKEN_<short>` commodity so the posting still surfaces.
 
-## Reports (top-level, no `bwx ledger` parent)
+## Reports (top-level, no `wavie ledger` parent)
 
 All reports run against the cwd's workspace (local or cloud). Filters
 `--from`, `--to`, `--account` are supported by date-range reports;
@@ -155,27 +155,27 @@ All reports run against the cwd's workspace (local or cloud). Filters
 
 | Command | Description |
 |---|---|
-| `bwx bal` (alias `balance`) | Account balances tree. |
-| `bwx reg` (alias `register`) | Posting-by-posting register with running balance. |
-| `bwx print` | Re-emit canonical ledger format. |
-| `bwx accounts` | Declared + observed accounts. |
-| `bwx contacts` (alias `payees`) | Distinct contacts (payees + payors). |
-| `bwx commodities` | Distinct asset symbols. |
-| `bwx equity` | Equity-style snapshot entry. |
-| `bwx cleared` | Print only cleared entries. |
-| `bwx csv` | CSV dump of postings. |
-| `bwx stats` | Workspace summary counts. |
+| `wavie bal` (alias `balance`) | Account balances tree. |
+| `wavie reg` (alias `register`) | Posting-by-posting register with running balance. |
+| `wavie print` | Re-emit canonical ledger format. |
+| `wavie accounts` | Declared + observed accounts. |
+| `wavie contacts` (alias `payees`) | Distinct contacts (payees + payors). |
+| `wavie commodities` | Distinct asset symbols. |
+| `wavie equity` | Equity-style snapshot entry. |
+| `wavie cleared` | Print only cleared entries. |
+| `wavie csv` | CSV dump of postings. |
+| `wavie stats` | Workspace summary counts. |
 
 ## Migration
 
 | Command | Description |
 |---|---|
-| `bwx migrate [--name N]` | Push a local workspace to a new cloud workspace under the active org; rewrites `.bwx.toml` to cloud mode and renames source files to `*.bak`. Each local journal becomes its own cloud journal. |
-| `bwx migrate --invite <email>` | (Pending server support) Migrate into another user's org via the delegation flow. |
+| `wavie migrate [--name N]` | Push a local workspace to a new cloud workspace under the active org; rewrites `.wavie.toml` to cloud mode and renames source files to `*.bak`. Each local journal becomes its own cloud journal. |
+| `wavie migrate --invite <email>` | (Pending server support) Migrate into another user's org via the delegation flow. |
 
 ## Close period
 
-`bwx close run` is a stub today; the period-close orchestrator has not yet
+`wavie close run` is a stub today; the period-close orchestrator has not yet
 been ported into this CLI.
 
 ## Environment variables

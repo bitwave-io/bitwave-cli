@@ -1,5 +1,5 @@
 // Package blockchainquery is a thin HTTP client for blockchain-query-svc.
-// It backs `bwx wallets sync` — the per-wallet on-chain history pull that
+// It backs `wavie wallets sync` — the per-wallet on-chain history pull that
 // builds local ledger entries.
 package blockchainquery
 

@@ -34,13 +34,13 @@ type tokenResponse struct {
 // refreshBuffer is the number of seconds before expiry to trigger a refresh.
 const refreshBuffer = 60
 
-// credentialsDir returns the path to ~/.bw/.
+// credentialsDir returns the path to ~/.wavie/.
 func credentialsDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".bw"), nil
+	return filepath.Join(home, ".wavie"), nil
 }
 
 // credentialsPath returns the full path to the credentials file.
@@ -52,7 +52,7 @@ func credentialsPath() (string, error) {
 	return filepath.Join(dir, "credentials.json"), nil
 }
 
-// SaveCredentials writes tokens to ~/.bw/credentials.json with 0600 permissions.
+// SaveCredentials writes tokens to ~/.wavie/credentials.json with 0600 permissions.
 func SaveCredentials(creds *Credentials) error {
 	dir, err := credentialsDir()
 	if err != nil {
