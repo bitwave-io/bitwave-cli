@@ -21,10 +21,12 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      # No registry-url here: that makes setup-node write an .npmrc with a
+      # placeholder auth token, and npm prefers a configured token (even a
+      # bogus one) over attempting the OIDC trusted-publishing exchange.
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          registry-url: "https://registry.npmjs.org"
       # Trusted publishing needs npm >= 11.5.1 for OIDC support.
       - run: npm install -g npm@latest && npm --version
       - name: Run tests
