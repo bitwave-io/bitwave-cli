@@ -4,8 +4,8 @@ go 1.25.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/bitwave-io/bitwave-accounting-sdk v0.2.0
-	github.com/bitwave-io/bitwave-wallet-sdk v0.1.0
+	github.com/bitwave-io/bitwave-accounting-sdk v0.2.1
+	github.com/bitwave-io/bitwave-wallet-sdk v0.2.0
 	github.com/ethereum/go-ethereum v1.15.11
 	github.com/shopspring/decimal v1.4.0
 	github.com/spf13/cobra v1.9.1
