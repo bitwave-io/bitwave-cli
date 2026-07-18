@@ -8,10 +8,12 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/bitwave-io/bitwave-cli/internal/auth"
+	"github.com/bitwave-io/bitwave-cli/internal/update"
 )
 
 // Version is set at build time via -ldflags.
@@ -71,6 +73,14 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 		SilenceErrors: true,
 		PersistentPreRun: func(c *cobra.Command, _ []string) {
 			printStatusBanner(c)
+		},
+		PersistentPostRun: func(c *cobra.Command, _ []string) {
+			// Refresh the update-check cache at most once per 24h, after the
+			// command's real work is done. Silent on failure; skipped for
+			// quiet runs, dev builds, and BITWAVE_NO_UPDATE_CHECK=1.
+			if !quietFlag && os.Getenv("BITWAVE_QUIET") != "1" {
+				update.BackgroundRefresh(Version)
+			}
 		},
 		Run: func(c *cobra.Command, _ []string) { _ = c.Help() },
 	}
@@ -132,6 +142,7 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 
 	addInGroup(groupCLI, newStatusCmd())
 	addInGroup(groupCLI, newVersionCmd())
+	addInGroup(groupCLI, newUpgradeCmd())
 
 	return root
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/bitwave-io/bitwave-cli/internal/auth"
 	"github.com/bitwave-io/bitwave-cli/internal/bitwave/config"
 	"github.com/bitwave-io/bitwave-cli/internal/orgctx"
+	"github.com/bitwave-io/bitwave-cli/internal/update"
 )
 
 // quietFlag is set by --quiet (and respects BITWAVE_QUIET=1) to suppress the
@@ -49,6 +50,11 @@ func printStatusBanner(cmd *cobra.Command) {
 		}
 	}
 	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), describeStatus())
+	// Cached-only check — never a network wait. The cache refreshes after
+	// commands finish (see PersistentPostRun on the root command).
+	if notice, ok := update.CachedNotice(Version); ok {
+		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), notice)
+	}
 }
 
 // describeStatus returns the single-line banner string. Exposed so the

@@ -45,13 +45,11 @@ jobs:
           mkdir -p /tmp/oidc-test && cd /tmp/oidc-test
           cat > package.json <<'EOF'
           {
-            "name": "@bitwave-io/bitwave-linux-x64",
-            "version": "0.0.2",
-            "description": "bitwave binary for linux-x64. Install bitwave instead of this package. (0.0.2 is an OIDC pipeline test placeholder.)",
+            "name": "bitwave",
+            "version": "0.0.3",
+            "description": "OIDC pipeline test placeholder — install a 0.x release, not this.",
             "license": "AGPL-3.0-only",
-            "repository": { "type": "git", "url": "git+https://github.com/bitwave-io/bitwave-cli.git" },
-            "os": ["linux"],
-            "cpu": ["x64"]
+            "repository": { "type": "git", "url": "git+https://github.com/bitwave-io/bitwave-cli.git" }
           }
           EOF
           npm publish --access public --tag oidc-test --loglevel http
