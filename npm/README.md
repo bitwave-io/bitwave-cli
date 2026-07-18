@@ -9,7 +9,7 @@ journal format as [hledger](https://hledger.org),
 EVM wallet sync so your on-chain activity lands in balanced, auditable books.
 
 ```sh
-npm install -g wavie
+npm install -g @bitwave-io/wavie
 wavie init --name my-books
 wavie je new --date 2026-07-18 --payee "AWS" \
   --posting "Expenses:Cloud  $42.18" \

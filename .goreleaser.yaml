@@ -1,0 +1,91 @@
+version: 2
+
+project_name: wavie
+
+builds:
+  - id: wavie
+    main: ./cmd/wavie
+    binary: wavie
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+      - -X github.com/bitwave-io/bitwave-cli/internal/wavie/cmd.Version={{.Version}}
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+
+# Sign + notarize the darwin binaries when Apple credentials are present in the
+# environment; a release without them just skips this block. See
+# docs/RELEASING.md for how to produce the cert (base64 p12) and the App Store
+# Connect API key.
+notarize:
+  macos:
+    - enabled: '{{ isEnvSet "MACOS_SIGN_P12" }}'
+      ids:
+        - wavie
+      sign:
+        certificate: "{{.Env.MACOS_SIGN_P12}}"
+        password: "{{.Env.MACOS_SIGN_PASSWORD}}"
+      notarize:
+        issuer_id: "{{.Env.MACOS_NOTARY_ISSUER_ID}}"
+        key_id: "{{.Env.MACOS_NOTARY_KEY_ID}}"
+        key: "{{.Env.MACOS_NOTARY_KEY}}"
+        wait: true
+        timeout: 20m
+
+archives:
+  - id: default
+    name_template: "wavie_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  github:
+    owner: bitwave-io
+    name: bitwave-cli
+  draft: false
+  prerelease: auto
+
+homebrew_casks:
+  - name: wavie
+    ids: [default]
+    repository:
+      owner: bitwave-io
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/bitwave-io/bitwave-cli
+    description: Plain-text accounting for humans and agents, by Bitwave
+    # Until the darwin binaries are signed + notarized (see notarize block
+    # above), Gatekeeper quarantines cask-installed binaries; this hook clears
+    # the attribute. Harmless once signing is live, but can be removed then.
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/wavie"]
+          end

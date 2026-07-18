@@ -40,7 +40,7 @@ try {
       `If you installed with --ignore-scripts this is not the cause (wavie has no\n` +
       `install scripts) — more likely optional dependencies are disabled, or this\n` +
       `wavie version predates published binaries. Try:\n\n` +
-      `  npm install -g wavie@latest\n\n` +
+      `  npm install -g @bitwave-io/wavie@latest\n\n` +
       `or install another way: https://github.com/bitwave-io/bitwave-cli#install`
   );
   process.exit(1);
