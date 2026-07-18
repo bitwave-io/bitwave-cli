@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+"use strict";
+
+// wavie launcher.
+//
+// The real binary ships in per-platform packages (@bitwave-io/wavie-<os>-<arch>)
+// declared as optionalDependencies, so npm only downloads the one that matches
+// this machine. No postinstall script: we resolve the binary at run time, which
+// keeps installs working under --ignore-scripts, pnpm, yarn, and bun.
+
+const { spawnSync } = require("child_process");
+
+const PLATFORM_PACKAGES = {
+  "darwin-arm64": "@bitwave-io/wavie-darwin-arm64",
+  "darwin-x64": "@bitwave-io/wavie-darwin-x64",
+  "linux-arm64": "@bitwave-io/wavie-linux-arm64",
+  "linux-x64": "@bitwave-io/wavie-linux-x64",
+  "win32-x64": "@bitwave-io/wavie-win32-x64",
+};
+
+const key = `${process.platform}-${process.arch}`;
+const pkg = PLATFORM_PACKAGES[key];
+
+if (!pkg) {
+  console.error(
+    `wavie: unsupported platform ${key}.\n` +
+      `Supported: ${Object.keys(PLATFORM_PACKAGES).join(", ")}\n` +
+      `Other platforms can build from source: https://github.com/bitwave-io/bitwave-cli`
+  );
+  process.exit(1);
+}
+
+let binaryPath;
+try {
+  // Each platform package's "main" points at its wavie binary.
+  binaryPath = require.resolve(pkg);
+} catch (e) {
+  console.error(
+    `wavie: platform binary package ${pkg} is not installed.\n\n` +
+      `If you installed with --ignore-scripts this is not the cause (wavie has no\n` +
+      `install scripts) — more likely optional dependencies are disabled, or this\n` +
+      `wavie version predates published binaries. Try:\n\n` +
+      `  npm install -g wavie@latest\n\n` +
+      `or install another way: https://github.com/bitwave-io/bitwave-cli#install`
+  );
+  process.exit(1);
+}
+
+const result = spawnSync(binaryPath, process.argv.slice(2), {
+  stdio: "inherit",
+});
+
+if (result.error) {
+  console.error(`wavie: failed to launch ${binaryPath}: ${result.error.message}`);
+  process.exit(1);
+}
+process.exit(result.status === null ? 1 : result.status);

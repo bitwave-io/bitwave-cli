@@ -1,0 +1,36 @@
+{
+  "name": "wavie",
+  "version": "0.0.1",
+  "description": "wavie — plain-text accounting for humans and agents, by Bitwave. Speaks hledger/ledger/beancount, with optional cloud GL and EVM wallet sync.",
+  "license": "AGPL-3.0-only",
+  "homepage": "https://github.com/bitwave-io/bitwave-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bitwave-io/bitwave-cli.git",
+    "directory": "npm"
+  },
+  "bugs": {
+    "url": "https://github.com/bitwave-io/bitwave-cli/issues"
+  },
+  "keywords": [
+    "accounting",
+    "plain-text-accounting",
+    "ledger",
+    "hledger",
+    "beancount",
+    "double-entry",
+    "cli",
+    "bitwave",
+    "crypto",
+    "agent"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "wavie": "bin/wavie"
+  },
+  "files": [
+    "bin/"
+  ]
+}
