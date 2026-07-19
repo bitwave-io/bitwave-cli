@@ -700,6 +700,14 @@ Changes to journal parsing, printing, or balance computation belong in the
 [`bitwave-accounting-sdk`](https://github.com/bitwave-io/bitwave-accounting-sdk)
 that this CLI depends on.
 
+## Telemetry
+
+bitwave collects anonymous usage telemetry — command names and flag *names*
+only, never values, ledger data, or file paths. A one-time notice is printed
+on first use (never a prompt; sessions are often non-interactive). Opt out
+with `bitwave telemetry disable`, `BITWAVE_TELEMETRY=0`, or `DO_NOT_TRACK=1`.
+Every field is documented in [docs/TELEMETRY.md](docs/TELEMETRY.md).
+
 ## License
 
 [GNU Affero General Public License v3.0](LICENSE). The SDKs this CLI is

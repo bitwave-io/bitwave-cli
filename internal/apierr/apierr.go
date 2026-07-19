@@ -13,18 +13,30 @@ import (
 
 const maxDetailLen = 200
 
+// Error is a structured API error. Callers can errors.As it to inspect the
+// HTTP status; its message is the human-readable rendering.
+type Error struct {
+	Status int
+	Method string
+	URL    string
+	Detail string
+}
+
+func (e *Error) Error() string {
+	msg := fmt.Sprintf("%s %s: %s", e.Method, e.URL, statusLine(e.Status))
+	if e.Detail != "" {
+		msg += ": " + e.Detail
+	}
+	if hint := hintFor(e.Status); hint != "" {
+		msg += "\n  " + hint
+	}
+	return msg
+}
+
 // Format builds a readable error for a non-2xx response. method and url
 // describe the request; body is the (possibly empty) response body.
 func Format(status int, method, url string, body []byte) error {
-	detail := extractDetail(body)
-	msg := fmt.Sprintf("%s %s: %s", method, url, statusLine(status))
-	if detail != "" {
-		msg += ": " + detail
-	}
-	if hint := hintFor(status); hint != "" {
-		msg += "\n  " + hint
-	}
-	return fmt.Errorf("%s", msg)
+	return &Error{Status: status, Method: method, URL: url, Detail: extractDetail(body)}
 }
 
 func statusLine(status int) string {

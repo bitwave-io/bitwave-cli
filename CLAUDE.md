@@ -191,6 +191,10 @@ root.go brings it back.
 | `BITWAVE_AUTH_URL` | Auth service URL (default `https://auth.bitwave.io`) |
 | `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL (default `https://api.bitwave.io`) |
 | `BITWAVE_BASE_URL_CORE` | Core API base URL (used for org list/create) |
+| `BITWAVE_TELEMETRY` | `0` disables anonymous usage telemetry, `1` force-enables (see docs/TELEMETRY.md) |
+| `DO_NOT_TRACK` | Non-zero disables telemetry (cross-tool convention) |
+| `BITWAVE_TELEMETRY_URL` | Override the telemetry ingest endpoint (default `https://api.bitwave.io/metrics`) |
+| `BITWAVE_NO_UPDATE_CHECK` | `1` disables the daily update check |
 
 ## Cross-tool compatibility & accounting internals
 

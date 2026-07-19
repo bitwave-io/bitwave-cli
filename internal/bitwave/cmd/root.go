@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/bitwave-io/bitwave-cli/internal/auth"
+	"github.com/bitwave-io/bitwave-cli/internal/telemetry"
 	"github.com/bitwave-io/bitwave-cli/internal/update"
 )
 
@@ -76,6 +77,9 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(c *cobra.Command, _ []string) {
+			// One-time telemetry disclosure, before any other output. Printed,
+			// never prompted — sessions are commonly non-interactive.
+			telemetry.NoticeIfNeeded(Version, quietFlag || os.Getenv("BITWAVE_QUIET") == "1")
 			printStatusBanner(c)
 		},
 		PersistentPostRun: func(c *cobra.Command, _ []string) {
@@ -151,6 +155,7 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 	addInGroup(groupCLI, newStatusCmd())
 	addInGroup(groupCLI, newVersionCmd())
 	addInGroup(groupCLI, newUpgradeCmd())
+	addInGroup(groupCLI, newTelemetryCmd())
 
 	return root
 }
