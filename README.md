@@ -376,8 +376,8 @@ Cloud mode keeps only `.bitwave.toml` locally — everything else lives in
 | `BITWAVE_AGENT_TOKEN` | Well-known agent identity token (highest priority) | — |
 | `BITWAVE_TOKEN` | Bearer token (CI / legacy) | — |
 | `BITWAVE_AUTH_URL` | Auth service URL | `https://auth.bitwave.io` |
-| `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL | `https://api4.bitwave.io` |
-| `BITWAVE_BASE_URL_CORE` | Core API base URL (org list/create) | `https://api4.bitwave.io` |
+| `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL | `https://api.bitwave.io` |
+| `BITWAVE_BASE_URL_CORE` | Core API base URL (org list/create) | `https://api.bitwave.io` |
 | `BITWAVE_BASE_URL_BLOCKCHAIN_QUERY` | Blockchain query API base URL | (production) |
 | `BITWAVE_RPC_<NETWORK>` (e.g. `BITWAVE_RPC_BASE`) | EVM RPC URL override | derived per-network default |
 

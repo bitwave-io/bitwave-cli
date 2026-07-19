@@ -6,6 +6,7 @@ package blockchainquery
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/bitwave-io/bitwave-cli/internal/apierr"
 	"io"
 	"net/http"
 	"net/url"
@@ -114,7 +115,7 @@ func (c *Client) do(method, path string) ([]byte, error) {
 	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d %s %s: %s", resp.StatusCode, method, path, string(data))
+		return nil, apierr.Format(resp.StatusCode, method, c.BaseURL+path, data)
 	}
 	return data, nil
 }

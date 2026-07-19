@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/bitwave-io/bitwave-cli/internal/apierr"
 	"io"
 	"net/http"
 	"time"
@@ -62,7 +63,7 @@ func (c *Client) do(method, path string, body any) ([]byte, error) {
 	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(data))
+		return nil, apierr.Format(resp.StatusCode, method, c.BaseURL+path, data)
 	}
 	return data, nil
 }

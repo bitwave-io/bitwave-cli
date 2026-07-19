@@ -29,7 +29,7 @@ func TestClient_Create_PostsJSON(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := New(srv.URL, "org-1", func() (string, error) { return "tok-abc", nil })
+	c := New(srv.URL, "ws-1", func() (string, error) { return "tok-abc", nil })
 	out, err := c.Create(context.Background(), "j-1", CreateRequest{
 		RecipientEmail: "a@b.co",
 		Message:        "hi",
@@ -41,7 +41,7 @@ func TestClient_Create_PostsJSON(t *testing.T) {
 	if gotMethod != "POST" {
 		t.Errorf("method: %s", gotMethod)
 	}
-	if gotPath != "/v1/orgs/org-1/journals/j-1/shares" {
+	if gotPath != "/v1/workspaces/ws-1/journals/j-1/shares" {
 		t.Errorf("path: %s", gotPath)
 	}
 	if gotAuth != "Bearer tok-abc" {
@@ -67,7 +67,7 @@ func TestClient_Create_PropagatesError(t *testing.T) {
 		_, _ = w.Write([]byte(`{"error":"bad email"}`))
 	}))
 	defer srv.Close()
-	c := New(srv.URL, "org-1", func() (string, error) { return "t", nil })
+	c := New(srv.URL, "ws-1", func() (string, error) { return "t", nil })
 	_, err := c.Create(context.Background(), "j-1", CreateRequest{RecipientEmail: "nope"})
 	if err == nil {
 		t.Fatal("expected error")
@@ -107,7 +107,7 @@ func TestClient_Revoke(t *testing.T) {
 	if err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
-	if path != "/v1/orgs/o/journals/j-1/shares/sh-1/revoke" {
+	if path != "/v1/workspaces/o/journals/j-1/shares/sh-1/revoke" {
 		t.Errorf("path: %s", path)
 	}
 	if out.Status != "REVOKED" {

@@ -1,6 +1,6 @@
-// Package shares is a thin HTTP client for the cloud ledger-2 journal-share
-// endpoints under /v1/orgs/{orgId}/journals/{journalId}/shares. It backs
-// the bitwave `journal share` subcommands.
+// Package shares is a thin HTTP client for the cloud ledger journal-share
+// endpoints under /v1/workspaces/{workspaceId}/journals/{journalId}/shares.
+// It backs the bitwave `journal share` subcommands.
 package shares
 
 import (
@@ -11,6 +11,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/bitwave-io/bitwave-cli/internal/apierr"
 )
 
 type CreateRequest struct {
@@ -42,22 +44,22 @@ type CreateResponse struct {
 
 type Client struct {
 	BaseURL       string
-	OrgId         string
+	WorkspaceId   string
 	TokenResolver func() (string, error)
 	HTTPClient    *http.Client
 }
 
-func New(baseURL, orgId string, tokenResolver func() (string, error)) *Client {
+func New(baseURL, workspaceId string, tokenResolver func() (string, error)) *Client {
 	return &Client{
 		BaseURL:       baseURL,
-		OrgId:         orgId,
+		WorkspaceId:   workspaceId,
 		TokenResolver: tokenResolver,
 		HTTPClient:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
 func (c *Client) Create(ctx context.Context, journalId string, req CreateRequest) (*CreateResponse, error) {
-	path := fmt.Sprintf("/v1/orgs/%s/journals/%s/shares", c.OrgId, journalId)
+	path := fmt.Sprintf("/v1/workspaces/%s/journals/%s/shares", c.WorkspaceId, journalId)
 	body, err := c.do(ctx, http.MethodPost, path, req)
 	if err != nil {
 		return nil, err
@@ -70,7 +72,7 @@ func (c *Client) Create(ctx context.Context, journalId string, req CreateRequest
 }
 
 func (c *Client) List(ctx context.Context, journalId string) ([]Share, error) {
-	path := fmt.Sprintf("/v1/orgs/%s/journals/%s/shares", c.OrgId, journalId)
+	path := fmt.Sprintf("/v1/workspaces/%s/journals/%s/shares", c.WorkspaceId, journalId)
 	body, err := c.do(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -83,7 +85,7 @@ func (c *Client) List(ctx context.Context, journalId string) ([]Share, error) {
 }
 
 func (c *Client) Revoke(ctx context.Context, journalId, shareId string) (*Share, error) {
-	path := fmt.Sprintf("/v1/orgs/%s/journals/%s/shares/%s/revoke", c.OrgId, journalId, shareId)
+	path := fmt.Sprintf("/v1/workspaces/%s/journals/%s/shares/%s/revoke", c.WorkspaceId, journalId, shareId)
 	body, err := c.do(ctx, http.MethodPost, path, nil)
 	if err != nil {
 		return nil, err
@@ -124,7 +126,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d %s %s: %s", resp.StatusCode, method, path, string(data))
+		return nil, apierr.Format(resp.StatusCode, method, c.BaseURL+path, data)
 	}
 	return data, nil
 }

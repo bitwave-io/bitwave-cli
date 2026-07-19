@@ -189,7 +189,7 @@ root.go brings it back.
 | `BITWAVE_AGENT_TOKEN` | Well-known agent identity token (highest priority) |
 | `BITWAVE_TOKEN` | Bearer token (CI/legacy) |
 | `BITWAVE_AUTH_URL` | Auth service URL (default `https://auth.bitwave.io`) |
-| `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL (default `https://api4.bitwave.io`) |
+| `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL (default `https://api.bitwave.io`) |
 | `BITWAVE_BASE_URL_CORE` | Core API base URL (used for org list/create) |
 
 ## Cross-tool compatibility & accounting internals

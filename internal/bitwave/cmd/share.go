@@ -97,6 +97,9 @@ Examples:
 			if cfg.OrgId == "" {
 				return fmt.Errorf(".bitwave.toml is missing org_id for cloud share")
 			}
+			if cfg.WorkspaceId == "" {
+				return fmt.Errorf(".bitwave.toml is missing workspace_id for cloud share")
+			}
 
 			req := shares.CreateRequest{
 				RecipientEmail: to,
@@ -104,8 +107,7 @@ Examples:
 				TTLHours:       ttlHours,
 			}
 
-			orgId := cfg.OrgId
-			c := shares.New(resolveGLBaseURL(), orgId, makeOrgTokenResolver(orgId))
+			c := shares.New(resolveGLBaseURL(), cfg.WorkspaceId, makeOrgTokenResolver(cfg.OrgId))
 			resp, err := c.Create(cmd.Context(), jId, req)
 			if err != nil {
 				return fmt.Errorf("create share: %w", err)
@@ -159,7 +161,7 @@ func newSharesListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := shares.New(resolveGLBaseURL(), cfg.OrgId, makeOrgTokenResolver(cfg.OrgId))
+			c := shares.New(resolveGLBaseURL(), cfg.WorkspaceId, makeOrgTokenResolver(cfg.OrgId))
 			list, err := c.List(cmd.Context(), jId)
 			if err != nil {
 				return err
@@ -201,7 +203,7 @@ func newSharesRevokeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			c := shares.New(resolveGLBaseURL(), cfg.OrgId, makeOrgTokenResolver(cfg.OrgId))
+			c := shares.New(resolveGLBaseURL(), cfg.WorkspaceId, makeOrgTokenResolver(cfg.OrgId))
 			out, err := c.Revoke(cmd.Context(), jId, args[0])
 			if err != nil {
 				return err

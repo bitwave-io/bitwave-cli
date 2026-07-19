@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/bitwave-io/bitwave-cli/internal/apierr"
 )
 
 // UploadResponse is the JSON body the cloud ledger returns from /v1/workspaces:share.
@@ -109,7 +111,7 @@ func (c *Client) UploadAndShare(ctx context.Context, workspaceDir, recipientEmai
 	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d POST /v1/workspaces:share: %s", resp.StatusCode, string(data))
+		return nil, apierr.Format(resp.StatusCode, http.MethodPost, c.BaseURL+"/v1/workspaces:share", data)
 	}
 	var out UploadResponse
 	if err := json.Unmarshal(data, &out); err != nil {
@@ -149,7 +151,7 @@ func (c *Client) Adopt(ctx context.Context, workspaceId, newName string) (*Accep
 	defer func() { _ = resp.Body.Close() }()
 	data, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("HTTP %d POST /v1/workspaces/%s:accept: %s", resp.StatusCode, workspaceId, string(data))
+		return nil, apierr.Format(resp.StatusCode, http.MethodPost, fmt.Sprintf("%s/v1/workspaces/%s:accept", c.BaseURL, workspaceId), data)
 	}
 	var out AcceptResponse
 	if err := json.Unmarshal(data, &out); err != nil {

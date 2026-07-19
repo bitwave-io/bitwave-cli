@@ -85,7 +85,12 @@ func TestJournalShare_CloudMode_OmitsSnapshot(t *testing.T) {
 			}`))
 			return
 		}
-		// Stub journal-exists check.
+		// Stub the journals listing (GET /v1/workspaces/{id}/ledger/journals).
+		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/ledger/journals") {
+			_, _ = w.Write([]byte(`[{"id":"default","name":"default"}]`))
+			return
+		}
+		// Anything else: minimal object stub.
 		_, _ = w.Write([]byte(`{"id":"default","name":"default"}`))
 	}))
 	defer srv.Close()
