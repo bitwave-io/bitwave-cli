@@ -81,3 +81,34 @@ Server-side recommendations:
 - Don't store the source IP with events — the payload is designed to stay
   anonymous.
 - Respond 204 with an empty body on success.
+
+### Security model & abuse resistance
+
+The endpoint is **deliberately unauthenticated**: any credential shipped in
+a public binary is extractable, so an embedded key or HMAC would be theater,
+and requiring user auth would tie events to identities and break the
+anonymity promise. This is the standard posture for CLI telemetry
+(Homebrew, .NET, Next.js). Consequences and countermeasures:
+
+- **The endpoint is a write-only suggestion box.** It can be lied to, but it
+  cannot leak or mutate anything. There must be no read path.
+- **No auth context, ever.** The gateway route must not require, forward, or
+  log `Authorization` headers or session cookies for `/metrics` — it should
+  be impossible for a bearer token to flow into telemetry storage.
+- **Poisoning is dampened statistically, not prevented.** Anyone can POST
+  fake events; defend at query time, not ingest time:
+  - dedup on `(anonymousId, ts, command)`;
+  - cap the events counted per `anonymousId` per day (e.g. 2,000) so one
+    spammy id can't dominate;
+  - prefer "distinct anonymousIds doing X" over raw event counts for any
+    metric that matters;
+  - treat single-id or single-day spikes as noise until corroborated.
+- **Volume abuse** is an edge concern: IP rate limit (e.g. 60 req/min),
+  the body/batch caps above, and a WAF/bot rule in front if available.
+  Ingest should stay cheap — validate, append, 204; no fan-out work
+  attackers can amplify.
+- **Duplicates are normal, not an attack**: the client re-sends batches the
+  server never 2xx'd, so ingestion must be idempotency-tolerant (the dedup
+  key above).
+- **Retention**: usage telemetry goes stale fast; a 13-month TTL bounds both
+  storage and blast radius.
