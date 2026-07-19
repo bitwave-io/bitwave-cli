@@ -111,18 +111,12 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRun: func(c *cobra.Command, _ []string) {
+			quiet := quietFlag || os.Getenv("BITWAVE_QUIET") == "1"
 			// One-time telemetry disclosure, before any other output. Printed,
 			// never prompted — sessions are commonly non-interactive.
-			telemetry.NoticeIfNeeded(Version, quietFlag || os.Getenv("BITWAVE_QUIET") == "1")
+			telemetry.NoticeIfNeeded(Version, quiet)
+			printUpdateNotice(c, quiet)
 			printStatusBanner(c)
-		},
-		PersistentPostRun: func(c *cobra.Command, _ []string) {
-			// Refresh the update-check cache at most once per 24h, after the
-			// command's real work is done. Silent on failure; skipped for
-			// quiet runs, dev builds, and BITWAVE_NO_UPDATE_CHECK=1.
-			if !quietFlag && os.Getenv("BITWAVE_QUIET") != "1" {
-				update.BackgroundRefresh(Version)
-			}
 		},
 		Run: func(c *cobra.Command, _ []string) { _ = c.Help() },
 	}
@@ -196,6 +190,18 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 	addInGroup(groupCLI, newTelemetryCmd())
 
 	return root
+}
+
+// PostRunMaintenance runs from main after every invocation — success or
+// failure. It cannot live in PersistentPostRun: cobra skips post-hooks when
+// RunE errors, which would leave the update cache stale exactly on the runs
+// where users are struggling. Refreshes the update-check cache at most once
+// per 24h; silent on failure; skipped for quiet runs, dev builds, and
+// BITWAVE_NO_UPDATE_CHECK=1.
+func PostRunMaintenance() {
+	if !quietFlag && os.Getenv("BITWAVE_QUIET") != "1" {
+		update.BackgroundRefresh(Version)
+	}
 }
 
 func newVersionCmd() *cobra.Command {

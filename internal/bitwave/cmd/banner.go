@@ -50,8 +50,21 @@ func printStatusBanner(cmd *cobra.Command) {
 		}
 	}
 	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), describeStatus())
-	// Cached-only check — never a network wait. The cache refreshes after
-	// commands finish (see PersistentPostRun on the root command).
+}
+
+// printUpdateNotice prints the cached "vX available" hint. Deliberately
+// independent of the banner so it also shows on bare `bitwave` (help) runs;
+// cached-only, never a network wait (the cache refreshes post-command via
+// PostRunMaintenance). Skipped for shell-completion machinery and for
+// `upgrade` itself, which does its own fresh check.
+func printUpdateNotice(cmd *cobra.Command, quiet bool) {
+	if quiet {
+		return
+	}
+	switch cmd.Name() {
+	case cobra.ShellCompRequestCmd, cobra.ShellCompNoDescRequestCmd, "completion", "upgrade":
+		return
+	}
 	if notice, ok := update.CachedNotice(Version); ok {
 		_, _ = fmt.Fprintln(cmd.ErrOrStderr(), notice)
 	}
