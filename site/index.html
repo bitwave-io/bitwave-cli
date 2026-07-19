@@ -204,6 +204,26 @@ imported 187 entries into journal `default`</div>
           <a class="cta" href="https://github.com/bitwave-io/bitwave-accounting-sdk">bitwave-accounting-sdk →</a>
         </div>
       </div>
+
+      <div class="feature">
+        <div>
+          <h2>Crypto accounting that reconciles to the chain</h2>
+          <p>Manage EVM wallets inside the workspace — locally-custodied for
+          signing, or watch-only for cold storage and exchange addresses.
+          <code>bitwave wallets sync</code> turns on-chain history into balanced
+          journal entries: every transfer, every token (even ones bitwave has
+          never seen), and gas as its own expense posting. Entries land pending
+          (<code>!</code>) and auto-clear (<code>*</code>) once confirmations
+          pass, and <code>wallets send</code> books the spend the moment it's
+          signed — so your books and the chain never disagree.</p>
+          <a class="cta" href="https://github.com/bitwave-io/bitwave-cli#crypto-extension">Crypto extension →</a>
+        </div>
+        <div class="snippet">$ <b>bitwave je show base:20260718-004</b>
+2026-07-18 ! Chainlink Labs  ; txn:0x7a3f…c21e
+    <b>Expenses:Infrastructure</b>       0.500000 ETH
+    <b>Expenses:Crypto:Fees:base</b>     0.000021 ETH
+    <b>Assets:Crypto:base:treasury</b>  -0.500021 ETH</div>
+      </div>
     </section>
 
     <div class="bottom-install">
@@ -311,6 +331,11 @@ imported 187 entries into journal `default`</div>
       desc: "Pull on-chain history into balanced journal entries",
       cmd: 'bitwave wallets sync --wallet treasury --network ethereum',
       out: 'fetched 47 txs\n<span class="ok">appended 47 entries</span> (pending until confirmations clear)'
+    },
+    {
+      desc: "Sign, broadcast, and book a payment in one step",
+      cmd: 'bitwave wallets send --wallet treasury --network base \\\n    --to 0x8f3C…9aD1 --amount-eth 0.5 \\\n    --category Expenses:Infrastructure --contact "Chainlink Labs"',
+      out: 'broadcast <span class="ok">0x7a3f…c21e</span>\n<span class="ok">appended pending entry</span> — gas booked to Expenses:Crypto:Fees:base'
     },
     {
       desc: "Your books, everyone's tools — pipe straight into hledger",
