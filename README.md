@@ -71,7 +71,7 @@ npm install -g bitwave
 ### Shell (macOS / Linux)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/bitwave-io/bitwave-cli/main/install.sh | sh
+curl -fsSL https://cli.bitwave.io/install.sh | sh
 ```
 
 Installs the latest release to `~/.local/bin` after verifying its

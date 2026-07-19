@@ -4,6 +4,13 @@
     "public": "site",
     "ignore": ["firebase.json", "**/.*", "**/README.md"],
     "cleanUrls": true,
+    "redirects": [
+      {
+        "source": "/install.sh",
+        "destination": "https://raw.githubusercontent.com/bitwave-io/bitwave-cli/main/install.sh",
+        "type": 302
+      }
+    ],
     "headers": [
       {
         "source": "**/*.html",

@@ -1,7 +1,7 @@
 #!/bin/sh
 # bitwave installer — https://github.com/bitwave-io/bitwave-cli
 #
-#   curl -fsSL https://raw.githubusercontent.com/bitwave-io/bitwave-cli/main/install.sh | sh
+#   curl -fsSL https://cli.bitwave.io/install.sh | sh
 #
 # Options (env vars):
 #   BITWAVE_VERSION      release tag to install (e.g. v0.2.0); default: latest

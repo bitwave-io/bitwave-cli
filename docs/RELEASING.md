@@ -77,7 +77,7 @@ runner (no macOS runner needed). Presence of `MACOS_SIGN_P12` is the switch.
 ```sh
 brew install bitwave-io/tap/bitwave && bitwave version
 npm install -g bitwave && bitwave version
-curl -fsSL https://raw.githubusercontent.com/bitwave-io/bitwave-cli/main/install.sh | sh
+curl -fsSL https://cli.bitwave.io/install.sh | sh
 # darwin, once signing is live:
 codesign -dv --verbose=2 "$(command -v bitwave)"
 spctl -a -vv -t install "$(command -v bitwave)"
