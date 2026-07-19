@@ -80,12 +80,3 @@ homebrew_casks:
     directory: Casks
     homepage: https://github.com/bitwave-io/bitwave-cli
     description: Agent-first accounting platform — run locally, share in the cloud
-    # Until the darwin binaries are signed + notarized (see notarize block
-    # above), Gatekeeper quarantines cask-installed binaries; this hook clears
-    # the attribute. Harmless once signing is live, but can be removed then.
-    hooks:
-      post:
-        install: |
-          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/bitwave"]
-          end
