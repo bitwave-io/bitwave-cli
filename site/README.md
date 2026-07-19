@@ -1,21 +1,24 @@
 # bitwave landing page
 
-A single, self-contained static page (`index.html`, no build step, no
-dependencies) modeled on [cli.github.com](https://cli.github.com): hero with
-tabbed install commands, a cycling terminal demo, feature sections, and a
-footer. The "Current version" line fills itself from the GitHub releases API
-at view time.
+A single self-contained `index.html` (no build step) modeled on
+cli.github.com. The install box's version number self-fills from the
+GitHub releases API at view time.
 
-Preview locally:
+## Preview locally
 
 ```sh
-python3 -m http.server -d site 8000   # http://localhost:8000
+python3 -m http.server -d site 8000
 ```
 
-Deploy options (pick one):
+## Deploy (Firebase Hosting)
 
-- **GitHub Pages**: repo Settings → Pages → deploy from a branch is
-  root/docs-only, so either move this to `docs/`, or add a
-  `actions/deploy-pages` workflow that uploads `site/` as the Pages artifact.
-- **Custom domain** (e.g. `cli.bitwave.io`): point the CNAME at Pages or any
-  static host and drop this file in.
+Lives on the `bitwave-cli` Hosting site in the `bitwave-prod` project
+(target name `cli`, see `.firebaserc` + `firebase.json` at the repo root):
+
+```sh
+firebase deploy --only hosting:cli --project bitwave-prod
+```
+
+Live at <https://bitwave-cli.web.app>; the custom domain `cli.bitwave.io`
+is attached via Firebase console → Hosting → bitwave-cli → Add custom
+domain (requires the DNS records the console prints).

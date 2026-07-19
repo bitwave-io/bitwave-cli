@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": "bitwave-prod"
+  },
+  "targets": {
+    "bitwave-prod": {
+      "hosting": {
+        "cli": ["bitwave-cli"]
+      }
+    }
+  }
+}
