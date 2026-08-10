@@ -10,8 +10,16 @@ data, so rule creation uses the CLI mutation safety contract.
 
 ```bash
 bitwave rule list
+bitwave rule get RULE_ID
 bitwave rule create
+bitwave rule recipes
+bitwave rule context
+bitwave rule plan
+bitwave rule apply
 bitwave rule validate RULE_ID TRANSACTION_ID
+bitwave rule enable RULE_ID
+bitwave rule disable RULE_ID
+bitwave rule delete RULE_ID
 ```
 
 `rules` is accepted as an alias for `rule`.
@@ -139,16 +147,10 @@ Backend endpoint:
 GET /orgs/{orgId}/transactions/{transactionId}/rules/{ruleId}
 ```
 
-Recommended LLM workflow:
+For the recommended one-command LLM workflow, built-in presets, ID fast path,
+client-side batch format, and lifecycle operations, see
+[`AGENT_RULE_WORKFLOW.md`](AGENT_RULE_WORKFLOW.md).
 
-1. Search a bounded transaction sample.
-2. Query only relevant category/contact choices.
-3. Create the rule disabled using `--dry-run`, then `--yes`.
-4. Read the new rule ID with `rule list --include-disabled --query NAME`.
-5. Validate it against one or more known transactions.
-6. Only enable or run it after the user confirms the validation results and
-   historical scope.
-
-Rule execution and enable/disable mutations are not exposed yet because their
-deployed API contracts were not present in the available source. The CLI does
-not invent those operations.
+`rule get RULE_ID` avoids the full list endpoint. Unfiltered lists use the
+paginated query. Text searches still require a full scan because the backend
+does not expose a text filter.

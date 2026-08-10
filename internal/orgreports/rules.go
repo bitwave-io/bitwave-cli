@@ -9,8 +9,7 @@ import (
 	"strings"
 )
 
-const rulesQuery = `query rules($orgId: ID!) {
-  rules(orgId: $orgId) {
+const ruleFields = `
     id name disabled type priority methodId
     action {
       ... on DetailedCategorizationAction {
@@ -42,6 +41,20 @@ const rulesQuery = `query rules($orgId: ID!) {
     autoCategorizeFee multiToken accountingConnectionId includesCurrency allowMismatch
     metadataRule { operator metadata { key value __typename } txnRecordRule __typename }
     __typename
+`
+
+const rulesQuery = `query rules($orgId: ID!) {
+  rules(orgId: $orgId) {` + ruleFields + `}
+}`
+
+const ruleQuery = `query rule($orgId: ID!, $ruleId: ID!) {
+  rule(orgId: $orgId, ruleId: $ruleId) {` + ruleFields + `}
+}`
+
+const rulesPageQuery = `query rulesPaginated($orgId: ID!, $pageLimit: Int, $paginationToken: String) {
+  rulesPaginated(orgId: $orgId, pageLimit: $pageLimit, paginationTokenOpt: $paginationToken) {
+    items {` + ruleFields + `}
+    nextPageToken
   }
 }`
 
@@ -49,9 +62,22 @@ const createRuleMutation = `mutation CreateRule($orgId: ID!, $rule: Rule!) {
   createRule(orgId: $orgId, rule: $rule) { success errors }
 }`
 
+const toggleRuleMutation = `mutation ToggleRuleStatus($orgId: ID!, $ruleId: ID!, $disabled: Boolean!) {
+  toggleRuleStatus(orgId: $orgId, ruleId: $ruleId, disabled: $disabled)
+}`
+
+const deleteRuleMutation = `mutation DeleteRule($orgId: ID!, $ruleId: ID!) {
+  deleteRule(orgId: $orgId, ruleId: $ruleId)
+}`
+
 type RuleCreateResult struct {
 	Success bool            `json:"success"`
 	Errors  json.RawMessage `json:"errors,omitempty"`
+}
+
+type RulesPage struct {
+	Items         []json.RawMessage `json:"items"`
+	NextPageToken string            `json:"nextPageToken,omitempty"`
 }
 
 type graphQLError struct {
@@ -83,6 +109,57 @@ func (c *Client) Rules(ctx context.Context, orgID string) ([]json.RawMessage, er
 	return response.Data.Rules, nil
 }
 
+func (c *Client) Rule(ctx context.Context, orgID, ruleID string) (json.RawMessage, error) {
+	request := map[string]any{
+		"operationName": "rule", "query": ruleQuery,
+		"variables": map[string]any{"orgId": orgID, "ruleId": ruleID},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesQueryURL, request, true)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Data struct {
+			Rule json.RawMessage `json:"rule"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decode rule response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return nil, err
+	}
+	if len(response.Data.Rule) == 0 || string(response.Data.Rule) == "null" {
+		return nil, fmt.Errorf("rule %q was not found", ruleID)
+	}
+	return response.Data.Rule, nil
+}
+
+func (c *Client) RulesPage(ctx context.Context, orgID string, pageLimit int, paginationToken string) (*RulesPage, error) {
+	request := map[string]any{
+		"operationName": "rulesPaginated", "query": rulesPageQuery,
+		"variables": map[string]any{"orgId": orgID, "pageLimit": pageLimit, "paginationToken": paginationToken},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesQueryURL, request, true)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Data struct {
+			Page RulesPage `json:"rulesPaginated"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decode paginated rules response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return nil, err
+	}
+	return &response.Data.Page, nil
+}
+
 func (c *Client) CreateRule(ctx context.Context, orgID string, rule json.RawMessage) (*RuleCreateResult, error) {
 	request := map[string]any{
 		"operationName": "CreateRule",
@@ -109,6 +186,60 @@ func (c *Client) CreateRule(ctx context.Context, orgID string, rule json.RawMess
 		return &response.Data.CreateRule, fmt.Errorf("create rule was rejected: %s", strings.TrimSpace(string(response.Data.CreateRule.Errors)))
 	}
 	return &response.Data.CreateRule, nil
+}
+
+func (c *Client) ToggleRule(ctx context.Context, orgID, ruleID string, disabled bool) error {
+	request := map[string]any{
+		"operationName": "ToggleRuleStatus", "query": toggleRuleMutation,
+		"variables": map[string]any{"orgId": orgID, "ruleId": ruleID, "disabled": disabled},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesMutationURL, request, true)
+	if err != nil {
+		return err
+	}
+	var response struct {
+		Data struct {
+			Success bool `json:"toggleRuleStatus"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return fmt.Errorf("decode toggle rule response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return err
+	}
+	if !response.Data.Success {
+		return fmt.Errorf("toggle rule was rejected")
+	}
+	return nil
+}
+
+func (c *Client) DeleteRule(ctx context.Context, orgID, ruleID string) error {
+	request := map[string]any{
+		"operationName": "DeleteRule", "query": deleteRuleMutation,
+		"variables": map[string]any{"orgId": orgID, "ruleId": ruleID},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesMutationURL, request, true)
+	if err != nil {
+		return err
+	}
+	var response struct {
+		Data struct {
+			Success bool `json:"deleteRule"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return fmt.Errorf("decode delete rule response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return err
+	}
+	if !response.Data.Success {
+		return fmt.Errorf("delete rule was rejected")
+	}
+	return nil
 }
 
 func (c *Client) ValidateRule(ctx context.Context, orgID, transactionID, ruleID string) (json.RawMessage, error) {

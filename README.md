@@ -343,6 +343,23 @@ bitwave report actions \
 `transaction-export` also accepts the aliases `transactions-export` and
 `txn-export`.
 
+Organization categorization rules have an agent-native workflow. An LLM can
+load compact Bitwave rule knowledge, discover only relevant organization
+choices, and apply one or many rules in a single authenticated process:
+
+```sh
+bitwave rule recipes --json
+bitwave rule context --preset simple-inflow --asset ETH --query revenue
+bitwave rule apply --preset simple-inflow --asset ETH \
+  --accounting-connection-id CONNECTION_ID \
+  --category-id CATEGORY_ID --contact-id CONTACT_ID \
+  --enabled --yes
+```
+
+See [Agent-Native Categorization Rules](docs/AGENT_RULE_WORKFLOW.md) for the
+presets, name-to-ID discovery path, client-side batch format, and lifecycle
+commands.
+
 ---
 
 ## Expense reports

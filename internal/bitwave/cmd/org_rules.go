@@ -41,7 +41,94 @@ Rule creation changes future organization behavior. Every create requires
 --yes, supports --dry-run, and should be validated against a known transaction
 before an enabled rule is run across historical data.`,
 	}
-	cmd.AddCommand(newListRulesCmd(), newCreateRawRuleCmd(), newValidateRuleCmd())
+	cmd.AddCommand(
+		newListRulesCmd(), newGetRuleCmd(), newCreateRawRuleCmd(), newValidateRuleCmd(),
+		newToggleRuleCmd("enable", false), newToggleRuleCmd("disable", true), newDeleteRuleCmd(),
+		newRuleRecipesCmd(), newRuleContextCmd(), newRulePlanCmd(), newRuleApplyCmd(),
+	)
+	return cmd
+}
+
+func newGetRuleCmd() *cobra.Command {
+	var orgID string
+	cmd := &cobra.Command{
+		Use:   "get RULE_ID",
+		Short: "Get one complete organization rule without listing every rule",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedOrg, err := resolveReportOrg(orgID)
+			if err != nil {
+				return err
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrg))
+			rule, err := client.Rule(cmd.Context(), resolvedOrg, args[0])
+			if err != nil {
+				return fmt.Errorf("get rule %s: %w", args[0], err)
+			}
+			_, err = cmd.OutOrStdout().Write(append(rule, '\n'))
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
+	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
+	return cmd
+}
+
+func newToggleRuleCmd(name string, disabled bool) *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{
+		Use:   name + " RULE_ID",
+		Short: strings.ToUpper(name[:1]) + name[1:] + " an organization categorization rule",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, name+"-rule", f.jsonOutput, err)
+			}
+			preview := map[string]any{"operation": "ToggleRuleStatus", "variables": map[string]any{"orgId": orgID, "ruleId": args[0], "disabled": disabled}}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: name + "-rule", Organization: orgID, DryRun: true, Request: preview})
+			}
+			if !f.yes {
+				return mutationError(cmd, name+"-rule", f.jsonOutput, errors.New("refusing to change a rule without --yes (use --dry-run to preview)"))
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			if err := client.ToggleRule(cmd.Context(), orgID, args[0], disabled); err != nil {
+				return mutationError(cmd, name+"-rule", f.jsonOutput, err)
+			}
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: name + "-rule", Organization: orgID, Result: map[string]any{"ruleId": args[0], "disabled": disabled}})
+		},
+	}
+	addMutationFlags(cmd, &f)
+	return cmd
+}
+
+func newDeleteRuleCmd() *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{
+		Use:   "delete RULE_ID",
+		Short: "Permanently delete an organization categorization rule",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, "delete-rule", f.jsonOutput, err)
+			}
+			preview := map[string]any{"operation": "DeleteRule", "variables": map[string]any{"orgId": orgID, "ruleId": args[0]}}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: "delete-rule", Organization: orgID, DryRun: true, Request: preview})
+			}
+			if !f.yes {
+				return mutationError(cmd, "delete-rule", f.jsonOutput, errors.New("refusing to permanently delete a rule without --yes (use --dry-run to preview)"))
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			if err := client.DeleteRule(cmd.Context(), orgID, args[0]); err != nil {
+				return mutationError(cmd, "delete-rule", f.jsonOutput, err)
+			}
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: "delete-rule", Organization: orgID, Result: map[string]any{"ruleId": args[0], "deleted": true}})
+		},
+	}
+	addMutationFlags(cmd, &f)
 	return cmd
 }
 
@@ -61,9 +148,38 @@ func newListRulesCmd() *cobra.Command {
 				return err
 			}
 			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrg))
-			rawRules, err := client.Rules(cmd.Context(), resolvedOrg)
-			if err != nil {
-				return fmt.Errorf("list rules: %w", err)
+			originalQuery := strings.TrimSpace(query)
+			rawRules := []json.RawMessage{}
+			totalKnown := true
+			moreAvailable := false
+			if originalQuery == "" {
+				totalKnown = false
+				token := ""
+				for {
+					page, pageErr := client.RulesPage(cmd.Context(), resolvedOrg, min(limit*2, 500), token)
+					if pageErr != nil {
+						return fmt.Errorf("list rules: %w", pageErr)
+					}
+					rawRules = append(rawRules, page.Items...)
+					matching := 0
+					for _, raw := range rawRules {
+						var summary ruleSummary
+						if json.Unmarshal(raw, &summary) == nil && (includeDisabled || !summary.Disabled) {
+							matching++
+						}
+					}
+					if matching >= limit || page.NextPageToken == "" || page.NextPageToken == token {
+						moreAvailable = page.NextPageToken != ""
+						break
+					}
+					token = page.NextPageToken
+				}
+			} else {
+				var loadErr error
+				rawRules, loadErr = client.Rules(cmd.Context(), resolvedOrg)
+				if loadErr != nil {
+					return fmt.Errorf("list rules: %w", loadErr)
+				}
 			}
 			query = strings.ToLower(strings.TrimSpace(query))
 			matchingRaw := make([]json.RawMessage, 0)
@@ -91,11 +207,11 @@ func newListRulesCmd() *cobra.Command {
 				rules = matchingRaw
 			}
 			warnings := []string{}
-			if len(matchingSummary) == limit && len(rawRules) > limit {
+			if len(matchingSummary) == limit && (len(rawRules) > limit || moreAvailable) {
 				warnings = append(warnings, "Rule results may be truncated; narrow --query or increase --limit.")
 			}
 			return writeJSON(cmd.OutOrStdout(), map[string]any{
-				"schemaVersion": "1", "organization": resolvedOrg, "totalRules": len(rawRules),
+				"schemaVersion": "1", "organization": resolvedOrg, "totalRules": map[bool]any{true: len(rawRules), false: nil}[totalKnown], "totalRulesKnown": totalKnown,
 				"count": len(matchingSummary), "rules": rules, "resultShape": map[bool]string{true: "full", false: "compact"}[full],
 				"filters": map[string]any{"query": query, "includeDisabled": includeDisabled, "limit": limit}, "warnings": warnings,
 			})
