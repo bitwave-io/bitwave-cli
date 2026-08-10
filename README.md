@@ -6,6 +6,8 @@ non-interactive, every output is parseable, and every action is
 balance-checked — so an agent can drive the books end-to-end and a human
 can audit every step.
 
+The CLI is designed for both interactive use and automated agent workflows.
+
 It runs locally against plain-text journal files in the same format as
 [ledger-cli](https://ledger-cli.org), [hledger](https://hledger.org), and
 (with a syntax shim) [beancount](https://beancount.github.io) — your books
