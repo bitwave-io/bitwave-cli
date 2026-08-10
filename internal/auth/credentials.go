@@ -192,12 +192,12 @@ func RefreshTokens(authBaseURL string, creds *Credentials) (*Credentials, error)
 	if tok.Error != "" {
 		// Clear credentials on refresh failure — user must re-login.
 		_ = DeleteCredentials()
-		return nil, fmt.Errorf("refresh failed: %s — %s\nPlease run: bw auth login", tok.Error, tok.ErrorDesc)
+		return nil, fmt.Errorf("refresh failed: %s — %s\nPlease run: bitwave auth login", tok.Error, tok.ErrorDesc)
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		_ = DeleteCredentials()
-		return nil, fmt.Errorf("refresh returned HTTP %d: %s\nPlease run: bw auth login", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("refresh returned HTTP %d: %s\nPlease run: bitwave auth login", resp.StatusCode, string(respBody))
 	}
 
 	newCreds := &Credentials{
@@ -268,7 +268,7 @@ func LoadAndRefresh(authBaseURL string) (string, error) {
 		return "", err
 	}
 	if creds == nil {
-		return "", fmt.Errorf("not logged in — run: bw auth login")
+		return "", fmt.Errorf("not logged in — run: bitwave auth login")
 	}
 
 	if creds.IsExpired() {
@@ -290,7 +290,7 @@ func LoadAndRefreshWithOrg(authBaseURL, orgId string) (string, error) {
 		return "", err
 	}
 	if creds == nil {
-		return "", fmt.Errorf("not logged in — run: bw auth login")
+		return "", fmt.Errorf("not logged in — run: bitwave auth login")
 	}
 
 	body := url.Values{

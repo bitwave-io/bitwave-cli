@@ -16,7 +16,7 @@ import (
 var ErrNoActiveOrg = errors.New("no active org")
 
 // Hint is the standard remediation message shown when ErrNoActiveOrg is hit.
-const Hint = "No active org. Run `bw org switch` to pick one, or `bw org create` to make a new one."
+const Hint = "No active org. Run `bitwave org use` to pick one, or `bitwave org create` to make a new one."
 
 // Active is the on-disk shape persisted to ~/.bitwave/config.json.
 type Active struct {
