@@ -85,3 +85,30 @@ func TestCategorizationOptionFilters(t *testing.T) {
 		t.Fatalf("contacts = %#v", contacts)
 	}
 }
+
+func TestCreateValidation(t *testing.T) {
+	for _, value := range []string{"1", "0.000000000000000001", "123.45"} {
+		if err := positiveDecimal("--amount", value); err != nil {
+			t.Fatalf("%s: %v", value, err)
+		}
+	}
+	for _, value := range []string{"", "0", "-1", "not-a-number"} {
+		if err := positiveDecimal("--amount", value); err == nil {
+			t.Fatalf("expected %q to fail", value)
+		}
+	}
+	if err := validateCreateCommon(transactionCreateCommon{wallet: "Wallet", systemID: "llm-123", at: "2026-08-10T10:00:00Z"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCreateCommon(transactionCreateCommon{wallet: "Wallet", systemID: "llm-123", at: "2026-08-10T10:00:00Z", categoryID: "cat"}); err == nil {
+		t.Fatal("expected incomplete categorization tuple to fail")
+	}
+}
+
+func TestCompactTransactionsBoundsLines(t *testing.T) {
+	items := []json.RawMessage{json.RawMessage(`{"id":"txn-1","transactionType":"Receive","ignored":false,"lines":[{"line":0,"from":"0xabc"},{"line":1},{"line":2},{"line":3},{"line":4},{"line":5}]}`)}
+	result := compactTransactions(items)
+	if len(result) != 1 || result[0].ID != "txn-1" || result[0].LineCount != 6 || len(result[0].Lines) != 5 {
+		t.Fatalf("result = %#v", result)
+	}
+}

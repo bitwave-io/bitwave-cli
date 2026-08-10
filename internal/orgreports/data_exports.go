@@ -67,6 +67,11 @@ type TransactionExportFilters struct {
 	ReconciliationStatuses      []string              `json:"reconciliationStatuses,omitempty"`
 	IgnoredStatuses             []string              `json:"ignoredStatuses,omitempty"`
 	SearchTokens                []string              `json:"searchTokens,omitempty"`
+	TransactionIDs              []string              `json:"transactionIds,omitempty"`
+	FromAddresses               []string              `json:"fromAddresses,omitempty"`
+	ToAddresses                 []string              `json:"toAddresses,omitempty"`
+	Addresses                   []string              `json:"addresses,omitempty"`
+	Operations                  []string              `json:"operations,omitempty"`
 	IncludeCombinedTransactions bool                  `json:"includeCombinedTransactions,omitempty"`
 }
 

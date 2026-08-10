@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 const (
@@ -69,6 +70,107 @@ type AccountingConnection struct {
 	Name     string `json:"name,omitempty"`
 	Type     string `json:"type"`
 	Disabled bool   `json:"disabled"`
+}
+
+type TransactionSearchRequest struct {
+	Timezone      string                   `json:"timezone,omitempty"`
+	Limit         int                      `json:"limit"`
+	NextToken     string                   `json:"nextToken,omitempty"`
+	SortBy        string                   `json:"sortBy,omitempty"`
+	SortDirection string                   `json:"sortDirection,omitempty"`
+	Filters       TransactionExportFilters `json:"filters"`
+}
+
+type TransactionSearchResponse struct {
+	Transactions []json.RawMessage `json:"transactions"`
+	NextToken    string            `json:"nextToken,omitempty"`
+	PrevToken    string            `json:"prevToken,omitempty"`
+	AssetIDs     []string          `json:"assetIds,omitempty"`
+}
+
+// CreateTransaction is the public transaction-ingest contract used by the
+// Bitwave transaction UI. Numeric quantities remain strings to avoid losing
+// precision in automation and LLM tool calls.
+type CreateTransaction struct {
+	SystemID               string         `json:"systemId"`
+	Time                   string         `json:"time"`
+	AccountID              string         `json:"accountId"`
+	Amount                 string         `json:"amount"`
+	AmountTicker           string         `json:"amountTicker"`
+	TransactionType        string         `json:"transactionType"`
+	TradeID                string         `json:"tradeId,omitempty"`
+	GroupID                string         `json:"groupId,omitempty"`
+	BlockchainID           string         `json:"blockchainId,omitempty"`
+	Cost                   string         `json:"cost,omitempty"`
+	CostTicker             string         `json:"costTicker,omitempty"`
+	Fee                    string         `json:"fee,omitempty"`
+	FeeTicker              string         `json:"feeTicker,omitempty"`
+	CategoryID             string         `json:"categoryId,omitempty"`
+	ContactID              string         `json:"contactId,omitempty"`
+	AccountingConnectionID string         `json:"accountingConnectionId,omitempty"`
+	Memo                   string         `json:"memo,omitempty"`
+	Description            string         `json:"description,omitempty"`
+	FromAddress            string         `json:"fromAddress,omitempty"`
+	ToAddress              string         `json:"toAddress,omitempty"`
+	Metadata               map[string]any `json:"metadata,omitempty"`
+}
+
+type InternalTransferInput struct {
+	FromWalletID string `json:"fromWalletId"`
+	ToWalletID   string `json:"toWalletId"`
+	Coin         string `json:"coin"`
+	Amount       string `json:"amount"`
+	CreatedSEC   int64  `json:"createdSEC"`
+	Memo         string `json:"memo,omitempty"`
+}
+
+func (c *Client) SearchTransactions(ctx context.Context, orgID string, input TransactionSearchRequest) (*TransactionSearchResponse, error) {
+	var response TransactionSearchResponse
+	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/search"
+	if err := c.doJSON(ctx, http.MethodPost, path, input, &response); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+func (c *Client) CreateTransactions(ctx context.Context, orgID string, input []CreateTransaction) (json.RawMessage, error) {
+	path := "/txns/orgs/" + url.PathEscape(orgID) + "/transactions?immediate=true"
+	data, err := c.do(ctx, http.MethodPost, path, input)
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(data) {
+		return nil, fmt.Errorf("create transaction response was not valid JSON")
+	}
+	return json.RawMessage(data), nil
+}
+
+func (c *Client) CreateInternalTransfer(ctx context.Context, orgID string, input InternalTransferInput) (json.RawMessage, error) {
+	request := map[string]any{
+		"query":     `mutation CreateInternalTransfer($orgId: ID!, $input: CreateInternalTransferInput!) { createInternalTransfer(orgId: $orgId, input: $input) { id } }`,
+		"variables": map[string]any{"orgId": orgID, "input": input},
+	}
+	data, err := c.do(ctx, http.MethodPost, "/graphql", request)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Data   json.RawMessage `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decode GraphQL response: %w", err)
+	}
+	if len(response.Errors) > 0 {
+		messages := make([]string, 0, len(response.Errors))
+		for _, item := range response.Errors {
+			messages = append(messages, item.Message)
+		}
+		return nil, fmt.Errorf("create internal transfer: %s", strings.Join(messages, "; "))
+	}
+	return json.RawMessage(data), nil
 }
 
 func (c *Client) BulkUpdateTransactionState(ctx context.Context, orgID string, input BulkStateRequest) (*BulkStateResponse, error) {

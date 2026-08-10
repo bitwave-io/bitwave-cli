@@ -18,6 +18,36 @@ organization. They do not edit the CLI's local ledger.
 
 Always preview a generated mutation before executing it.
 
+## LLM workflow: find, narrow, preview, confirm
+
+Users do not need to know a transaction hash. `transaction search` accepts the
+same useful dimensions as the transaction UI and returns only 25 matches by
+default. Each match is a compact summary with at most five lines; pass `--full`
+only when complete objects are needed. For example, find inflows from one
+address in one wallet and asset:
+
+```bash
+bitwave --quiet transaction search \
+  --org ORG_ID \
+  --from 2026-07-01 --to 2026-07-31 \
+  --wallet "Treasury" \
+  --asset ASSET_ID \
+  --from-address 0x000000234243234 \
+  --operation Receive \
+  --limit 25 --json
+```
+
+Available filters include `--from-address`, `--to-address`, `--address`
+(either side), `--wallet`, `--asset`, `--type`, `--operation`, `--state`,
+`--categorization`, `--reconciliation`, `--ignored`, `--transaction`, and up
+to five `--search` tokens. Supply the returned `nextToken` through
+`--next-token` to inspect another page.
+
+An LLM should show the user a compact summary of matches, then pass only the
+reviewed IDs to ignore or categorization commands. It should query
+`categorization-options` with the user's words (for example `--query revenue`)
+instead of displaying every category and contact.
+
 ## Ignore and unignore
 
 Preview:
@@ -168,3 +198,66 @@ PUT /v3/orgs/{orgId}/transactions
 ```
 
 British spelling is accepted as the `bulk-categorise` alias.
+
+## Create transactions
+
+Creation writes are guarded by the same `--dry-run` then `--yes` workflow.
+Amounts are decimal strings, timestamps must be RFC3339, and simple/trade
+requests require a caller-controlled `--system-id` so the LLM does not silently
+invent or reuse a source identity.
+
+Simple inflow preview:
+
+```bash
+bitwave --quiet transaction create simple \
+  --org ORG_ID --wallet "Treasury" \
+  --system-id llm-import-20260810-001 \
+  --at 2026-08-10T12:00:00Z \
+  --direction inflow --amount 1.25 --asset ETH \
+  --from-address 0x000000234243234 \
+  --dry-run --json
+```
+
+Use `--direction outflow` for a withdrawal. Optional fee, address, memo,
+description, and blockchain ID flags are available. Categorization at creation
+time requires all three of `--category`, `--contact`, and
+`--accounting-connection` so records from different accounting connections
+cannot be mixed accidentally.
+
+Trade preview:
+
+```bash
+bitwave --quiet transaction create trade \
+  --org ORG_ID --wallet "Exchange" \
+  --system-id llm-trade-20260810-001 \
+  --at 2026-08-10T12:00:00Z \
+  --acquire-amount 1 --acquire-asset ETH \
+  --dispose-amount 3500 --dispose-asset USDC \
+  --fee-amount 5 --fee-asset USDC \
+  --dry-run --json
+```
+
+This produces acquire/dispose rows, and an optional fee row, tied together by
+one trade ID. It calls:
+
+```text
+POST /txns/orgs/{orgId}/transactions?immediate=true
+```
+
+Internal-transfer preview:
+
+```bash
+bitwave --quiet transaction create internal-transfer \
+  --org ORG_ID \
+  --from-wallet "Treasury" --to-wallet "Operations" \
+  --at 2026-08-10T12:00:00Z \
+  --amount 0.5 --asset ETH --memo "Treasury funding" \
+  --dry-run --json
+```
+
+Internal transfers use Bitwave's atomic `CreateInternalTransfer` GraphQL
+mutation at `POST /graphql`. The CLI resolves exact wallet names to IDs and
+rejects a transfer whose source and destination resolve to the same wallet.
+
+After the user reviews a preview, execute the identical command with
+`--yes --json` in place of `--dry-run --json`.

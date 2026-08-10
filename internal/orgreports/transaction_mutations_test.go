@@ -47,6 +47,47 @@ func TestTransactionMutationContracts(t *testing.T) {
 				t.Fatalf("method = %s", r.Method)
 			}
 			_, _ = w.Write([]byte(`[{"success":true,"txnId":"txn-1"}]`))
+		case "/v3/orgs/org-1/transactions/search":
+			if r.Method != http.MethodPost {
+				t.Fatalf("method = %s", r.Method)
+			}
+			var body TransactionSearchRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Limit != 25 || len(body.Filters.FromAddresses) != 1 {
+				t.Fatalf("body = %#v", body)
+			}
+			_, _ = w.Write([]byte(`{"transactions":[{"id":"txn-2"}],"nextToken":"next-1"}`))
+		case "/txns/orgs/org-1/transactions":
+			if r.Method != http.MethodPost || r.URL.Query().Get("immediate") != "true" {
+				t.Fatalf("request = %s %s", r.Method, r.URL.String())
+			}
+			var body []CreateTransaction
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if len(body) != 1 || body[0].TransactionType != "deposit" {
+				t.Fatalf("body = %#v", body)
+			}
+			_, _ = w.Write([]byte(`{"transactions":[{"transactionId":"txn-created"}]}`))
+		case "/graphql":
+			if r.Method != http.MethodPost {
+				t.Fatalf("method = %s", r.Method)
+			}
+			var body struct {
+				Variables struct {
+					OrgID string                `json:"orgId"`
+					Input InternalTransferInput `json:"input"`
+				} `json:"variables"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if body.Variables.OrgID != "org-1" || body.Variables.Input.FromWalletID != "wallet-a" {
+				t.Fatalf("body = %#v", body)
+			}
+			_, _ = w.Write([]byte(`{"data":{"createInternalTransfer":{"id":"txn-transfer"}}}`))
 		case "/org/org-1/categories":
 			_, _ = w.Write([]byte(`{"items":[{"id":"cat-1","name":"Revenue","enabled":true,"accountingConnectionId":"ac-1"}]}`))
 		case "/contacts/org-1":
@@ -87,5 +128,17 @@ func TestTransactionMutationContracts(t *testing.T) {
 	connections, err := c.AccountingConnections(ctx, "org-1")
 	if err != nil || len(connections) != 1 || connections[0].ID != "ac-1" {
 		t.Fatalf("connections = %#v err=%v", connections, err)
+	}
+	search, err := c.SearchTransactions(ctx, "org-1", TransactionSearchRequest{Limit: 25, Filters: TransactionExportFilters{FromAddresses: []string{"0xabc"}}})
+	if err != nil || len(search.Transactions) != 1 || search.NextToken != "next-1" {
+		t.Fatalf("search = %#v err=%v", search, err)
+	}
+	created, err := c.CreateTransactions(ctx, "org-1", []CreateTransaction{{SystemID: "source-1", Time: "2026-08-10T10:00:00Z", AccountID: "wallet-a", Amount: "1.25", AmountTicker: "ETH", TransactionType: "deposit"}})
+	if err != nil || !json.Valid(created) {
+		t.Fatalf("created = %s err=%v", created, err)
+	}
+	transfer, err := c.CreateInternalTransfer(ctx, "org-1", InternalTransferInput{FromWalletID: "wallet-a", ToWalletID: "wallet-b", Coin: "ETH", Amount: "1", CreatedSEC: 1})
+	if err != nil || !json.Valid(transfer) {
+		t.Fatalf("transfer = %s err=%v", transfer, err)
 	}
 }
