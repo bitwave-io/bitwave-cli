@@ -144,6 +144,7 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 	addInGroup(groupReports, newClearedCmd())
 	addInGroup(groupReports, newCSVCmd())
 	addInGroup(groupReports, newStatsCmd())
+	addInGroup(groupReports, newOrgReportCmd())
 
 	addInGroup(groupWorkflows, newMigrateCmd())
 	// Period-close is parked until the orchestrator is ported into this CLI;

@@ -281,7 +281,7 @@ lets agents validate the transaction shape and the resulting journal entry
 
 ## Reports
 
-All reports run against the cwd's workspace (local or cloud), accept
+Ledger reports run against the cwd's workspace (local or cloud), accept
 `--from`, `--to`, `--account` filters, and `--cleared` to restrict to
 cleared entries.
 
@@ -301,6 +301,23 @@ cleared entries.
 Want richer reports? Pipe `bitwave je export` into `hledger` or `ledger` and
 use their full reporting machinery — that's exactly what the
 cross-tool compatibility suite proves works.
+
+Organization product reports are a separate command family. They use the
+active Bitwave organization and its product wallets/transactions; no CLI
+ledger workspace is required:
+
+```sh
+bitwave auth login
+bitwave org use <org-id>
+bitwave report balance \
+  --as-of 2026-06-30 \
+  --group-by wallet \
+  --out 2026-06-30-balance-by-wallet.csv
+```
+
+`bitwave report balance` starts the server-side Balance Report, waits for it,
+and downloads CSV. It is deliberately different from `bitwave bal`, which
+calculates account balances from a CLI ledger workspace.
 
 ---
 
