@@ -25,6 +25,32 @@ type InventoryView struct {
 	Name string `json:"name"`
 }
 
+// Wallet and Subsidiary intentionally contain only discovery-safe fields used
+// to resolve human labels to stable report filter IDs.
+type Wallet struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	NetworkID    string `json:"networkId,omitempty"`
+	SubsidiaryID string `json:"subsidiaryId,omitempty"`
+}
+
+type Subsidiary struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	SubType string `json:"subType,omitempty"`
+}
+
+type TransactionAssetRequest struct {
+	Timezone string                   `json:"timezone,omitempty"`
+	Limit    int                      `json:"limit"`
+	Filters  TransactionExportFilters `json:"filters"`
+}
+
+type ColumnUniqueValues struct {
+	Values        []any  `json:"values"`
+	NextPageToken string `json:"nextPageToken,omitempty"`
+}
+
 type TransactionDateRange struct {
 	From string `json:"from,omitempty"`
 	To   string `json:"to,omitempty"`
@@ -108,6 +134,79 @@ func (c *Client) InventoryViews(ctx context.Context, orgID string) ([]InventoryV
 		return nil, err
 	}
 	return response.Items, nil
+}
+
+// Wallets returns every enabled wallet, following the API's pagination token.
+func (c *Client) Wallets(ctx context.Context, orgID string) ([]Wallet, error) {
+	var result []Wallet
+	var token string
+	for {
+		query := url.Values{"pageLimit": {"500"}, "nameSortOrder": {"asc"}}
+		if token != "" {
+			query.Set("paginationToken", token)
+		}
+		var response struct {
+			Items    []Wallet `json:"items"`
+			NextPage string   `json:"nextPage"`
+		}
+		path := "/orgs/" + url.PathEscape(orgID) + "/wallets?" + query.Encode()
+		if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+			return nil, err
+		}
+		result = append(result, response.Items...)
+		if response.NextPage == "" || response.NextPage == token {
+			return result, nil
+		}
+		token = response.NextPage
+	}
+}
+
+func (c *Client) Subsidiaries(ctx context.Context, orgID string) ([]Subsidiary, error) {
+	var result []Subsidiary
+	path := "/orgs/" + url.PathEscape(orgID) + "/subsidiaries"
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// TransactionAssetIDs returns the transaction search facet. Supplying wallet
+// IDs or a date range makes this a dependent choice list without downloading
+// transaction rows into the LLM context.
+func (c *Client) TransactionAssetIDs(ctx context.Context, orgID string, input TransactionAssetRequest) ([]string, error) {
+	var response struct {
+		AssetIDs []string `json:"assetIds"`
+	}
+	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/search"
+	if err := c.doJSON(ctx, http.MethodPost, path, input, &response); err != nil {
+		return nil, err
+	}
+	return response.AssetIDs, nil
+}
+
+// ActionColumnValues returns all unique values for one Actions column.
+func (c *Client) ActionColumnValues(ctx context.Context, orgID, inventoryViewID, column, from, to string) ([]string, error) {
+	var result []string
+	var token string
+	for {
+		query := url.Values{"showEmptyLots": {"false"}, "startDate": {from}, "asOf": {to}}
+		if token != "" {
+			query.Set("pageToken", token)
+		}
+		path := "/orgs/" + url.PathEscape(orgID) + "/inventory-views/" + url.PathEscape(inventoryViewID) +
+			"/actions/columns/" + url.PathEscape(column) + "/unique?" + query.Encode()
+		var response ColumnUniqueValues
+		if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+			return nil, err
+		}
+		for _, value := range response.Values {
+			result = append(result, fmt.Sprint(value))
+		}
+		if response.NextPageToken == "" || response.NextPageToken == token {
+			return result, nil
+		}
+		token = response.NextPageToken
+	}
 }
 
 // StreamTransactionExport writes the V3 Transaction Export CSV to dst. The

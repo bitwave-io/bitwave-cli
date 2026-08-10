@@ -82,3 +82,55 @@ func TestOrganizationDataExportContracts(t *testing.T) {
 		t.Fatalf("href = %q err=%v", href, err)
 	}
 }
+
+func TestReportOptionDiscoveryContracts(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/orgs/org-1/wallets":
+			if r.URL.Query().Get("paginationToken") == "next-1" {
+				_, _ = w.Write([]byte(`{"items":[{"id":"wallet-2","name":"Trading"}]}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"items":[{"id":"wallet-1","name":"Treasury","networkId":"ethereum"}],"nextPage":"next-1"}`))
+		case "/orgs/org-1/subsidiaries":
+			_, _ = w.Write([]byte(`[{"id":"sub-1","name":"Parent","subType":"root"}]`))
+		case "/v3/orgs/org-1/transactions/search":
+			var body TransactionAssetRequest
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if len(body.Filters.WalletIDs) != 1 || body.Filters.WalletIDs[0] != "wallet-1" {
+				t.Fatalf("asset filters = %#v", body.Filters)
+			}
+			_, _ = w.Write([]byte(`{"transactions":[],"assetIds":["ETH","USDC"]}`))
+		case "/orgs/org-1/inventory-views/view-1/actions/columns/asset/unique":
+			if r.URL.Query().Get("pageToken") == "page-2" {
+				_, _ = w.Write([]byte(`{"values":["USDC"]}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"values":["ETH"],"nextPageToken":"page-2"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := New(srv.URL, func() (string, error) { return "token", nil })
+	ctx := context.Background()
+	wallets, err := c.Wallets(ctx, "org-1")
+	if err != nil || len(wallets) != 2 {
+		t.Fatalf("wallets = %#v err=%v", wallets, err)
+	}
+	subsidiaries, err := c.Subsidiaries(ctx, "org-1")
+	if err != nil || len(subsidiaries) != 1 || subsidiaries[0].ID != "sub-1" {
+		t.Fatalf("subsidiaries = %#v err=%v", subsidiaries, err)
+	}
+	assets, err := c.TransactionAssetIDs(ctx, "org-1", TransactionAssetRequest{Limit: 1, Filters: TransactionExportFilters{WalletIDs: []string{"wallet-1"}}})
+	if err != nil || len(assets) != 2 {
+		t.Fatalf("assets = %#v err=%v", assets, err)
+	}
+	actionAssets, err := c.ActionColumnValues(ctx, "org-1", "view-1", "asset", "2026-01-01", "2026-06-30")
+	if err != nil || len(actionAssets) != 2 || actionAssets[1] != "USDC" {
+		t.Fatalf("action assets = %#v err=%v", actionAssets, err)
+	}
+}

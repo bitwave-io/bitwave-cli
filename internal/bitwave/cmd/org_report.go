@@ -35,6 +35,7 @@ type balanceReportFlags struct {
 	noWait         bool
 	timeout        time.Duration
 	reportAPI      string
+	jsonOutput     bool
 }
 
 func newOrgReportCmd() *cobra.Command {
@@ -52,19 +53,34 @@ organization, but do not require a .bitwave.toml workspace.`,
 	cmd.AddCommand(newTransactionExportCmd())
 	cmd.AddCommand(newActionsReportCmd())
 	cmd.AddCommand(newInventoryViewsCmd())
+	cmd.AddCommand(newReportOptionsCmd())
 	return cmd
 }
 
 func newOrgReportListCmd() *cobra.Command {
-	return &cobra.Command{
+	var jsonOutput bool
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List organization reports supported by this CLI",
-		Run: func(cmd *cobra.Command, _ []string) {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if jsonOutput {
+				return writeJSON(cmd.OutOrStdout(), map[string]any{
+					"schemaVersion": reportSchemaVersion,
+					"reports": []map[string]any{
+						{"name": "balance", "label": "Balance Report", "optionsCommand": "bitwave report options balance"},
+						{"name": "transaction-export", "label": "Transaction Export", "aliases": []string{"transactions-export", "txn-export"}, "optionsCommand": "bitwave report options transaction-export"},
+						{"name": "actions", "label": "Actions", "optionsCommand": "bitwave report options actions"},
+					},
+				})
+			}
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "balance             Balance Report (wallet or asset grouping)")
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "transaction-export  Transaction Export (organization transactions)")
 			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "actions             Actions (selected inventory view)")
+			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Emit machine-readable JSON")
+	return cmd
 }
 
 func newOrgBalanceReportCmd() *cobra.Command {
@@ -81,7 +97,15 @@ written to stderr so redirected CSV remains clean.`,
   bitwave report balance --as-of 2026-06-30 --group-by asset > balance.csv
   bitwave report balance --as-of 2026-06-30 --no-wait`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runOrgBalanceReport(cmd, f)
+			err := runOrgBalanceReport(cmd, &f)
+			if err != nil && f.jsonOutput {
+				return emitReportError(cmd, "balance", err)
+			}
+			if err != nil || !f.jsonOutput {
+				return err
+			}
+			orgID, _ := resolveReportOrg(f.orgID)
+			return emitReportSuccess(cmd, "balance", orgID, []string{f.out}, map[string]any{"asOf": f.asOf, "groupBy": f.groupBy, "currency": f.currency, "wallets": f.walletIDs, "subsidiaries": f.subsidiaryIDs, "includeIgnored": f.includeIgnored, "excludeNFT": f.excludeNFT, "skipPricing": f.skipPricing, "reportAPI": f.reportAPI})
 		},
 	}
 	cmd.Flags().StringVar(&f.asOf, "as-of", "", "Balance date in YYYY-MM-DD (required)")
@@ -98,12 +122,12 @@ written to stderr so redirected CSV remains clean.`,
 	cmd.Flags().BoolVar(&f.noWait, "no-wait", false, "Start the report, print its run ID, and exit")
 	cmd.Flags().DurationVar(&f.timeout, "timeout", 15*time.Minute, "Maximum time to wait for report completion")
 	cmd.Flags().StringVar(&f.reportAPI, "report-api", "v1", "Report API: v1 (production-stable) or v3 (preview)")
-	_ = cmd.MarkFlagRequired("as-of")
+	cmd.Flags().BoolVar(&f.jsonOutput, "json", false, "Emit a machine-readable result envelope (requires --out)")
 	return cmd
 }
 
-func runOrgBalanceReport(cmd *cobra.Command, f balanceReportFlags) error {
-	if err := validateBalanceReportFlags(f); err != nil {
+func runOrgBalanceReport(cmd *cobra.Command, f *balanceReportFlags) error {
+	if err := validateBalanceReportFlags(*f); err != nil {
 		return err
 	}
 	orgID, err := resolveReportOrg(f.orgID)
@@ -111,13 +135,33 @@ func runOrgBalanceReport(cmd *cobra.Command, f balanceReportFlags) error {
 		return err
 	}
 
-	inputs, err := balanceReportInputs(f)
+	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+	if len(f.subsidiaryIDs) > 0 {
+		subsidiaries, discoverErr := client.Subsidiaries(cmd.Context(), orgID)
+		if discoverErr != nil {
+			return fmt.Errorf("resolve subsidiaries: %w", discoverErr)
+		}
+		f.subsidiaryIDs, err = resolveSubsidiaryRefs(f.subsidiaryIDs, subsidiaries)
+		if err != nil {
+			return err
+		}
+	}
+	if len(f.walletIDs) > 0 {
+		wallets, discoverErr := client.Wallets(cmd.Context(), orgID)
+		if discoverErr != nil {
+			return fmt.Errorf("resolve wallets: %w", discoverErr)
+		}
+		f.walletIDs, err = resolveWalletRefs(f.walletIDs, wallets)
+		if err != nil {
+			return err
+		}
+	}
+	inputs, err := balanceReportInputs(*f)
 	if err != nil {
 		return err
 	}
-	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
 	if f.reportAPI == "v1" {
-		return runLegacyOrgBalanceReport(cmd, client, orgID, f)
+		return runLegacyOrgBalanceReport(cmd, client, orgID, *f)
 	}
 	run, err := client.StartBalance(cmd.Context(), orgID, inputs)
 	if err != nil {
@@ -327,6 +371,12 @@ func waitForReport(ctx context.Context, client reportStatusClient, orgID, runID 
 }
 
 func validateBalanceReportFlags(f balanceReportFlags) error {
+	if f.jsonOutput && (f.out == "" || f.out == "-") {
+		return errors.New("--json requires --out so stdout remains valid JSON")
+	}
+	if f.jsonOutput && f.noWait {
+		return errors.New("--json cannot be combined with --no-wait")
+	}
 	parsed, err := time.Parse("2006-01-02", f.asOf)
 	if err != nil || parsed.Format("2006-01-02") != f.asOf {
 		return fmt.Errorf("--as-of must be a valid calendar date in YYYY-MM-DD format")

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -30,6 +31,7 @@ type transactionExportFlags struct {
 	includeCombined        bool
 	out                    string
 	orgID                  string
+	jsonOutput             bool
 }
 
 type actionsReportFlags struct {
@@ -46,10 +48,12 @@ type actionsReportFlags struct {
 	lineErrors     []string
 	out            string
 	orgID          string
+	jsonOutput     bool
 }
 
 func newInventoryViewsCmd() *cobra.Command {
 	var orgID string
+	var jsonOutput bool
 	cmd := &cobra.Command{
 		Use:   "inventory-views",
 		Short: "List inventory views available to inventory-backed reports",
@@ -64,8 +68,14 @@ func newInventoryViewsCmd() *cobra.Command {
 				return fmt.Errorf("list inventory views: %w", err)
 			}
 			if len(views) == 0 {
+				if jsonOutput {
+					return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": reportSchemaVersion, "organization": resolvedOrg, "inventoryViews": []any{}})
+				}
 				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "(no inventory views)")
 				return nil
+			}
+			if jsonOutput {
+				return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": reportSchemaVersion, "organization": resolvedOrg, "inventoryViews": choicesFromViews(views)})
 			}
 			for _, view := range views {
 				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%-32s  %s\n", view.ID, view.Name)
@@ -74,6 +84,7 @@ func newInventoryViewsCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Emit machine-readable JSON")
 	return cmd
 }
 
@@ -91,7 +102,15 @@ explicitly supplied. Omitting dates never silently creates an unbounded export.`
 		Example: `  bitwave report transaction-export --from 2026-01-01 --to 2026-06-30 --out transactions.csv
   bitwave report txn-export --all-dates --out all-transactions.csv`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runTransactionExport(cmd, f)
+			err := runTransactionExport(cmd, &f)
+			if err != nil && f.jsonOutput {
+				return emitReportError(cmd, "transaction-export", err)
+			}
+			if err != nil || !f.jsonOutput {
+				return err
+			}
+			orgID, _ := resolveReportOrg(f.orgID)
+			return emitReportSuccess(cmd, "transaction-export", orgID, []string{f.out}, map[string]any{"from": dateLabel(f.from, f.allDates), "to": dateLabel(f.to, f.allDates), "wallets": f.walletIDs, "assets": f.assetIDs, "subsidiaries": f.subsidiaryIDs, "types": f.transactionTypes, "states": f.states, "categorization": f.categorizationStatuses, "reconciliation": f.reconciliationStatuses, "ignored": f.ignoredStatuses, "search": f.searchTokens, "includeCombined": f.includeCombined})
 		},
 	}
 	cmd.Flags().StringVar(&f.from, "from", "", "Inclusive start date (YYYY-MM-DD)")
@@ -109,10 +128,14 @@ explicitly supplied. Omitting dates never silently creates an unbounded export.`
 	cmd.Flags().BoolVar(&f.includeCombined, "include-combined", false, "Include combined transaction children")
 	cmd.Flags().StringVarP(&f.out, "out", "o", "", "Output CSV (stdout when omitted)")
 	cmd.Flags().StringVar(&f.orgID, "org", "", "Organization ID override")
+	cmd.Flags().BoolVar(&f.jsonOutput, "json", false, "Emit a machine-readable result envelope (requires --out)")
 	return cmd
 }
 
-func runTransactionExport(cmd *cobra.Command, f transactionExportFlags) error {
+func runTransactionExport(cmd *cobra.Command, f *transactionExportFlags) error {
+	if f.jsonOutput && (f.out == "" || f.out == "-") {
+		return errors.New("--json requires --out so stdout remains valid JSON")
+	}
 	if err := validateExportDateRange(f.from, f.to, f.allDates); err != nil {
 		return err
 	}
@@ -124,6 +147,26 @@ func runTransactionExport(cmd *cobra.Command, f transactionExportFlags) error {
 		return err
 	}
 	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+	if len(f.walletIDs) > 0 {
+		wallets, discoverErr := client.Wallets(cmd.Context(), orgID)
+		if discoverErr != nil {
+			return fmt.Errorf("resolve wallets: %w", discoverErr)
+		}
+		f.walletIDs, err = resolveWalletRefs(f.walletIDs, wallets)
+		if err != nil {
+			return err
+		}
+	}
+	if len(f.subsidiaryIDs) > 0 {
+		subsidiaries, discoverErr := client.Subsidiaries(cmd.Context(), orgID)
+		if discoverErr != nil {
+			return fmt.Errorf("resolve subsidiaries: %w", discoverErr)
+		}
+		f.subsidiaryIDs, err = resolveSubsidiaryRefs(f.subsidiaryIDs, subsidiaries)
+		if err != nil {
+			return err
+		}
+	}
 	org, err := client.Org(cmd.Context(), orgID)
 	if err != nil {
 		return fmt.Errorf("load organization settings: %w", err)
@@ -181,7 +224,15 @@ timezone. The CLI accepts an inventory-view ID or an exact view name.`,
 		Example: `  bitwave report inventory-views
   bitwave report actions --inventory-view "Primary FIFO" --from 2026-01-01 --to 2026-06-30 --out actions.csv`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runActionsReport(cmd, f)
+			err := runActionsReport(cmd, &f)
+			if err != nil && f.jsonOutput {
+				return emitReportError(cmd, "actions", err)
+			}
+			if err != nil || !f.jsonOutput {
+				return err
+			}
+			orgID, _ := resolveReportOrg(f.orgID)
+			return emitReportSuccess(cmd, "actions", orgID, actionResultPaths(f.out), map[string]any{"inventoryView": f.inventoryView, "from": f.from, "to": f.to, "inventory": f.inventory, "subsidiaries": f.subsidiaryIDs, "actions": f.actions, "statuses": f.statuses, "transactions": f.transactionIDs, "assets": f.assets, "assetIDs": f.assetIDs, "lineErrors": f.lineErrors})
 		},
 	}
 	cmd.Flags().StringVar(&f.inventoryView, "inventory-view", "", "Inventory view ID or exact name (required)")
@@ -197,14 +248,17 @@ timezone. The CLI accepts an inventory-view ID or an exact view name.`,
 	cmd.Flags().StringSliceVar(&f.lineErrors, "line-error", nil, "Line-error filter")
 	cmd.Flags().StringVarP(&f.out, "out", "o", "", "Output path (required; multiple files get -part-N suffixes)")
 	cmd.Flags().StringVar(&f.orgID, "org", "", "Organization ID override")
-	_ = cmd.MarkFlagRequired("inventory-view")
-	_ = cmd.MarkFlagRequired("from")
-	_ = cmd.MarkFlagRequired("to")
-	_ = cmd.MarkFlagRequired("out")
+	cmd.Flags().BoolVar(&f.jsonOutput, "json", false, "Emit a machine-readable result envelope")
 	return cmd
 }
 
-func runActionsReport(cmd *cobra.Command, f actionsReportFlags) error {
+func runActionsReport(cmd *cobra.Command, f *actionsReportFlags) error {
+	if strings.TrimSpace(f.inventoryView) == "" {
+		return errors.New("--inventory-view is required")
+	}
+	if strings.TrimSpace(f.out) == "" || f.out == "-" {
+		return errors.New("--out is required for Actions exports")
+	}
 	if err := validateExportDateRange(f.from, f.to, false); err != nil {
 		return err
 	}
@@ -213,6 +267,16 @@ func runActionsReport(cmd *cobra.Command, f actionsReportFlags) error {
 		return err
 	}
 	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+	if len(f.subsidiaryIDs) > 0 {
+		subsidiaries, discoverErr := client.Subsidiaries(cmd.Context(), orgID)
+		if discoverErr != nil {
+			return fmt.Errorf("resolve subsidiaries: %w", discoverErr)
+		}
+		f.subsidiaryIDs, err = resolveSubsidiaryRefs(f.subsidiaryIDs, subsidiaries)
+		if err != nil {
+			return err
+		}
+	}
 	views, err := client.InventoryViews(cmd.Context(), orgID)
 	if err != nil {
 		return fmt.Errorf("list inventory views: %w", err)
@@ -221,6 +285,7 @@ func runActionsReport(cmd *cobra.Command, f actionsReportFlags) error {
 	if err != nil {
 		return err
 	}
+	f.inventoryView = view.ID
 	_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "source=bitwave-org-report org=%s report=actions inventoryView=%s inventoryViewName=%q from=%s to=%s\n", orgID, view.ID, view.Name, f.from, f.to)
 
 	export, err := client.StartActionsExport(cmd.Context(), orgID, view.ID, orgreports.ActionsExportInput{
@@ -324,6 +389,17 @@ func actionOutputPaths(path string, count int) []string {
 		paths[i] = fmt.Sprintf("%s-part-%02d%s", stem, i+1, ext)
 	}
 	return paths
+}
+
+func actionResultPaths(path string) []string {
+	if _, err := os.Stat(path); err == nil {
+		return []string{path}
+	}
+	ext := filepath.Ext(path)
+	stem := strings.TrimSuffix(path, ext)
+	matches, _ := filepath.Glob(stem + "-part-*" + ext)
+	sort.Strings(matches)
+	return matches
 }
 
 func writeStreamAtomic(path string, write func(io.Writer) error) error {

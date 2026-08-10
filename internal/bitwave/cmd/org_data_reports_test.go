@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/bitwave-io/bitwave-cli/internal/orgreports"
@@ -52,6 +53,24 @@ func TestResolveInventoryView(t *testing.T) {
 	}
 	if _, err := resolveInventoryView("missing", views); err == nil {
 		t.Fatal("expected missing-view error")
+	}
+}
+
+func TestResolveWalletAndSubsidiaryNames(t *testing.T) {
+	walletIDs, err := resolveWalletRefs([]string{"treasury", "wallet-2"}, []orgreports.Wallet{{ID: "wallet-1", Name: "Treasury"}, {ID: "wallet-2", Name: "Trading"}})
+	if err != nil || !reflect.DeepEqual(walletIDs, []string{"wallet-1", "wallet-2"}) {
+		t.Fatalf("wallet IDs = %v err=%v", walletIDs, err)
+	}
+	subsidiaryIDs, err := resolveSubsidiaryRefs([]string{"parent"}, []orgreports.Subsidiary{{ID: "sub-1", Name: "Parent"}})
+	if err != nil || !reflect.DeepEqual(subsidiaryIDs, []string{"sub-1"}) {
+		t.Fatalf("subsidiary IDs = %v err=%v", subsidiaryIDs, err)
+	}
+}
+
+func TestResolveWalletRejectsAmbiguousName(t *testing.T) {
+	_, err := resolveWalletRefs([]string{"Treasury"}, []orgreports.Wallet{{ID: "wallet-1", Name: "Treasury"}, {ID: "wallet-2", Name: "treasury"}})
+	if err == nil || !strings.Contains(err.Error(), "wallet-1, wallet-2") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
