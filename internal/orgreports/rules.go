@@ -13,18 +13,35 @@ const rulesQuery = `query rules($orgId: ID!) {
   rules(orgId: $orgId) {
     id name disabled type priority methodId
     action {
-      ... on SimpleCategorizationAction { type contactId categoryId feeContactId feeCategoryId ignoreFailPricing __typename }
+      ... on DetailedCategorizationAction {
+        lines { valueExtractor assetExtractor lineQualifierExtractor contactId categoryId metadataIds __typename }
+        type ignoreFailPricing isIntercompanyTransfer __typename
+      }
       ... on IgnoreAction { type __typename }
-      ... on InternalTransferCategorizationAction { type feeContactId feeCategoryId ignoreFailPricing __typename }
-      ... on TradeCategorizationAction { type feeContactId ignoreFailPricing __typename }
-      ... on DetailedCategorizationAction { type ignoreFailPricing isIntercompanyTransfer lines { valueExtractor assetExtractor lineQualifierExtractor contactId categoryId metadataIds } __typename }
+      ... on SimpleCategorizationAction { type contactId categoryId feeContactId feeCategoryId ignoreFailPricing __typename }
+      ... on InternalTransferCategorizationAction {
+        type internalFeeContactId: feeContactId internalFeeCategoryId: feeCategoryId ignoreFailPricing __typename
+      }
+      ... on SimpleSplitCategorizationAction {
+        type
+        splits { ... on PercentageSplit { percentage contactId categoryId __typename } __typename }
+        feeSplits { ... on PercentageSplit { percentage contactId categoryId __typename } __typename }
+        __typename
+      }
+      ... on TradeCategorizationAction { type tradeFeeContactId: feeContactId ignoreFailPricing __typename }
+      ... on DeFiCategorizationAction { type deFiFeeContactId: feeContactId deFiWalletId __typename }
+      ... on IntercompanyTransferCategorizationAction {
+        type intercompanyFeeContactId: feeContactId intercompanyFeeCategoryId: feeCategoryId
+        disposedCategoryId disposedContactId acquiredCategoryId acquiredContactId ignoreFailPricing __typename
+      }
       __typename
     }
     coin description memo fromAddress toAddress
     valueRules { comparison value }
     afterDateSEC beforeDateSEC walletId direction autoReconcile collapseValues
     autoCategorizeFee multiToken accountingConnectionId includesCurrency allowMismatch
-    metadataRule { operator metadata { key value } txnRecordRule }
+    metadataRule { operator metadata { key value __typename } txnRecordRule __typename }
+    __typename
   }
 }`
 
