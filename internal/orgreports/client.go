@@ -78,16 +78,27 @@ type ReportRow struct {
 }
 
 type Client struct {
-	BaseURL       string
-	TokenResolver func() (string, error)
-	HTTPClient    *http.Client
+	BaseURL          string
+	RulesQueryURL    string
+	RulesMutationURL string
+	TokenResolver    func() (string, error)
+	HTTPClient       *http.Client
 }
 
 func New(baseURL string, tokenResolver func() (string, error)) *Client {
+	baseURL = strings.TrimRight(baseURL, "/")
+	rulesQueryURL := baseURL + "/graphql-reports"
+	rulesMutationURL := baseURL + "/graphql"
+	if parsed, err := url.Parse(baseURL); err == nil && parsed.Hostname() == "api.bitwave.io" {
+		rulesQueryURL = "https://api4.bitwave.io/graphql-reports"
+		rulesMutationURL = "https://api-app.bitwave.io/graphql"
+	}
 	return &Client{
-		BaseURL:       strings.TrimRight(baseURL, "/"),
-		TokenResolver: tokenResolver,
-		HTTPClient:    &http.Client{Timeout: 60 * time.Second},
+		BaseURL:          baseURL,
+		RulesQueryURL:    rulesQueryURL,
+		RulesMutationURL: rulesMutationURL,
+		TokenResolver:    tokenResolver,
+		HTTPClient:       &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
