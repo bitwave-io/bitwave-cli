@@ -44,6 +44,13 @@ POST https://api4.bitwave.io/graphql-reports
 GraphQL query: rules(orgId)
 ```
 
+The deployed GraphQL schema does not accept a rule ID, name filter, or page
+limit. `--query` and `--limit` therefore reduce the CLI/LLM output but cannot
+reduce the backend request: Bitwave still returns every rule before the CLI
+filters it. On large organizations this endpoint can be substantially slower
+than transaction search or categorization mutations and needs a server-side
+filtered lookup to improve further.
+
 ## Create a rule
 
 The GraphQL `Rule!` input is a tagged union. The CLI accepts its complete JSON
@@ -81,6 +88,10 @@ The example deliberately uses `direction: All`. For an inflow-only or
 outflow-only rule, copy the exact direction value used by a comparable rule
 returned from `rule list --full`; the server remains authoritative for the
 organization's deployed rule schema.
+
+Keep `multiToken: false` for a rule intended to match a single asset such as
+ETH. Set it to `true` only when the rule is deliberately expected to match
+transactions containing multiple assets.
 
 Preview the exact GraphQL variables without changing the organization:
 
