@@ -319,6 +319,28 @@ bitwave report balance \
 and downloads CSV. It is deliberately different from `bitwave bal`, which
 calculates account balances from a CLI ledger workspace.
 
+The same organization-report family exposes Transaction Export and the
+inventory-view Actions report:
+
+```sh
+# Inclusive dates in the organization's timezone. Use --all-dates explicitly
+# for an unbounded export.
+bitwave report transaction-export \
+  --from 2026-01-01 --to 2026-06-30 \
+  --out transactions.csv
+
+# Actions always requires an explicit inventory view because the selected
+# view's active run determines the report's accounting method and results.
+bitwave report inventory-views
+bitwave report actions \
+  --inventory-view "Primary FIFO" \
+  --from 2026-01-01 --to 2026-06-30 \
+  --out actions.csv
+```
+
+`transaction-export` also accepts the aliases `transactions-export` and
+`txn-export`.
+
 ---
 
 ## Expense reports

@@ -1,0 +1,203 @@
+package orgreports
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/bitwave-io/bitwave-cli/internal/apierr"
+)
+
+type OrgDetails struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Timezone     string `json:"timezone"`
+	BaseCurrency any    `json:"baseCurrency"`
+}
+
+type InventoryView struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type TransactionDateRange struct {
+	From string `json:"from,omitempty"`
+	To   string `json:"to,omitempty"`
+}
+
+type TransactionExportFilters struct {
+	DateRange                   *TransactionDateRange `json:"dateRange,omitempty"`
+	WalletIDs                   []string              `json:"walletIds,omitempty"`
+	SubsidiaryIDs               []string              `json:"subsidiaryIds,omitempty"`
+	AssetIDs                    []string              `json:"assetIds,omitempty"`
+	TransactionTypes            []string              `json:"transactionTypes,omitempty"`
+	States                      []string              `json:"states,omitempty"`
+	CategorizationStatuses      []string              `json:"categorizationStatuses,omitempty"`
+	ReconciliationStatuses      []string              `json:"reconciliationStatuses,omitempty"`
+	IgnoredStatuses             []string              `json:"ignoredStatuses,omitempty"`
+	SearchTokens                []string              `json:"searchTokens,omitempty"`
+	IncludeCombinedTransactions bool                  `json:"includeCombinedTransactions,omitempty"`
+}
+
+type TransactionExportRequest struct {
+	Timezone      string                   `json:"timezone"`
+	SortBy        string                   `json:"sortBy,omitempty"`
+	SortDirection string                   `json:"sortDirection,omitempty"`
+	Filters       TransactionExportFilters `json:"filters"`
+}
+
+type ActionsExportInput struct {
+	From           string
+	To             string
+	Inventory      []string
+	SubsidiaryIDs  []string
+	Actions        []string
+	Statuses       []string
+	TransactionIDs []string
+	Assets         []string
+	AssetIDs       []string
+	LineErrors     []string
+}
+
+type ExportResponse struct {
+	FileType  string   `json:"fileType,omitempty"`
+	ExportID  string   `json:"exportId,omitempty"`
+	Filename  string   `json:"filename,omitempty"`
+	ExportIDs []string `json:"exportIds,omitempty"`
+}
+
+func (r ExportResponse) IDs() []string {
+	if r.ExportID != "" {
+		return []string{r.ExportID}
+	}
+	return append([]string(nil), r.ExportIDs...)
+}
+
+func (c *Client) Org(ctx context.Context, orgID string) (*OrgDetails, error) {
+	data, err := c.do(ctx, http.MethodGet, "/v3/orgs/"+url.PathEscape(orgID), nil)
+	if err != nil {
+		return nil, err
+	}
+	var org OrgDetails
+	if err := json.Unmarshal(data, &org); err == nil && org.ID != "" {
+		return &org, nil
+	}
+	var wrapped struct {
+		Org OrgDetails `json:"org"`
+	}
+	if err := json.Unmarshal(data, &wrapped); err != nil {
+		return nil, fmt.Errorf("decode organization response: %w", err)
+	}
+	if wrapped.Org.ID == "" {
+		return nil, fmt.Errorf("organization response did not include an id")
+	}
+	return &wrapped.Org, nil
+}
+
+func (c *Client) InventoryViews(ctx context.Context, orgID string) ([]InventoryView, error) {
+	var response struct {
+		Items []InventoryView `json:"items"`
+	}
+	path := "/orgs/" + url.PathEscape(orgID) + "/inventory-views"
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+		return nil, err
+	}
+	return response.Items, nil
+}
+
+// StreamTransactionExport writes the V3 Transaction Export CSV to dst. The
+// request uses the same filter contract as transaction search; pagination
+// fields are deliberately absent because the export endpoint streams all rows.
+func (c *Client) StreamTransactionExport(ctx context.Context, orgID string, input TransactionExportRequest, dst io.Writer) error {
+	data, err := json.Marshal(input)
+	if err != nil {
+		return err
+	}
+	token, err := c.TokenResolver()
+	if err != nil {
+		return err
+	}
+	endpoint := c.BaseURL + "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/export"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "text/csv")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		return apierr.Format(resp.StatusCode, http.MethodPost, endpoint, body)
+	}
+	if _, err := io.Copy(dst, resp.Body); err != nil {
+		return fmt.Errorf("stream transaction export: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) StartActionsExport(ctx context.Context, orgID, inventoryViewID string, input ActionsExportInput) (*ExportResponse, error) {
+	query := url.Values{
+		"startDate":     {input.From},
+		"asOf":          {input.To},
+		"exportResults": {"true"},
+	}
+	addAll := func(key string, values []string) {
+		for _, value := range values {
+			if strings.TrimSpace(value) != "" {
+				query.Add(key, value)
+			}
+		}
+	}
+	addAll("inventory", input.Inventory)
+	addAll("subsidiaryId", input.SubsidiaryIDs)
+	addAll("action", input.Actions)
+	addAll("status", input.Statuses)
+	addAll("txnId", input.TransactionIDs)
+	addAll("asset", input.Assets)
+	addAll("assetId", input.AssetIDs)
+	addAll("lineError", input.LineErrors)
+
+	path := "/orgs/" + url.PathEscape(orgID) + "/inventory-views/" + url.PathEscape(inventoryViewID) + "/actions?" + query.Encode()
+	var response ExportResponse
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+		return nil, err
+	}
+	if len(response.IDs()) == 0 {
+		return nil, fmt.Errorf("actions export returned no export id")
+	}
+	return &response, nil
+}
+
+func (c *Client) ExportDownloadURL(ctx context.Context, orgID, exportID, exportType string) (string, error) {
+	query := url.Values{"rawUrl": {"true"}}
+	if exportType != "" {
+		query.Set("exportType", exportType)
+	}
+	path := "/v2/orgs/" + url.PathEscape(orgID) + "/exports/" + url.PathEscape(exportID) + "?" + query.Encode()
+	data, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return "", err
+	}
+	var href string
+	if json.Unmarshal(data, &href) != nil {
+		href = strings.TrimSpace(string(data))
+	}
+	if href == "" {
+		return "", fmt.Errorf("export %s returned an empty download URL", exportID)
+	}
+	parsed, err := url.Parse(href)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") {
+		return "", fmt.Errorf("export %s returned an invalid download URL", exportID)
+	}
+	return href, nil
+}

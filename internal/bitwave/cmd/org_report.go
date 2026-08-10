@@ -49,6 +49,9 @@ organization, but do not require a .bitwave.toml workspace.`,
 	}
 	cmd.AddCommand(newOrgReportListCmd())
 	cmd.AddCommand(newOrgBalanceReportCmd())
+	cmd.AddCommand(newTransactionExportCmd())
+	cmd.AddCommand(newActionsReportCmd())
+	cmd.AddCommand(newInventoryViewsCmd())
 	return cmd
 }
 
@@ -57,7 +60,9 @@ func newOrgReportListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List organization reports supported by this CLI",
 		Run: func(cmd *cobra.Command, _ []string) {
-			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "balance  Balance Report (wallet or asset grouping; CSV download)")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "balance             Balance Report (wallet or asset grouping)")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "transaction-export  Transaction Export (organization transactions)")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "actions             Actions (selected inventory view)")
 		},
 	}
 }
