@@ -2,8 +2,9 @@
 
 An organization needs an accounting connection and available chart of accounts
 before an LLM can create meaningful categorization rules. Category IDs are
-scoped to an accounting connection, so this step comes after wallets/data sync
-and before transaction categorization.
+scoped to an accounting connection. Prompt for this choice either immediately
+before wallet onboarding or immediately after wallet creation; do not wait
+until the user asks to create their first rule.
 
 ## One fast readiness check
 
@@ -95,9 +96,11 @@ bitwave org accounting accounts import --input accounts.json --dry-run --json
 bitwave org accounting accounts import --input accounts.json --yes --json
 ```
 
-Imports reuse one authenticated client and create up to eight accounts in
-parallel. Supported account types are `asset`, `bank`, `equity`, `expense`,
-`liability`, `other`, and `revenue`.
+Imports reuse one authenticated client, default to two concurrent writes, and
+support `--concurrency 1` through `8`. The importer retries HTTP 429 responses
+with backoff and skips account IDs that already exist, so rerunning the same
+file safely resumes a partial import. Supported account types are `asset`,
+`bank`, `equity`, `expense`, `liability`, `other`, and `revenue`.
 
 List bounded account choices without filling LLM context:
 

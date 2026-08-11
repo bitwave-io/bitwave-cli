@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/bitwave-io/bitwave-cli/internal/apierr"
 	"github.com/bitwave-io/bitwave-cli/internal/orgreports"
 )
 
@@ -251,7 +254,7 @@ func newOrgAccountingAccountCreateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "create", Short: "Create one account in a manual Bitwave chart",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runCreateChartAccounts(cmd, []chartAccountInput{input}, f)
+			return runCreateChartAccounts(cmd, []chartAccountInput{input}, f, 1)
 		},
 	}
 	addMutationFlags(cmd, &f)
@@ -267,6 +270,7 @@ func newOrgAccountingAccountCreateCmd() *cobra.Command {
 func newOrgAccountingAccountsImportCmd() *cobra.Command {
 	var f transactionMutationFlags
 	var inputPath string
+	var concurrency int
 	cmd := &cobra.Command{
 		Use: "import", Short: "Import a JSON array of accounts into a manual Bitwave chart",
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -274,18 +278,22 @@ func newOrgAccountingAccountsImportCmd() *cobra.Command {
 			if err != nil {
 				return mutationError(cmd, "import-chart-of-accounts", f.jsonOutput, err)
 			}
-			return runCreateChartAccounts(cmd, accounts, f)
+			return runCreateChartAccounts(cmd, accounts, f, concurrency)
 		},
 	}
 	addMutationFlags(cmd, &f)
 	cmd.Flags().StringVarP(&inputPath, "input", "i", "", "Accounts JSON file, or - for stdin (required)")
+	cmd.Flags().IntVar(&concurrency, "concurrency", 2, "Maximum concurrent account creations (1-8)")
 	return cmd
 }
 
-func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f transactionMutationFlags) error {
+func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f transactionMutationFlags, concurrency int) error {
 	operation := "import-chart-of-accounts"
 	if len(accounts) == 0 {
 		return mutationError(cmd, operation, f.jsonOutput, errors.New("at least one chart account is required"))
+	}
+	if concurrency < 1 || concurrency > 8 {
+		return mutationError(cmd, operation, f.jsonOutput, errors.New("--concurrency must be between 1 and 8"))
 	}
 	for i := range accounts {
 		if err := validateChartAccount(accounts[i]); err != nil {
@@ -331,15 +339,23 @@ func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f 
 		}
 	}
 	results := make([]map[string]any, len(requests))
+	existingAccounts, err := client.Categories(cmd.Context(), orgID)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("check existing chart accounts: %w", err))
+	}
+	existingIDs := map[string]bool{}
+	for _, account := range existingAccounts {
+		existingIDs[account.ID] = true
+	}
 	jobs := make(chan int)
-	workerCount := min(8, len(requests))
+	workerCount := min(concurrency, len(requests))
 	var workers sync.WaitGroup
 	for range workerCount {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
 			for i := range jobs {
-				response, createErr := client.CreateChartAccount(cmd.Context(), orgID, requests[i])
+				response, createErr := createChartAccountWithRetry(cmd, client, orgID, requests[i])
 				if createErr != nil {
 					results[i] = map[string]any{"input": accounts[i], "status": "failed", "error": createErr.Error()}
 					continue
@@ -349,26 +365,56 @@ func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f 
 		}()
 	}
 	for i := range requests {
+		expectedID := accounts[i].ConnectionID + "." + accounts[i].ID
+		if existingIDs[expectedID] {
+			results[i] = map[string]any{"input": accounts[i], "status": "skipped_existing", "id": expectedID}
+			continue
+		}
 		jobs <- i
 	}
 	close(jobs)
 	workers.Wait()
-	failed := 0
+	failed, skipped := 0, 0
 	for _, result := range results {
 		if result["status"] == "failed" {
 			failed++
+		} else if result["status"] == "skipped_existing" {
+			skipped++
 		}
 	}
 	status := "success"
 	if failed > 0 {
 		status = "partial_failure"
 	}
-	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": len(accounts) - failed, "failed": failed, "concurrency": workerCount, "accounts": results, "nextCommand": "bitwave org accounting status --json"}}
+	created := len(accounts) - failed - skipped
+	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "concurrency": workerCount, "accounts": results, "nextCommand": "bitwave org accounting status --json"}}
 	if failed > 0 {
 		_ = writeJSON(cmd.OutOrStdout(), envelope)
-		return fmt.Errorf("chart import: %d created, %d failed", len(accounts)-failed, failed)
+		return fmt.Errorf("chart import: %d created, %d skipped, %d failed", created, skipped, failed)
 	}
-	return outputMutation(cmd, f.jsonOutput, envelope, fmt.Sprintf("chart of accounts: %d created\n", len(accounts)))
+	return outputMutation(cmd, f.jsonOutput, envelope, fmt.Sprintf("chart of accounts: %d created, %d skipped\n", created, skipped))
+}
+
+func createChartAccountWithRetry(cmd *cobra.Command, client *orgreports.Client, orgID string, request orgreports.CreateChartAccountInput) (*orgreports.CreateChartAccountResponse, error) {
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		response, err := client.CreateChartAccount(cmd.Context(), orgID, request)
+		if err == nil {
+			return response, nil
+		}
+		lastErr = err
+		var apiError *apierr.Error
+		if !errors.As(err, &apiError) || apiError.Status != http.StatusTooManyRequests || attempt == 4 {
+			return nil, err
+		}
+		delay := time.Duration(1<<attempt) * time.Second
+		select {
+		case <-cmd.Context().Done():
+			return nil, cmd.Context().Err()
+		case <-time.After(delay):
+		}
+	}
+	return nil, lastErr
 }
 
 func validateChartAccount(input chartAccountInput) error {

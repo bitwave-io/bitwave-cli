@@ -19,6 +19,20 @@ wallet adapter. Creation is forward-compatible: the CLI accepts a new canonical
 network ID and lets the Bitwave API validate it, so adding a backend network does
 not require an immediate CLI release.
 
+## Prompt for accounting setup next to wallet onboarding
+
+Before adding wallets—or immediately after the wallet batch is accepted—run:
+
+```bash
+bitwave org accounting status --json
+```
+
+If `interactionRequired` is true, ask the single returned question: connect the
+client's external accounting system in Bitwave, or create a manual Bitwave chart
+of accounts. Wallet sync can continue in parallel with this setup. Do not delay
+the prompt until rule creation, because categories and contacts are scoped to an
+accounting connection and are prerequisites for most categorization.
+
 ## Assess volume before adding anything
 
 A wallet with millions of historical transactions should not be ingested as if

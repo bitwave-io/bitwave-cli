@@ -287,6 +287,7 @@ surface:
 
 ```sh
 $ bitwave org use ORG_ID
+$ bitwave org accounting status --json
 $ bitwave org wallets networks
 $ bitwave org wallets assess --input wallets.json --json
 $ bitwave org wallets add --input wallets.json --dry-run --json
@@ -310,8 +311,8 @@ network-specific fields are documented in
 
 ### Accounting setup before rules
 
-After wallet data begins syncing, check that the organization has an accounting
-connection and chart of accounts:
+Immediately before wallet onboarding or while wallet data begins syncing, check
+that the organization has an accounting connection and chart of accounts:
 
 ```sh
 $ bitwave org accounting status --json
