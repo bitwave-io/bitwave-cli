@@ -42,6 +42,7 @@ type spamAssetPlan struct {
 
 type spamAnalyzeFlags struct {
 	orgID                                   string
+	tickers                                 []string
 	concurrency, maxAssets, maxTransactions int
 	threshold                               float64
 	includeCategorized                      bool
@@ -148,15 +149,18 @@ func newTransactionSpamOrgCmd(apply bool) *cobra.Command {
 				f.mutation.orgID = resolvedOrg
 				mutation = &f.mutation
 			}
-			return runTransactionSpamAnalyze(cmd, resolvedOrg, f.concurrency, f.maxAssets, f.maxTransactions, f.threshold, f.includeCategorized, mutation)
+			return runTransactionSpamAnalyze(cmd, resolvedOrg, f.tickers, f.concurrency, f.maxAssets, f.maxTransactions, f.threshold, f.includeCategorized, mutation)
 		},
 	}
 	cmd.Flags().StringVar(&f.orgID, "org", "", "Organization ID override")
+	cmd.Flags().StringSliceVar(&f.tickers, "ticker", nil, "Ticker selected from the transaction UI filter (repeatable; skips full-org discovery)")
 	cmd.Flags().IntVar(&f.concurrency, "concurrency", f.concurrency, "Concurrent address-service lookups (1-100)")
 	cmd.Flags().IntVar(&f.maxAssets, "max-assets", f.maxAssets, "Maximum distinct organization assets to check (1-10000)")
 	cmd.Flags().IntVar(&f.maxTransactions, "max-transactions-per-asset", f.maxTransactions, "Maximum ignore-ready transactions returned per spam asset (1-100)")
 	cmd.Flags().Float64Var(&f.threshold, "threshold", f.threshold, "Spam-score threshold")
-	cmd.Flags().BoolVar(&f.includeCategorized, "include-categorized", false, "Include transactions already categorized (excluded by default)")
+	if !apply {
+		cmd.Flags().BoolVar(&f.includeCategorized, "include-categorized", false, "Include categorized transactions in read-only analysis")
+	}
 	if apply {
 		cmd.Flags().BoolVar(&f.mutation.yes, "yes", false, "Confirm the bulk ignore mutation")
 		cmd.Flags().BoolVar(&f.mutation.dryRun, "dry-run", false, "Print the exact bulk ignore request without changing the organization")
@@ -168,7 +172,7 @@ func newTransactionSpamOrgCmd(apply bool) *cobra.Command {
 	return cmd
 }
 
-func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, maxAssets, maxTransactions int, threshold float64, includeCategorized bool, mutation *transactionMutationFlags) error {
+func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, selectedTickers []string, concurrency, maxAssets, maxTransactions int, threshold float64, includeCategorized bool, mutation *transactionMutationFlags) error {
 	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
 	client.TransactionServiceURL = strings.TrimRight(resolveTransactionsBaseURL(), "/")
 	filters := orgreports.TransactionExportFilters{IgnoredStatuses: []string{"Unignored"}}
@@ -177,6 +181,10 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 		filters.CategorizationStatuses = []string{"Uncategorized"}
 	} else {
 		transactionScope = "all-categorization-statuses"
+	}
+	selectedTickers = normalizedSpamSymbols(selectedTickers)
+	if len(selectedTickers) > 0 {
+		return runSelectedTickerIgnore(cmd, client, orgID, selectedTickers, maxTransactions, filters, transactionScope, mutation)
 	}
 	tickerValues, err := client.TransactionTickerValues(cmd.Context(), orgID)
 	if err != nil {
@@ -341,6 +349,145 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 	}
 	if !result.Success && !(mutation.noWait && strings.EqualFold(result.Status, "RUNNING")) {
 		return fmt.Errorf("bulk ignore processed %d transaction(s): %d succeeded, %d failed", result.Processed, result.SuccessCount, len(result.Failed))
+	}
+	return nil
+}
+
+func runSelectedTickerIgnore(cmd *cobra.Command, client *orgreports.Client, orgID string, symbols []string, maxTransactions int, filters orgreports.TransactionExportFilters, transactionScope string, mutation *transactionMutationFlags) error {
+	// Explicit ticker selection mirrors the transaction-grid UI. Mutations stay
+	// uncategorized-only even if a caller accidentally supplies
+	// --include-categorized; categorized work must never be swept up by a spam
+	// convenience command.
+	filters.CategorizationStatuses = []string{"Uncategorized"}
+	transactionScope = "uncategorized-only"
+	plans := make([]map[string]any, 0, len(symbols))
+	allIgnoreIDs := []string{}
+	for _, symbol := range symbols {
+		response, err := client.SearchTransactions(cmd.Context(), orgID, orgreports.TransactionSearchRequest{
+			Timezone: "UTC", Limit: maxTransactions, SortBy: "timestamp", SortDirection: "desc",
+			Filters: orgreports.TransactionExportFilters{
+				AmountCurrencyNames:    []string{symbol},
+				CategorizationStatuses: filters.CategorizationStatuses,
+				IgnoredStatuses:        []string{"Unignored"},
+			},
+		})
+		plan := map[string]any{
+			"ticker": symbol, "filter": "amountCurrencyNames", "ignoreTransactionIds": []string{},
+			"excludedMixedTokenCount": 0, "excludedUnexpectedCount": 0,
+			"transactionPageTruncated": false,
+		}
+		if err != nil {
+			plan["error"] = err.Error()
+			plans = append(plans, plan)
+			continue
+		}
+		plan["transactionPageTruncated"] = response.NextToken != ""
+		ignoreIDs := []string{}
+		excludedMixed := 0
+		excludedUnexpected := 0
+		for _, raw := range response.Transactions {
+			var transaction struct {
+				ID    string                   `json:"id"`
+				Lines []compactTransactionLine `json:"lines"`
+			}
+			if json.Unmarshal(raw, &transaction) != nil || transaction.ID == "" || len(transaction.Lines) == 0 {
+				excludedUnexpected++
+				continue
+			}
+			onlySelectedTicker := true
+			for _, line := range transaction.Lines {
+				if strings.ToUpper(strings.TrimSpace(line.AmountCurrencyName)) != symbol {
+					onlySelectedTicker = false
+					break
+				}
+			}
+			if !onlySelectedTicker {
+				excludedMixed++
+				continue
+			}
+			ignoreIDs = append(ignoreIDs, transaction.ID)
+			allIgnoreIDs = append(allIgnoreIDs, transaction.ID)
+		}
+		plan["ignoreTransactionIds"] = ignoreIDs
+		plan["excludedMixedTokenCount"] = excludedMixed
+		plan["excludedUnexpectedCount"] = excludedUnexpected
+		plans = append(plans, plan)
+	}
+	allIgnoreIDs = uniqueNonEmpty(allIgnoreIDs)
+	output := map[string]any{
+		"schemaVersion": "1", "organization": orgID,
+		"transactionScope":     transactionScope,
+		"assetDiscovery":       "explicit-transaction-grid-ticker-filter",
+		"selectedTickers":      symbols,
+		"tickerPlans":          plans,
+		"ignoreReadyCount":     len(allIgnoreIDs),
+		"ignoreTransactionIds": allIgnoreIDs,
+		"policy": []string{
+			"Ticker values are sent through the same amountCurrencyNames filter used by the transaction UI.",
+			"Only Uncategorized and Unignored transactions are eligible.",
+			"Any transaction containing a different or unidentified token line is excluded.",
+		},
+	}
+	if mutation == nil {
+		return writeJSON(cmd.OutOrStdout(), output)
+	}
+	request := orgreports.BulkStateRequest{BulkActionID: mutation.bulkActionID, TransactionIDs: allIgnoreIDs, Update: orgreports.TransactionStateIgnore}
+	preview := map[string]any{"method": "POST", "path": fmt.Sprintf("/v3/orgs/%s/transactions/bulk-state", orgID), "body": request}
+	if mutation.dryRun {
+		output["bulkIgnore"] = map[string]any{"status": "preview", "dryRun": true, "request": preview}
+		return writeJSON(cmd.OutOrStdout(), output)
+	}
+	if !mutation.yes {
+		return errors.New("refusing to bulk-ignore transactions without --yes (use --dry-run to preview)")
+	}
+	if len(allIgnoreIDs) == 0 {
+		output["bulkIgnore"] = map[string]any{"status": "noop", "processed": 0}
+		return writeJSON(cmd.OutOrStdout(), output)
+	}
+	const bulkStateBatchSize = 100
+	batchResults := []*orgreports.BulkStateResponse{}
+	totalProcessed := 0
+	totalSucceeded := 0
+	allSucceeded := true
+	allFailed := []orgreports.TransactionFailure{}
+	for start := 0; start < len(allIgnoreIDs); start += bulkStateBatchSize {
+		end := min(start+bulkStateBatchSize, len(allIgnoreIDs))
+		batchActionID := mutation.bulkActionID
+		if batchActionID != "" && len(allIgnoreIDs) > bulkStateBatchSize {
+			batchActionID = fmt.Sprintf("%s-%d", batchActionID, start/bulkStateBatchSize+1)
+		}
+		batchRequest := orgreports.BulkStateRequest{
+			BulkActionID: batchActionID, TransactionIDs: allIgnoreIDs[start:end], Update: orgreports.TransactionStateIgnore,
+		}
+		result, err := client.BulkUpdateTransactionState(cmd.Context(), orgID, batchRequest)
+		if err != nil {
+			return fmt.Errorf("bulk-ignore UI-filtered spam-token transaction batch %d: %w", start/bulkStateBatchSize+1, err)
+		}
+		if result.WorkflowID != "" && !mutation.noWait && strings.EqualFold(result.Status, "RUNNING") {
+			ctx, cancel := context.WithTimeout(cmd.Context(), mutation.timeout)
+			result, err = waitForBulkStateWorkflow(ctx, client, orgID, result.WorkflowID)
+			cancel()
+			if err != nil {
+				return err
+			}
+		}
+		batchResults = append(batchResults, result)
+		totalProcessed += result.Processed
+		totalSucceeded += result.SuccessCount
+		allFailed = append(allFailed, result.Failed...)
+		if !result.Success && !(mutation.noWait && strings.EqualFold(result.Status, "RUNNING")) {
+			allSucceeded = false
+		}
+	}
+	output["bulkIgnore"] = map[string]any{
+		"success": allSucceeded, "processed": totalProcessed, "successCount": totalSucceeded,
+		"failed": allFailed, "batchCount": len(batchResults), "batches": batchResults,
+	}
+	if err := writeJSON(cmd.OutOrStdout(), output); err != nil {
+		return err
+	}
+	if !allSucceeded {
+		return fmt.Errorf("bulk ignore processed %d transaction(s): %d succeeded, %d failed", totalProcessed, totalSucceeded, len(allFailed))
 	}
 	return nil
 }

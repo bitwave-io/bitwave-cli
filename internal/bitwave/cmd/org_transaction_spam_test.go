@@ -83,7 +83,7 @@ func TestTransactionSpamAnalyzeExcludesMixedTokenTransactions(t *testing.T) {
 	cmd.SetContext(context.Background())
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	if err := runTransactionSpamAnalyze(cmd, "org-1", 4, 100, 100, 0.5, false, nil); err != nil {
+	if err := runTransactionSpamAnalyze(cmd, "org-1", nil, 4, 100, 100, 0.5, false, nil); err != nil {
 		t.Fatal(err)
 	}
 	var result struct {
@@ -109,11 +109,76 @@ func TestTransactionSpamAnalyzeExcludesMixedTokenTransactions(t *testing.T) {
 	out.Reset()
 	cmd.SetOut(&out)
 	mutation := &transactionMutationFlags{yes: true, timeout: time.Minute}
-	if err := runTransactionSpamAnalyze(cmd, "org-1", 4, 100, 100, 0.5, false, mutation); err != nil {
+	if err := runTransactionSpamAnalyze(cmd, "org-1", nil, 4, 100, 100, 0.5, false, mutation); err != nil {
 		t.Fatal(err)
 	}
 	if len(bulkIgnoredIDs) != 2 || bulkIgnoredIDs[0] != "txn-single" || bulkIgnoredIDs[1] != "txn-same-token" {
 		t.Fatalf("bulk ignored IDs = %#v", bulkIgnoredIDs)
+	}
+}
+
+func TestSelectedTickerIgnoreUsesUIFilterAndUncategorizedScope(t *testing.T) {
+	var bulkIgnoredIDs []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v3/orgs/org-1/transactions/search":
+			var body struct {
+				Filters struct {
+					AmountCurrencyNames    []string `json:"amountCurrencyNames"`
+					CategorizationStatuses []string `json:"categorizationStatuses"`
+					IgnoredStatuses        []string `json:"ignoredStatuses"`
+				} `json:"filters"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if len(body.Filters.AmountCurrencyNames) != 1 || body.Filters.AmountCurrencyNames[0] != "ZEPE.IO" {
+				t.Fatalf("ticker filter = %#v", body.Filters.AmountCurrencyNames)
+			}
+			if len(body.Filters.CategorizationStatuses) != 1 || body.Filters.CategorizationStatuses[0] != "Uncategorized" || len(body.Filters.IgnoredStatuses) != 1 || body.Filters.IgnoredStatuses[0] != "Unignored" {
+				t.Fatalf("transaction scope = %#v", body.Filters)
+			}
+			_, _ = w.Write([]byte(`{"transactions":[
+				{"id":"txn-spam-only","lines":[{"amountCurrencyName":"Zepe.io"}]},
+				{"id":"txn-mixed","lines":[{"amountCurrencyName":"Zepe.io"},{"amountCurrencyName":"ETH"}]}
+			]}`))
+		case "/v3/orgs/org-1/transactions/bulk-state":
+			var body struct {
+				TransactionIDs []string `json:"transactionIds"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			bulkIgnoredIDs = append([]string(nil), body.TransactionIDs...)
+			_, _ = w.Write([]byte(`{"success":true,"processed":1,"successCount":1,"failed":[]}`))
+		default:
+			t.Fatalf("unexpected path = %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	t.Setenv("BITWAVE_BASE_URL_CORE", server.URL)
+	t.Setenv("BITWAVE_TOKEN", "token")
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	mutation := &transactionMutationFlags{yes: true, timeout: time.Minute}
+	if err := runTransactionSpamAnalyze(cmd, "org-1", []string{"Zepe.io"}, 4, 100, 100, 0.5, true, mutation); err != nil {
+		t.Fatal(err)
+	}
+	if len(bulkIgnoredIDs) != 1 || bulkIgnoredIDs[0] != "txn-spam-only" {
+		t.Fatalf("bulk ignored IDs = %#v", bulkIgnoredIDs)
+	}
+	var result struct {
+		TransactionScope string `json:"transactionScope"`
+		IgnoreReadyCount int    `json:"ignoreReadyCount"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.TransactionScope != "uncategorized-only" || result.IgnoreReadyCount != 1 {
+		t.Fatalf("result = %#v", result)
 	}
 }
 

@@ -52,8 +52,10 @@ The command:
    same spam asset.
 
 Categorized transactions are excluded unless the user explicitly directs the
-LLM to include them with `--include-categorized`. A transaction containing both
-a legitimate and spam token is never ignore-ready in this workflow.
+LLM to include them in read-only analysis with `--include-categorized`. The
+bulk-ignore command cannot include categorized transactions. A transaction
+containing both a legitimate and spam token is never ignore-ready in this
+workflow.
 
 The organization response reports clean lookups as a count instead of printing
 thousands of clean token records. Full details are retained for spam candidates,
@@ -74,6 +76,22 @@ Let the CLI perform the bulk ignore after review:
 bitwave --quiet transaction spam bulk-ignore \
   --org ORG_ID --yes --json
 ```
+
+When the user or LLM has already selected suspicious tickers from the same
+choices shown in the transaction UI, skip the full-org discovery pass:
+
+```bash
+bitwave --quiet transaction spam bulk-ignore \
+  --org ORG_ID \
+  --ticker Zepe.io --ticker MegaDoge --ticker DxDex.io \
+  --yes --json
+```
+
+`--ticker` sends `filters.amountCurrencyNames` to the transaction search API,
+which is the same filter used by the UI. It selects only `Uncategorized` and
+`Unignored` transactions and still excludes every transaction containing a
+different token line. Explicit selection is the user's basis for ignoring the
+ticker, so this fast path does not wait for address-service classification.
 
 This runs the same discovery and coin-ID validation itself; the LLM does not
 need to copy transaction IDs between commands. The mutation uses Bitwave's

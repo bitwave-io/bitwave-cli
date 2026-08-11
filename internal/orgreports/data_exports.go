@@ -64,6 +64,7 @@ type TransactionExportFilters struct {
 	MethodIDs                   []string              `json:"methodIds,omitempty"`
 	SubsidiaryIDs               []string              `json:"subsidiaryIds,omitempty"`
 	AssetIDs                    []string              `json:"assetIds,omitempty"`
+	AmountCurrencyNames         []string              `json:"amountCurrencyNames,omitempty"`
 	TransactionTypes            []string              `json:"transactionTypes,omitempty"`
 	States                      []string              `json:"states,omitempty"`
 	CategorizationStatuses      []string              `json:"categorizationStatuses,omitempty"`

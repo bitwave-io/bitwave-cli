@@ -14,14 +14,14 @@ import (
 )
 
 type transactionSearchFlags struct {
-	orgID, from, to, nextToken, sortBy, sortDirection string
-	wallets, assets, types, states, methodIDs         []string
-	categorization, reconciliation, ignored           []string
-	search, transactionIDs, fromAddresses             []string
-	toAddresses, addresses, operations                []string
-	includeCombined                                   bool
-	full                                              bool
-	limit                                             int
+	orgID, from, to, nextToken, sortBy, sortDirection  string
+	wallets, assets, tickers, types, states, methodIDs []string
+	categorization, reconciliation, ignored            []string
+	search, transactionIDs, fromAddresses              []string
+	toAddresses, addresses, operations                 []string
+	includeCombined                                    bool
+	full                                               bool
+	limit                                              int
 }
 
 func newSearchOrgTransactionsCmd() *cobra.Command {
@@ -41,6 +41,7 @@ an LLM does not need to load the organization's entire transaction history.`,
 	cmd.Flags().StringVar(&f.to, "to", "", "Inclusive end date (YYYY-MM-DD; requires --from)")
 	cmd.Flags().StringSliceVar(&f.wallets, "wallet", nil, "Wallet ID or exact name (repeatable)")
 	cmd.Flags().StringSliceVar(&f.assets, "asset", nil, "Asset ID (repeatable)")
+	cmd.Flags().StringSliceVar(&f.tickers, "ticker", nil, "Ticker shown by the transaction UI filter (repeatable)")
 	cmd.Flags().StringSliceVar(&f.types, "type", nil, "Transaction type, such as send, receive, trade, or transfer")
 	cmd.Flags().StringSliceVar(&f.methodIDs, "method-id", nil, "Smart-contract method ID (repeatable)")
 	cmd.Flags().StringSliceVar(&f.operations, "operation", nil, "Transaction operation, such as Send or Receive")
@@ -102,7 +103,7 @@ func runSearchOrgTransactions(cmd *cobra.Command, f transactionSearchFlags) erro
 		Timezone: org.Timezone, Limit: f.limit, NextToken: f.nextToken, SortBy: f.sortBy, SortDirection: f.sortDirection,
 		Filters: orgreports.TransactionExportFilters{
 			DateRange: optionalDateRange(f.from, f.to), WalletIDs: walletIDs,
-			AssetIDs: uniqueNonEmpty(f.assets), MethodIDs: uniqueNonEmpty(f.methodIDs), TransactionTypes: uniqueNonEmpty(f.types), Operations: uniqueNonEmpty(f.operations),
+			AssetIDs: uniqueNonEmpty(f.assets), AmountCurrencyNames: uniqueNonEmpty(f.tickers), MethodIDs: uniqueNonEmpty(f.methodIDs), TransactionTypes: uniqueNonEmpty(f.types), Operations: uniqueNonEmpty(f.operations),
 			States: uniqueNonEmpty(f.states), CategorizationStatuses: uniqueNonEmpty(f.categorization),
 			ReconciliationStatuses: uniqueNonEmpty(f.reconciliation), IgnoredStatuses: uniqueNonEmpty(f.ignored),
 			SearchTokens: uniqueNonEmpty(f.search), TransactionIDs: uniqueNonEmpty(f.transactionIDs),
