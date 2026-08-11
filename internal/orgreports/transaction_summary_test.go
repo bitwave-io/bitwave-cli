@@ -24,3 +24,18 @@ func TestTransactionSummaryAddresses(t *testing.T) {
 		t.Fatalf("items = %#v err=%v", items, err)
 	}
 }
+
+func TestTransactionSummaryAssets(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/dashboard/org-1/txns_summary/assets" || r.URL.Query().Get("datasource") != "bigquery" {
+			t.Fatalf("request = %s?%s", r.URL.Path, r.URL.RawQuery)
+		}
+		_, _ = w.Write([]byte(`{"items":[{"assetId":"COIN.1031","assetName":"TUSD"}]}`))
+	}))
+	defer server.Close()
+	client := New(server.URL, func() (string, error) { return "token", nil })
+	items, err := client.TransactionSummaryAssets(context.Background(), "org-1")
+	if err != nil || len(items) != 1 || items[0].AssetName != "TUSD" {
+		t.Fatalf("items = %#v err=%v", items, err)
+	}
+}

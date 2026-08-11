@@ -50,6 +50,12 @@ instead of displaying every category and contact.
 
 ## Ignore and unignore
 
+For spam-token discovery and bulk ignore, see
+[`SPAM_TOKEN_TRIAGE.md`](SPAM_TOKEN_TRIAGE.md). `transaction spam analyze`
+checks uncategorized assets concurrently and `transaction spam bulk-ignore
+--yes` performs the mutation. A transaction is eligible only when every
+token-bearing line contains the same confirmed spam asset.
+
 Preview:
 
 ```bash

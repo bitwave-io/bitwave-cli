@@ -422,6 +422,20 @@ Because background rule processing runs only intermittently (roughly twice per
 day), use `bitwave rule run --org ORG_ID --yes` after creation to trigger
 processing sooner.
 
+After rule setup, an LLM can triage and bulk-ignore token spam without loading
+the full ledger:
+
+```sh
+bitwave transaction spam check TUSD ETH SOL-USDC
+bitwave transaction spam analyze --org ORG_ID
+bitwave transaction spam bulk-ignore --org ORG_ID --yes
+```
+
+Organization analysis checks unignored, uncategorized assets by default,
+performs concurrent ticker lookups through Bitwave's address service, validates
+coin IDs, and excludes every transaction containing a second token. See
+[Spam-token triage](docs/SPAM_TOKEN_TRIAGE.md).
+
 See [Agent-Native Categorization Rules](docs/AGENT_RULE_WORKFLOW.md) for the
 presets, name-to-ID discovery path, client-side batch format, and lifecycle
 commands.

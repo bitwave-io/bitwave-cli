@@ -19,6 +19,11 @@ type TransactionSummaryAddressRecord struct {
 	WithdrawalsFMV              float64 `json:"withdrawalsFmv"`
 }
 
+type TransactionSummaryAsset struct {
+	AssetID   string `json:"assetId"`
+	AssetName string `json:"assetName"`
+}
+
 // TransactionSummaryAddresses reads the same Interacting Addresses view used
 // by Bitwave's Transaction Summary dashboard. The dashboard is the preferred
 // discovery source because it aggregates recurring counterparties before any
@@ -35,6 +40,21 @@ func (c *Client) TransactionSummaryAddresses(ctx context.Context, orgID string, 
 		Items []TransactionSummaryAddressRecord `json:"items"`
 	}
 	path := "/dashboard/" + url.PathEscape(orgID) + "/txns_summary/interacting_address/records?" + query.Encode()
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+		return nil, err
+	}
+	return response.Items, nil
+}
+
+// TransactionSummaryAssets returns the asset ID-to-symbol choices used by the
+// Transaction Summary dashboard without loading transaction rows.
+func (c *Client) TransactionSummaryAssets(ctx context.Context, orgID string) ([]TransactionSummaryAsset, error) {
+	query := url.Values{}
+	query.Set("datasource", "bigquery")
+	var response struct {
+		Items []TransactionSummaryAsset `json:"items"`
+	}
+	path := "/dashboard/" + url.PathEscape(orgID) + "/txns_summary/assets?" + query.Encode()
 	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
 		return nil, err
 	}

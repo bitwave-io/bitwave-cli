@@ -107,6 +107,21 @@ entire transaction history has already finished. If an active or recently
 completed run already exists, the server remains authoritative about whether a
 new run starts.
 
+### Triage spam tokens after rule setup
+
+After the initial rules are created, use `bitwave transaction spam analyze` to
+check distinct token symbols in uncategorized transactions. The command uses
+Bitwave's address-service spam score, validates the returned coin ID against
+the transaction asset, and emits bounded `ignoreTransactionIds` only when
+every token-bearing line contains the same spam asset. Categorized transactions
+remain out of scope unless the user explicitly requests
+`--include-categorized`.
+
+The LLM can execute the entire reviewed operation with `bitwave transaction
+spam bulk-ignore --yes`. Never ignore a transaction containing both a
+legitimate and spam token. See
+[`SPAM_TOKEN_TRIAGE.md`](SPAM_TOKEN_TRIAGE.md) for the full workflow.
+
 If the CLI trigger returns a persistent server-side error, explain that the
 rules were created but have not been run yet, then direct the user to Bitwave's
 Rules page and the **Run Rules** action. Do not imply that rule creation itself

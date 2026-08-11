@@ -53,6 +53,13 @@ func resolveCoreBaseURL() string {
 	return defaultCoreBaseURL
 }
 
+func resolveAddressServiceURL() string {
+	if v := os.Getenv("BITWAVE_ADDRESS_SERVICE_URL"); v != "" {
+		return v
+	}
+	return "https://address-svc-utyjy373hq-uc.a.run.app"
+}
+
 // makeTokenResolver returns a token resolver applying the bitwave priority:
 //
 //  1. BITWAVE_AGENT_TOKEN env (well-known agent identity)

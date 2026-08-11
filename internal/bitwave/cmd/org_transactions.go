@@ -57,6 +57,7 @@ method, path, and JSON body without sending a mutation.`,
 	cmd.AddCommand(newCategorizeTransactionCmd())
 	cmd.AddCommand(newBulkCategorizeTransactionsCmd())
 	cmd.AddCommand(newCategorizationOptionsCmd())
+	cmd.AddCommand(newTransactionSpamCmd())
 	return cmd
 }
 
