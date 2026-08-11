@@ -39,10 +39,11 @@ bitwave --quiet transaction spam analyze --org ORG_ID --json
 
 The command:
 
-1. Uses the transaction-search asset facet to discover assets present in
-   unignored, uncategorized transactions. It does not download the full ledger.
-2. Uses Transaction Summary's asset choices to map Bitwave asset IDs to ticker
-   symbols.
+1. Uses the same `amountCurrencyName` lookup that powers the transaction UI's
+   Filter by Ticker dropdown, with `limit=-1` for all values up to the service's
+   5,000-value hard cap. It does not download the full ledger.
+2. Uses Transaction Summary's asset choices to map those ticker symbols back to
+   stable Bitwave asset IDs.
 3. Checks the distinct symbols concurrently with the address service.
 4. Requires the returned `coinId` to match the transaction's `COIN.{id}`. A
    ticker match alone is not enough because symbols can collide across assets.

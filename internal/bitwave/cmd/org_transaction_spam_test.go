@@ -27,6 +27,11 @@ func TestTransactionSpamAnalyzeExcludesMixedTokenTransactions(t *testing.T) {
 			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
 		}
 		switch r.URL.Path {
+		case "/orgs/org-1/lookups":
+			if r.URL.Query().Get("fieldName") != "amountCurrencyName" || r.URL.Query().Get("limit") != "-1" {
+				t.Fatalf("lookup query = %s", r.URL.RawQuery)
+			}
+			_, _ = w.Write([]byte(`{"values":["SPAM"]}`))
 		case "/v3/orgs/org-1":
 			_, _ = w.Write([]byte(`{"id":"org-1","timezone":"UTC"}`))
 		case "/dashboard/org-1/txns_summary/assets":
@@ -42,13 +47,6 @@ func TestTransactionSpamAnalyzeExcludesMixedTokenTransactions(t *testing.T) {
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatal(err)
-			}
-			if len(body.Filters.AssetIDs) == 0 {
-				if len(body.Filters.CategorizationStatuses) != 1 || body.Filters.CategorizationStatuses[0] != "Uncategorized" {
-					t.Fatalf("facet scope = %#v", body.Filters)
-				}
-				_, _ = w.Write([]byte(`{"assetIds":["COIN.999"]}`))
-				return
 			}
 			if len(body.Filters.CategorizationStatuses) != 1 || body.Filters.CategorizationStatuses[0] != "Uncategorized" || len(body.Filters.IgnoredStatuses) != 1 {
 				t.Fatalf("transaction scope = %#v", body.Filters)
@@ -78,6 +76,7 @@ func TestTransactionSpamAnalyzeExcludesMixedTokenTransactions(t *testing.T) {
 	defer coreServer.Close()
 
 	t.Setenv("BITWAVE_BASE_URL_CORE", coreServer.URL)
+	t.Setenv("BITWAVE_BASE_URL_TRANSACTIONS", coreServer.URL)
 	t.Setenv("BITWAVE_ADDRESS_SERVICE_URL", addressServer.URL)
 	t.Setenv("BITWAVE_TOKEN", "token")
 	cmd := &cobra.Command{}

@@ -36,6 +36,7 @@ var defaultGLBaseURL = "https://api.bitwave.io"
 // defaultCoreBaseURL is the build-time default for the Bitwave core API. Same override
 // rules as defaultGLBaseURL.
 var defaultCoreBaseURL = "https://api.bitwave.io"
+var defaultTransactionsBaseURL = "https://transactions.bitwave.io"
 
 // resolveGLBaseURL: BITWAVE_BASE_URL_GL env → build-time default.
 func resolveGLBaseURL() string {
@@ -51,6 +52,13 @@ func resolveCoreBaseURL() string {
 		return v
 	}
 	return defaultCoreBaseURL
+}
+
+func resolveTransactionsBaseURL() string {
+	if v := os.Getenv("BITWAVE_BASE_URL_TRANSACTIONS"); v != "" {
+		return v
+	}
+	return defaultTransactionsBaseURL
 }
 
 func resolveAddressServiceURL() string {

@@ -170,6 +170,7 @@ func newTransactionSpamOrgCmd(apply bool) *cobra.Command {
 
 func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, maxAssets, maxTransactions int, threshold float64, includeCategorized bool, mutation *transactionMutationFlags) error {
 	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+	client.TransactionServiceURL = strings.TrimRight(resolveTransactionsBaseURL(), "/")
 	org, err := client.Org(cmd.Context(), orgID)
 	if err != nil {
 		return fmt.Errorf("load organization settings: %w", err)
@@ -181,40 +182,27 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 	} else {
 		transactionScope = "all-categorization-statuses"
 	}
-	assetIDs, err := client.TransactionAssetIDs(cmd.Context(), orgID, orgreports.TransactionAssetRequest{
-		Timezone: org.Timezone, Limit: 1, Filters: filters,
-	})
+	tickerValues, err := client.TransactionTickerValues(cmd.Context(), orgID)
 	if err != nil {
-		return fmt.Errorf("discover transaction assets: %w", err)
+		return fmt.Errorf("discover transaction tickers from the transaction-grid lookup: %w", err)
 	}
-	assetIDs = uniqueNonEmpty(assetIDs)
-	sort.Strings(assetIDs)
-	assetsTruncated := len(assetIDs) > maxAssets
+	symbols := normalizedSpamSymbols(tickerValues)
+	assetsTruncated := len(symbols) > maxAssets
 	if assetsTruncated {
-		assetIDs = assetIDs[:maxAssets]
+		symbols = symbols[:maxAssets]
 	}
 	summaryAssets, err := client.TransactionSummaryAssets(cmd.Context(), orgID)
 	if err != nil {
 		return fmt.Errorf("map transaction asset symbols: %w", err)
 	}
 	assetNames := make(map[string]string, len(summaryAssets))
+	assetBySymbol := map[string][]string{}
 	for _, asset := range summaryAssets {
 		assetNames[asset.AssetID] = asset.AssetName
-	}
-	symbols := make([]string, 0, len(assetIDs))
-	assetBySymbol := map[string][]string{}
-	unresolvedAssetIDs := []string{}
-	for _, assetID := range assetIDs {
-		symbol := strings.TrimSpace(assetNames[assetID])
-		if symbol == "" {
-			unresolvedAssetIDs = append(unresolvedAssetIDs, assetID)
-			continue
+		normalized := strings.ToUpper(strings.TrimSpace(asset.AssetName))
+		if normalized != "" && asset.AssetID != "" {
+			assetBySymbol[normalized] = append(assetBySymbol[normalized], asset.AssetID)
 		}
-		normalized := strings.ToUpper(symbol)
-		if len(assetBySymbol[normalized]) == 0 {
-			symbols = append(symbols, normalized)
-		}
-		assetBySymbol[normalized] = append(assetBySymbol[normalized], assetID)
 	}
 	lookups := lookupSpamSymbols(cmd.Context(), addresssvc.New(resolveAddressServiceURL()), symbols, concurrency, threshold)
 	lookupBySymbol := make(map[string]spamLookup, len(lookups))
@@ -234,9 +222,14 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 	}
 	plans := []spamAssetPlan{}
 	allIgnoreIDs := []string{}
+	unresolvedSpamSymbols := []string{}
 	for _, symbol := range symbols {
 		lookup := lookupBySymbol[symbol]
 		if !lookup.MeetsSpamThreshold || lookup.Coin == nil {
+			continue
+		}
+		if len(assetBySymbol[symbol]) == 0 {
+			unresolvedSpamSymbols = append(unresolvedSpamSymbols, symbol)
 			continue
 		}
 		for _, assetID := range assetBySymbol[symbol] {
@@ -293,9 +286,9 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 	})
 	output := map[string]any{
 		"schemaVersion": "1", "organization": orgID, "source": resolveAddressServiceURL(), "threshold": threshold,
-		"transactionScope": transactionScope, "assetCount": len(assetIDs), "assetsTruncated": assetsTruncated,
+		"transactionScope": transactionScope, "assetDiscovery": "transaction-grid-ticker-lookup", "assetCount": len(symbols), "assetsTruncated": assetsTruncated,
 		"lookupCount": len(lookups), "cleanLookupCount": cleanCount, "reviewLookups": reviewLookups,
-		"unresolvedLookups": unresolvedLookups, "unresolvedAssetIds": unresolvedAssetIDs,
+		"unresolvedLookups": unresolvedLookups, "unresolvedSpamSymbols": unresolvedSpamSymbols,
 		"spamAssetPlans": plans, "ignoreReadyCount": len(allIgnoreIDs), "ignoreTransactionIds": allIgnoreIDs,
 		"policy": []string{
 			"Only scores at or above the Bitwave spam threshold are ignore candidates.",
