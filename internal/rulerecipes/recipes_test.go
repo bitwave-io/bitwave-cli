@@ -89,6 +89,49 @@ func TestPlanningHierarchyStartsWithOrganizationWideTypes(t *testing.T) {
 	}
 }
 
+func TestGasFeeOnlyUsesDetailedFeeExtractor(t *testing.T) {
+	payload, err := Build(Plan{
+		Preset: "gas-fee-only", Name: "Gas Fee Only", Priority: 1, Enabled: true,
+		AccountingConnectionID: "ac-1", FeeCategoryID: "ac-1.gas", FeeContactID: "ac-1.gas-contact",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Transfer struct {
+			AccountingConnectionID string `json:"accountingConnectionId"`
+			Direction              string `json:"direction"`
+			AutoCategorizeFee      bool   `json:"autoCategorizeFee"`
+			Action                 struct {
+				Type  string `json:"type"`
+				Lines []struct {
+					ValueExtractor string `json:"valueExtractor"`
+					AssetExtractor string `json:"assetExtractor"`
+					CategoryID     string `json:"categoryId"`
+					ContactID      string `json:"contactId"`
+				} `json:"lines"`
+			} `json:"action"`
+		} `json:"transfer"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	transfer := decoded.Transfer
+	if transfer.AccountingConnectionID != "ac-1" || transfer.Direction != "Outbound" || !transfer.AutoCategorizeFee {
+		t.Fatalf("gas fee transfer = %#v", transfer)
+	}
+	if transfer.Action.Type == "InternalTransferCategorization" {
+		t.Fatal("gas fee only must never serialize as an internal transfer")
+	}
+	if transfer.Action.Type != "DetailedCategorization" || len(transfer.Action.Lines) != 1 {
+		t.Fatalf("gas fee action = %#v", transfer.Action)
+	}
+	line := transfer.Action.Lines[0]
+	if line.ValueExtractor != "fee" || line.AssetExtractor != "COIN" || line.CategoryID != "ac-1.gas" || line.ContactID != "ac-1.gas-contact" {
+		t.Fatalf("gas fee line = %#v", line)
+	}
+}
+
 func TestDetailedRecipeRequiresRawContract(t *testing.T) {
 	if _, err := Build(Plan{Preset: "detailed-categorization", Name: "details", Priority: 1, AccountingConnectionID: "ac-1"}); err == nil {
 		t.Fatal("expected guidance-only preset to reject compact apply")

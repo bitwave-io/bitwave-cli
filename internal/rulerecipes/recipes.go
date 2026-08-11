@@ -114,10 +114,10 @@ var catalog = []Recipe{
 	},
 	{
 		Name: "gas-fee-only", Summary: "Categorize transactions containing only network/contract execution fees.",
-		ActionType: "InternalTransferCategorization", PlanningTier: 1, DefaultScope: "organization", DefaultDirection: "Empty", ApplySupported: true,
+		ActionType: "DetailedCategorization", PlanningTier: 1, DefaultScope: "organization", DefaultDirection: "Outbound", ApplySupported: true,
 		Fields:   []Field{{"feeCategory", true, "Category used for the gas fee."}, {"feeContact", true, "Contact used for the gas fee."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Create one organization-wide gas-fee-only rule and omit wallet filters by default.", "Direction Empty is the deployed Bitwave condition for transactions without a primary fund flow.", "Add wallet scope only for an explicit exception where treatment genuinely differs."},
+		Guidance: []string{"Create one organization-wide gas-fee-only rule and omit wallet filters by default.", "Gas Fee Only is a Standard, Outbound, Advanced Categorize > Detailed Categorize rule; it is not an Internal Transfer rule or the disabled Fee Only transaction-type tab.", "Its detailed line must extract value=fee and asset=COIN into the gas category and contact.", "Add wallet scope only for an explicit exception where treatment genuinely differs."},
 	},
 	{
 		Name: "ignore-blank", Summary: "Ignore transactions that contain no transferred value.",
@@ -250,12 +250,24 @@ func Build(plan Plan) (json.RawMessage, error) {
 		}
 		action["feeContactId"] = plan.FeeContactID
 		action["ignoreFailPricing"] = plan.IgnoreFailPricing
-	case "internal-transfer", "gas-fee-only":
+	case "internal-transfer":
 		if plan.FeeCategoryID == "" || plan.FeeContactID == "" {
 			return nil, fmt.Errorf("preset %q requires fee category and fee contact", recipe.Name)
 		}
 		action["feeCategoryId"] = plan.FeeCategoryID
 		action["feeContactId"] = plan.FeeContactID
+		action["ignoreFailPricing"] = plan.IgnoreFailPricing
+	case "gas-fee-only":
+		if plan.FeeCategoryID == "" || plan.FeeContactID == "" {
+			return nil, fmt.Errorf("preset %q requires fee category and fee contact", recipe.Name)
+		}
+		action["lines"] = []map[string]any{{
+			"valueExtractor": "fee",
+			"assetExtractor": "COIN",
+			"categoryId":     plan.FeeCategoryID,
+			"contactId":      plan.FeeContactID,
+			"metadataIds":    []string{},
+		}}
 		action["ignoreFailPricing"] = plan.IgnoreFailPricing
 	case "ignore-blank":
 		// Ignore has no accounting action fields.
