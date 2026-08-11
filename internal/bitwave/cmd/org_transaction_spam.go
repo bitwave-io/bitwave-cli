@@ -184,7 +184,14 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, selectedTickers
 	}
 	selectedTickers = normalizedSpamSymbols(selectedTickers)
 	if len(selectedTickers) > 0 {
-		return runSelectedTickerIgnore(cmd, client, orgID, selectedTickers, maxTransactions, filters, transactionScope, mutation)
+		lookups := lookupSpamSymbols(cmd.Context(), addresssvc.New(resolveAddressServiceURL()), selectedTickers, concurrency, threshold)
+		confirmedSpamTickers := []string{}
+		for _, lookup := range lookups {
+			if lookup.MeetsSpamThreshold && lookup.Coin != nil {
+				confirmedSpamTickers = append(confirmedSpamTickers, lookup.RequestedSymbol)
+			}
+		}
+		return runSelectedTickerIgnore(cmd, client, orgID, confirmedSpamTickers, maxTransactions, filters, transactionScope, mutation, lookups)
 	}
 	tickerValues, err := client.TransactionTickerValues(cmd.Context(), orgID)
 	if err != nil {
@@ -331,29 +338,55 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, selectedTickers
 		output["bulkIgnore"] = map[string]any{"status": "noop", "processed": 0}
 		return writeJSON(cmd.OutOrStdout(), output)
 	}
-	result, err := client.BulkUpdateTransactionState(cmd.Context(), orgID, request)
-	if err != nil {
-		return fmt.Errorf("bulk-ignore spam-token transactions: %w", err)
-	}
-	if result.WorkflowID != "" && !mutation.noWait && strings.EqualFold(result.Status, "RUNNING") {
-		ctx, cancel := context.WithTimeout(cmd.Context(), mutation.timeout)
-		defer cancel()
-		result, err = waitForBulkStateWorkflow(ctx, client, orgID, result.WorkflowID)
+	const bulkStateBatchSize = 100
+	batchResults := []*orgreports.BulkStateResponse{}
+	totalProcessed := 0
+	totalSucceeded := 0
+	allSucceeded := true
+	allFailed := []orgreports.TransactionFailure{}
+	for start := 0; start < len(allIgnoreIDs); start += bulkStateBatchSize {
+		end := min(start+bulkStateBatchSize, len(allIgnoreIDs))
+		batchActionID := mutation.bulkActionID
+		if batchActionID != "" && len(allIgnoreIDs) > bulkStateBatchSize {
+			batchActionID = fmt.Sprintf("%s-%d", batchActionID, start/bulkStateBatchSize+1)
+		}
+		batchRequest := orgreports.BulkStateRequest{
+			BulkActionID: batchActionID, TransactionIDs: allIgnoreIDs[start:end], Update: orgreports.TransactionStateIgnore,
+		}
+		result, err := client.BulkUpdateTransactionState(cmd.Context(), orgID, batchRequest)
 		if err != nil {
-			return err
+			return fmt.Errorf("bulk-ignore scored spam-token transaction batch %d: %w", start/bulkStateBatchSize+1, err)
+		}
+		if result.WorkflowID != "" && !mutation.noWait && strings.EqualFold(result.Status, "RUNNING") {
+			ctx, cancel := context.WithTimeout(cmd.Context(), mutation.timeout)
+			result, err = waitForBulkStateWorkflow(ctx, client, orgID, result.WorkflowID)
+			cancel()
+			if err != nil {
+				return err
+			}
+		}
+		batchResults = append(batchResults, result)
+		totalProcessed += result.Processed
+		totalSucceeded += result.SuccessCount
+		allFailed = append(allFailed, result.Failed...)
+		if !result.Success && !(mutation.noWait && strings.EqualFold(result.Status, "RUNNING")) {
+			allSucceeded = false
 		}
 	}
-	output["bulkIgnore"] = result
+	output["bulkIgnore"] = map[string]any{
+		"success": allSucceeded, "processed": totalProcessed, "successCount": totalSucceeded,
+		"failed": allFailed, "batchCount": len(batchResults), "batches": batchResults,
+	}
 	if err := writeJSON(cmd.OutOrStdout(), output); err != nil {
 		return err
 	}
-	if !result.Success && !(mutation.noWait && strings.EqualFold(result.Status, "RUNNING")) {
-		return fmt.Errorf("bulk ignore processed %d transaction(s): %d succeeded, %d failed", result.Processed, result.SuccessCount, len(result.Failed))
+	if !allSucceeded {
+		return fmt.Errorf("bulk ignore processed %d transaction(s): %d succeeded, %d failed", totalProcessed, totalSucceeded, len(allFailed))
 	}
 	return nil
 }
 
-func runSelectedTickerIgnore(cmd *cobra.Command, client *orgreports.Client, orgID string, symbols []string, maxTransactions int, filters orgreports.TransactionExportFilters, transactionScope string, mutation *transactionMutationFlags) error {
+func runSelectedTickerIgnore(cmd *cobra.Command, client *orgreports.Client, orgID string, symbols []string, maxTransactions int, filters orgreports.TransactionExportFilters, transactionScope string, mutation *transactionMutationFlags, scoreLookups []spamLookup) error {
 	// Explicit ticker selection mirrors the transaction-grid UI. Mutations stay
 	// uncategorized-only even if a caller accidentally supplies
 	// --include-categorized; categorized work must never be swept up by a spam
@@ -416,14 +449,23 @@ func runSelectedTickerIgnore(cmd *cobra.Command, client *orgreports.Client, orgI
 	allIgnoreIDs = uniqueNonEmpty(allIgnoreIDs)
 	output := map[string]any{
 		"schemaVersion": "1", "organization": orgID,
-		"transactionScope":     transactionScope,
-		"assetDiscovery":       "explicit-transaction-grid-ticker-filter",
-		"selectedTickers":      symbols,
+		"transactionScope": transactionScope,
+		"assetDiscovery":   "explicit-transaction-grid-ticker-filter",
+		"selectedTickers": func() []string {
+			selected := make([]string, 0, len(scoreLookups))
+			for _, lookup := range scoreLookups {
+				selected = append(selected, lookup.RequestedSymbol)
+			}
+			return selected
+		}(),
+		"scoreLookups":         scoreLookups,
+		"confirmedSpamTickers": symbols,
 		"tickerPlans":          plans,
 		"ignoreReadyCount":     len(allIgnoreIDs),
 		"ignoreTransactionIds": allIgnoreIDs,
 		"policy": []string{
 			"Ticker values are sent through the same amountCurrencyNames filter used by the transaction UI.",
+			"Every selected ticker must meet the configured address-service spam-score threshold before transaction selection.",
 			"Only Uncategorized and Unignored transactions are eligible.",
 			"Any transaction containing a different or unidentified token line is excluded.",
 		},

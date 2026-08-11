@@ -121,6 +121,8 @@ func TestSelectedTickerIgnoreUsesUIFilterAndUncategorizedScope(t *testing.T) {
 	var bulkIgnoredIDs []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/symbols/ZEPE.IO":
+			_, _ = w.Write([]byte(`{"coinId":999,"networkId":"polygon","symbol":"ZEPE.IO","spamScore":0.9}`))
 		case "/v3/orgs/org-1/transactions/search":
 			var body struct {
 				Filters struct {
@@ -158,6 +160,7 @@ func TestSelectedTickerIgnoreUsesUIFilterAndUncategorizedScope(t *testing.T) {
 	defer server.Close()
 
 	t.Setenv("BITWAVE_BASE_URL_CORE", server.URL)
+	t.Setenv("BITWAVE_ADDRESS_SERVICE_URL", server.URL)
 	t.Setenv("BITWAVE_TOKEN", "token")
 	cmd := &cobra.Command{}
 	cmd.SetContext(context.Background())
@@ -179,6 +182,42 @@ func TestSelectedTickerIgnoreUsesUIFilterAndUncategorizedScope(t *testing.T) {
 	}
 	if result.TransactionScope != "uncategorized-only" || result.IgnoreReadyCount != 1 {
 		t.Fatalf("result = %#v", result)
+	}
+}
+
+func TestSelectedCleanTickerCannotReachTransactionIgnore(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/symbols/BSC_USDT" {
+			t.Fatalf("clean ticker unexpectedly reached %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"coinId":168107,"networkId":"bsc","symbol":"BSC_USDT"}`))
+	}))
+	defer server.Close()
+
+	t.Setenv("BITWAVE_BASE_URL_CORE", server.URL)
+	t.Setenv("BITWAVE_ADDRESS_SERVICE_URL", server.URL)
+	t.Setenv("BITWAVE_TOKEN", "token")
+	cmd := &cobra.Command{}
+	cmd.SetContext(context.Background())
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	mutation := &transactionMutationFlags{yes: true, timeout: time.Minute}
+	if err := runTransactionSpamAnalyze(cmd, "org-1", []string{"BSC_USDT"}, 4, 100, 100, 0.5, false, mutation); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		ConfirmedSpamTickers []string `json:"confirmedSpamTickers"`
+		IgnoreReadyCount     int      `json:"ignoreReadyCount"`
+		BulkIgnore           struct {
+			Status    string `json:"status"`
+			Processed int    `json:"processed"`
+		} `json:"bulkIgnore"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ConfirmedSpamTickers) != 0 || result.IgnoreReadyCount != 0 || result.BulkIgnore.Status != "noop" || result.BulkIgnore.Processed != 0 {
+		t.Fatalf("clean ticker result = %#v", result)
 	}
 }
 

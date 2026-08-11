@@ -87,11 +87,12 @@ bitwave --quiet transaction spam bulk-ignore \
   --yes --json
 ```
 
-`--ticker` sends `filters.amountCurrencyNames` to the transaction search API,
-which is the same filter used by the UI. It selects only `Uncategorized` and
-`Unignored` transactions and still excludes every transaction containing a
-different token line. Explicit selection is the user's basis for ignoring the
-ticker, so this fast path does not wait for address-service classification.
+`--ticker` first checks every selected value against the address service. Only
+tickers meeting the configured spam-score threshold are sent as
+`filters.amountCurrencyNames` to the transaction search API, which is the same
+filter used by the UI. It selects only `Uncategorized` and `Unignored`
+transactions and still excludes every transaction containing a different
+token line. Explicit selection never bypasses spam-score classification.
 
 This runs the same discovery and coin-ID validation itself; the LLM does not
 need to copy transaction IDs between commands. The mutation uses Bitwave's
