@@ -8,6 +8,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -16,8 +18,32 @@ import (
 	"github.com/bitwave-io/bitwave-cli/internal/update"
 )
 
-// Version is set at build time via -ldflags.
-var Version = "0.1.0-dev"
+const developmentVersion = "0.3.0-dev"
+
+// Version is replaced by GoReleaser or Make via -ldflags. Versioned `go
+// install` builds have no ldflags, so init falls back to the module version
+// embedded in Go build information instead of reporting a stale dev version.
+var Version = developmentVersion
+
+func init() {
+	// An ldflags value is authoritative for release and local packaged builds.
+	if Version != developmentVersion {
+		return
+	}
+	info, ok := debug.ReadBuildInfo()
+	Version = resolveBuildVersion(Version, info, ok)
+}
+
+func resolveBuildVersion(fallback string, info *debug.BuildInfo, ok bool) string {
+	if !ok || info == nil {
+		return fallback
+	}
+	version := strings.TrimSpace(info.Main.Version)
+	if version == "" || version == "(devel)" {
+		return fallback
+	}
+	return strings.TrimPrefix(version, "v")
+}
 
 // NewRootCmd builds the bitwave root command tree.
 func NewRootCmd() *cobra.Command {
