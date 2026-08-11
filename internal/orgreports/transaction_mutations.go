@@ -207,7 +207,7 @@ func (c *Client) BulkUpdateTransactionState(ctx context.Context, orgID string, i
 		return nil, fmt.Errorf("at least one transaction id is required")
 	}
 	var response BulkStateResponse
-	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk/state"
+	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk-state"
 	if err := c.doJSON(ctx, http.MethodPost, path, input, &response); err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (c *Client) Transaction(ctx context.Context, orgID, transactionID string) (
 
 func (c *Client) BulkTransactionStateStatus(ctx context.Context, orgID, workflowID string) (*BulkStateResponse, error) {
 	var response BulkStateResponse
-	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk/state/" + url.PathEscape(workflowID)
+	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk-state/" + url.PathEscape(workflowID)
 	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
 		return nil, err
 	}

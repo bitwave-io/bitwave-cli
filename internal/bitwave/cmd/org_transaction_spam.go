@@ -171,10 +171,6 @@ func newTransactionSpamOrgCmd(apply bool) *cobra.Command {
 func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, maxAssets, maxTransactions int, threshold float64, includeCategorized bool, mutation *transactionMutationFlags) error {
 	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
 	client.TransactionServiceURL = strings.TrimRight(resolveTransactionsBaseURL(), "/")
-	org, err := client.Org(cmd.Context(), orgID)
-	if err != nil {
-		return fmt.Errorf("load organization settings: %w", err)
-	}
 	filters := orgreports.TransactionExportFilters{IgnoredStatuses: []string{"Unignored"}}
 	transactionScope := "uncategorized-only"
 	if !includeCategorized {
@@ -191,19 +187,6 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 	if assetsTruncated {
 		symbols = symbols[:maxAssets]
 	}
-	summaryAssets, err := client.TransactionSummaryAssets(cmd.Context(), orgID)
-	if err != nil {
-		return fmt.Errorf("map transaction asset symbols: %w", err)
-	}
-	assetNames := make(map[string]string, len(summaryAssets))
-	assetBySymbol := map[string][]string{}
-	for _, asset := range summaryAssets {
-		assetNames[asset.AssetID] = asset.AssetName
-		normalized := strings.ToUpper(strings.TrimSpace(asset.AssetName))
-		if normalized != "" && asset.AssetID != "" {
-			assetBySymbol[normalized] = append(assetBySymbol[normalized], asset.AssetID)
-		}
-	}
 	lookups := lookupSpamSymbols(cmd.Context(), addresssvc.New(resolveAddressServiceURL()), symbols, concurrency, threshold)
 	lookupBySymbol := make(map[string]spamLookup, len(lookups))
 	cleanCount := 0
@@ -218,6 +201,30 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 			reviewLookups = append(reviewLookups, lookup)
 		case "unresolved":
 			unresolvedLookups = append(unresolvedLookups, lookup)
+		}
+	}
+	assetNames := map[string]string{}
+	assetBySymbol := map[string][]string{}
+	assetMappingError := ""
+	spamLookupCount := 0
+	for _, lookup := range lookups {
+		if lookup.MeetsSpamThreshold && lookup.Coin != nil {
+			spamLookupCount++
+		}
+	}
+	if spamLookupCount > 0 {
+		summaryAssets, summaryErr := client.TransactionSummaryAssets(cmd.Context(), orgID)
+		if summaryErr != nil {
+			assetMappingError = summaryErr.Error()
+		} else {
+			assetNames = make(map[string]string, len(summaryAssets))
+			for _, asset := range summaryAssets {
+				assetNames[asset.AssetID] = asset.AssetName
+				normalized := strings.ToUpper(strings.TrimSpace(asset.AssetName))
+				if normalized != "" && asset.AssetID != "" {
+					assetBySymbol[normalized] = append(assetBySymbol[normalized], asset.AssetID)
+				}
+			}
 		}
 	}
 	plans := []spamAssetPlan{}
@@ -240,7 +247,7 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 				continue
 			}
 			response, searchErr := client.SearchTransactions(cmd.Context(), orgID, orgreports.TransactionSearchRequest{
-				Timezone: org.Timezone, Limit: maxTransactions, SortBy: "timestamp", SortDirection: "desc",
+				Timezone: "UTC", Limit: maxTransactions, SortBy: "timestamp", SortDirection: "desc",
 				Filters: orgreports.TransactionExportFilters{
 					AssetIDs: []string{assetID}, CategorizationStatuses: filters.CategorizationStatuses, IgnoredStatuses: []string{"Unignored"},
 				},
@@ -297,11 +304,14 @@ func runTransactionSpamAnalyze(cmd *cobra.Command, orgID string, concurrency, ma
 			"Use `bitwave transaction spam bulk-ignore --yes` to execute this plan. Rerun when transactionPageTruncated is true.",
 		},
 	}
+	if assetMappingError != "" {
+		output["assetMappingError"] = assetMappingError
+	}
 	if mutation == nil {
 		return writeJSON(cmd.OutOrStdout(), output)
 	}
 	request := orgreports.BulkStateRequest{BulkActionID: mutation.bulkActionID, TransactionIDs: allIgnoreIDs, Update: orgreports.TransactionStateIgnore}
-	preview := map[string]any{"method": "POST", "path": fmt.Sprintf("/v3/orgs/%s/transactions/bulk/state", orgID), "body": request}
+	preview := map[string]any{"method": "POST", "path": fmt.Sprintf("/v3/orgs/%s/transactions/bulk-state", orgID), "body": request}
 	if mutation.dryRun {
 		output["bulkIgnore"] = map[string]any{"status": "preview", "dryRun": true, "request": preview}
 		return writeJSON(cmd.OutOrStdout(), output)

@@ -56,7 +56,7 @@ func TestTransactionSpamAnalyzeExcludesMixedTokenTransactions(t *testing.T) {
 				{"id":"txn-same-token","categorizationStatus":"Uncategorized","ignored":false,"lines":[{"line":0,"amountCurrencyId":"COIN.999"},{"line":1,"amountCurrencyId":"COIN.999"}]},
 				{"id":"txn-trade","categorizationStatus":"Uncategorized","ignored":false,"lines":[{"line":0,"amountCurrencyId":"COIN.999"},{"line":1,"amountCurrencyId":"COIN.10"}]}
 			]}`))
-		case "/v3/orgs/org-1/transactions/bulk/state":
+		case "/v3/orgs/org-1/transactions/bulk-state":
 			var body struct {
 				TransactionIDs []string `json:"transactionIds"`
 				Update         string   `json:"update"`

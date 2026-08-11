@@ -76,7 +76,7 @@ bitwave --quiet transaction unignore TXN_ID_1 TXN_ID_2 \
 Endpoint:
 
 ```text
-POST /v3/orgs/{orgId}/transactions/bulk/state
+POST /v3/orgs/{orgId}/transactions/bulk-state
 ```
 
 Request transitions are `ignore` and `un-ignore`. `--bulk-action-id` supplies
@@ -84,7 +84,7 @@ an optional server idempotency key. If the server starts a Temporal workflow,
 the CLI polls:
 
 ```text
-GET /v3/orgs/{orgId}/transactions/bulk/state/{workflowId}
+GET /v3/orgs/{orgId}/transactions/bulk-state/{workflowId}
 ```
 
 ## Categorization discovery
