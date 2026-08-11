@@ -279,6 +279,23 @@ appended pending entry:
 lets agents validate the transaction shape and the resulting journal entry
 *before* spending real gas.
 
+### Bitwave organization wallets
+
+The top-level wallet commands above operate on the CLI ledger. To add or list
+wallets in the selected Bitwave product organization, use the org-scoped
+surface:
+
+```sh
+$ bitwave org use ORG_ID
+$ bitwave org wallets networks
+$ bitwave org wallets add --name Treasury --address 0xABCD...1234 --network eth --yes
+$ bitwave org wallets list --json
+```
+
+Batch onboarding, subsidiary validation, duplicate detection, HD wallets, and
+network-specific fields are documented in
+[`docs/ORGANIZATION_WALLETS.md`](docs/ORGANIZATION_WALLETS.md).
+
 ---
 
 ## Reports

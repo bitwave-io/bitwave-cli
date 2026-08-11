@@ -28,10 +28,12 @@ type InventoryView struct {
 // Wallet and Subsidiary intentionally contain only discovery-safe fields used
 // to resolve human labels to stable report filter IDs.
 type Wallet struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	NetworkID    string `json:"networkId,omitempty"`
-	SubsidiaryID string `json:"subsidiaryId,omitempty"`
+	ID           string   `json:"id"`
+	Name         string   `json:"name"`
+	NetworkID    string   `json:"networkId,omitempty"`
+	Address      string   `json:"address,omitempty"`
+	Addresses    []string `json:"addresses,omitempty"`
+	SubsidiaryID string   `json:"subsidiaryId,omitempty"`
 }
 
 type Subsidiary struct {
