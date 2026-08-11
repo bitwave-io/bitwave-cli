@@ -27,15 +27,15 @@ If `interactionRequired` is true, ask the single prompt returned by the CLI.
 With no connection, ask whether to connect the client's external accounting
 system or create a manual Bitwave connection. Once connected, recognize that
 Bitwave supplies Digital Assets automatically and ask only for missing
-client-specific categories or contacts. Never create a duplicate Digital
-Assets account. When `readyForRules` is true, continue immediately without
+client-specific categories or contacts. Warn about a duplicate Digital Assets
+account, but do not block an explicit request. When `readyForRules` is true, continue immediately without
 asking again. `rule context` also embeds this readiness object.
 
 If the user has not supplied a chart or contact list, use `bitwave org
 accounting starter show --json` as the maximum default scope. The LLM may
 recommend additions from transaction evidence, but must present them as a
-proposal and require user approval. It must not silently create anything beyond
-the CLI starter set.
+proposal and recommend user approval. Accounting guidance is advisory: after
+explaining the likely consequence, the CLI must allow the requested operation.
 
 See `docs/ORGANIZATION_ACCOUNTING.md` for manual connection and chart import.
 

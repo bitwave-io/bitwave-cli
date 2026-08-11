@@ -34,6 +34,7 @@ type mutationEnvelope struct {
 	DryRun        bool         `json:"dryRun,omitempty"`
 	Request       any          `json:"request,omitempty"`
 	Result        any          `json:"result,omitempty"`
+	Warnings      []string     `json:"warnings,omitempty"`
 	Error         *reportError `json:"error,omitempty"`
 }
 

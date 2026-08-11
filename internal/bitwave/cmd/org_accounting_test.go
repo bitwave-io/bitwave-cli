@@ -49,15 +49,19 @@ func TestChartAccountValidationAndImportShape(t *testing.T) {
 	}
 }
 
-func TestChartAccountValidationRejectsAutomaticDigitalAssets(t *testing.T) {
-	err := validateChartAccount(chartAccountInput{
+func TestChartAccountValidationWarnsButAllowsAutomaticDigitalAssets(t *testing.T) {
+	account := chartAccountInput{
 		ConnectionID: "ac-1",
 		ID:           "1000",
 		Name:         "Digital Assets",
 		Type:         "asset",
-	})
-	if err == nil || !strings.Contains(err.Error(), "provided automatically") {
-		t.Fatalf("expected automatic Digital Assets error, got %v", err)
+	}
+	if err := validateChartAccount(account); err != nil {
+		t.Fatalf("accounting guidance must not block execution: %v", err)
+	}
+	warnings := chartAccountAdvisories(account)
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "still submit") {
+		t.Fatalf("warnings = %#v", warnings)
 	}
 }
 

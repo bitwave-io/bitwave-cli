@@ -47,6 +47,7 @@ type accountingStarterPolicy struct {
 	AutomaticAccounts []string                        `json:"automaticAccounts"`
 	Categories        []chartAccountInput             `json:"categories"`
 	Contacts          []orgreports.CreateContactInput `json:"contacts"`
+	AdvisoryOnly      bool                            `json:"advisoryOnly"`
 	Guardrails        []string                        `json:"guardrails"`
 }
 
@@ -70,6 +71,7 @@ here.`,
 func starterPolicy(connectionID string) accountingStarterPolicy {
 	return accountingStarterPolicy{
 		AutomaticAccounts: []string{"Digital Assets"},
+		AdvisoryOnly:      true,
 		Categories: []chartAccountInput{
 			{ConnectionID: connectionID, ID: "bitwave-starter-general-revenue", Code: "BW-4000", Name: "General Revenue", Type: "revenue", Description: "Starter fallback; replace with the client's revenue accounts when supplied"},
 			{ConnectionID: connectionID, ID: "bitwave-starter-general-expense", Code: "BW-6000", Name: "General Expense", Type: "expense", Description: "Starter fallback; replace with the client's expense accounts when supplied"},
@@ -81,10 +83,10 @@ func starterPolicy(connectionID string) accountingStarterPolicy {
 			{ConnectionID: connectionID, RemoteID: "bitwave-starter-gas-fees", Name: "Gas Fees", Type: "Vendor"},
 		},
 		Guardrails: []string{
-			"Never create another Digital Assets account or token/network/protocol-specific asset accounts unless the user explicitly requests them.",
+			"Warn before creating another Digital Assets account or token/network/protocol-specific asset accounts; proceed if the user requests it.",
 			"Treat starter revenue and expense resources as fallbacks, not inferred accounting policy.",
 			"Trade rules use the Gas Fees contact with no fee category and autoCategorizeFee=false.",
-			"Require the user to specify or approve every additional category and contact.",
+			"Recommend that the user specify or approve every additional category and contact; guidance never blocks execution.",
 		},
 	}
 }
@@ -375,12 +377,14 @@ func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f 
 		return mutationError(cmd, operation, f.jsonOutput, err)
 	}
 	requests := make([]orgreports.CreateChartAccountInput, 0, len(accounts))
+	warnings := make([]string, 0)
 	for _, account := range accounts {
 		requests = append(requests, accountRequest(account))
+		warnings = append(warnings, chartAccountAdvisories(account)...)
 	}
 	preview := map[string]any{"method": "POST", "path": "/org/" + orgID + "/categories", "requests": requests}
 	if f.dryRun {
-		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
+		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview, Warnings: warnings})
 	}
 	if !f.yes {
 		return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
@@ -457,7 +461,7 @@ func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f 
 		status = "partial_failure"
 	}
 	created := len(accounts) - failed - skipped
-	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "concurrency": workerCount, "accounts": results, "nextCommand": "bitwave org accounting status --json"}}
+	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "concurrency": workerCount, "accounts": results, "nextCommand": "bitwave org accounting status --json"}, Warnings: warnings}
 	if failed > 0 {
 		_ = writeJSON(cmd.OutOrStdout(), envelope)
 		return fmt.Errorf("chart import: %d created, %d skipped, %d failed", created, skipped, failed)
@@ -497,11 +501,15 @@ func validateChartAccount(input chartAccountInput) error {
 	if strings.TrimSpace(input.Name) == "" {
 		return errors.New("name is required")
 	}
-	if strings.EqualFold(strings.TrimSpace(input.Name), "Digital Assets") {
-		return errors.New("Digital Assets is provided automatically by Bitwave; do not create a duplicate account")
-	}
 	if !stringIn(strings.ToLower(strings.TrimSpace(input.Type)), chartAccountTypes...) {
 		return fmt.Errorf("type must be one of: %s", strings.Join(chartAccountTypes, ", "))
+	}
+	return nil
+}
+
+func chartAccountAdvisories(input chartAccountInput) []string {
+	if strings.EqualFold(strings.TrimSpace(input.Name), "Digital Assets") {
+		return []string{"Digital Assets is already provided automatically by Bitwave; this request may create a duplicate. The CLI will still submit it."}
 	}
 	return nil
 }

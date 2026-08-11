@@ -3,7 +3,8 @@
 An organization needs an accounting connection before an LLM can create
 meaningful categorization rules. Bitwave automatically supplies the Digital
 Assets account for that connection; it is not a category the user or LLM should
-create. Additional category IDs and contacts are scoped to the accounting
+create by default. The CLI warns but does not prevent an explicit request to
+create another one. Additional category IDs and contacts are scoped to the accounting
 connection. Prompt for client-specific accounts and contacts either immediately
 before wallet onboarding or immediately after wallet creation; do not wait
 until the user asks to create their first rule.
@@ -57,8 +58,8 @@ missing.
 
 Creating the connection also makes Bitwave's built-in Digital Assets account
 available. A zero-length categories response therefore means "no additional
-client-specific categories yet," not "no chart of accounts." Never create a
-second Digital Assets category.
+client-specific categories yet," not "no chart of accounts." The CLI recommends
+against a second Digital Assets category but will submit one if requested.
 
 Inspect the conservative starter set without writing, or reapply it later:
 
@@ -138,12 +139,15 @@ analysis may suggest a small set of evidence-backed revenue, expense,
 liability, or equity categories and counterparties; the LLM should present the
 proposal before creating them.
 
-The CLI's returned `starter.guardrails` is authoritative context for an LLM.
+The CLI's returned `starter.guardrails` is advisory context for an LLM, and
+`starter.advisoryOnly` is always true. Warnings explain likely consequences but
+never prevent a requested mutation. The CLI stops only for malformed or missing
+technical inputs, missing mutation confirmation, or an API rejection.
+
 An LLM may analyze transactions and recommend additional resources, but it must
 describe those as proposals and obtain the user's approval before creating
-them. It must not reinterpret Bitwave mechanics—for example, it cannot invent
-asset accounts, attach a fee category to trades, or require primary categories
-and contacts for internal transfers.
+them. If the user chooses a treatment that differs from the recommendation, the
+LLM should state the likely Bitwave consequence and proceed.
 
 ## Important fee-policy distinction
 
