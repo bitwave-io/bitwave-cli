@@ -61,6 +61,34 @@ Supported compact apply presets:
 Rule planning starts with transaction type, not wallet. `rule recipes` returns
 this as the machine-readable `planningHierarchy`.
 
+### Always suggest the Tier 1 defaults first
+
+As soon as the accounting connection, Gas Fees category, and Gas Fees contact
+are available, the LLM should suggest starting with these three enabled rules:
+
+1. All trades
+2. Internal transfers
+3. Gas-fee only
+
+Unless the user declines or equivalent rules already exist, create the missing
+rules together in one CLI batch. This setup does not require downloading or
+analyzing the organization's transaction history. The fast sequence is:
+
+1. List existing rules once.
+2. Resolve or create the Gas Fees category and contact once.
+3. Submit all missing Tier 1 rules through one authenticated `rule apply`
+   process.
+4. Verify the resulting rules once.
+
+Each default is enabled, organization-wide, and uses Bitwave rule priority `1`.
+It has no wallet, asset, address, or date filter. The trade rule uses the Gas
+Fees contact without a fee category and keeps `ignoreFailPricing=false`. The
+internal-transfer and gas-only rules use both the Gas Fees category and contact.
+Do not create duplicates when an equivalent rule is already present.
+
+Only after this default batch should the LLM analyze transaction history for
+Tier 2 deposit/inflow and withdrawal/outflow rules.
+
 Tier 1 contains the organization-wide type rules:
 
 1. Trade

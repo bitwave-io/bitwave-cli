@@ -48,6 +48,19 @@ without the category.
 
 ## Rule planning hierarchy
 
+The recommended starting point for nearly every organization is the same three
+enabled, priority-1 rules: organization-wide trade, internal transfer, and
+gas-fee only. The CLI/LLM should suggest them immediately after the accounting
+connection and Gas Fees resources are ready, create the missing rules in one
+batch unless the user declines, and verify them with one list call. No full
+transaction scan is needed for this starting set.
+
+Before applying, check for equivalent existing rules so rerunning onboarding
+does not create duplicates. Leave wallet, asset, address, and date filters
+empty. Trade uses the Gas Fees contact only and keeps
+`ignoreFailPricing=false`; internal transfer and gas-only use both the Gas Fees
+category and contact.
+
 Start with Tier 1 organization-wide transaction-type rules: trade,
 internal transfer, and gas-fee only. These normally have no wallet filter; one
 rule applies across the organization's wallets. A wallet-specific version is

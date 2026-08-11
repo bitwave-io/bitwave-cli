@@ -74,6 +74,9 @@ func TestPlanningHierarchyStartsWithOrganizationWideTypes(t *testing.T) {
 	if len(hierarchy) != 2 || hierarchy[0].Tier != 1 || hierarchy[1].Tier != 2 {
 		t.Fatalf("hierarchy = %#v", hierarchy)
 	}
+	if !hierarchy[0].RecommendedStart || !hierarchy[0].ApplyAsSingleBatch {
+		t.Fatalf("tier 1 must be the fast recommended starting batch: %#v", hierarchy[0])
+	}
 	want := []string{"trade", "internal-transfer", "gas-fee-only"}
 	for i, preset := range want {
 		if hierarchy[0].Presets[i] != preset {

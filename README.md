@@ -397,8 +397,8 @@ load compact Bitwave rule knowledge, discover only relevant organization
 choices, and apply one or many rules in a single authenticated process:
 
 ```sh
-bitwave rule recipes --json
-bitwave rule metadata-guide --json
+bitwave rule recipes
+bitwave rule metadata-guide
 bitwave transaction search --method-id 0xe8e33700 --limit 10
 bitwave rule context --preset simple-inflow --asset ETH --query revenue
 bitwave rule apply --preset simple-inflow --asset ETH \
@@ -407,6 +407,11 @@ bitwave rule apply --preset simple-inflow --asset ETH \
   --category-id CATEGORY_ID --contact-id CONTACT_ID \
   --enabled --yes
 ```
+
+The recommended first rule setup is one organization-wide, enabled rule for
+each of trade, internal transfer, and gas-fee only. Check for existing
+equivalents, then create all missing defaults in one batch without a full
+transaction scan. Granular deposit and withdrawal analysis comes afterward.
 
 See [Agent-Native Categorization Rules](docs/AGENT_RULE_WORKFLOW.md) for the
 presets, name-to-ID discovery path, client-side batch format, and lifecycle

@@ -51,18 +51,22 @@ type Recipe struct {
 }
 
 type PlanningTier struct {
-	Tier     int      `json:"tier"`
-	Name     string   `json:"name"`
-	Presets  []string `json:"presets"`
-	Guidance []string `json:"guidance"`
+	Tier               int      `json:"tier"`
+	Name               string   `json:"name"`
+	Presets            []string `json:"presets"`
+	RecommendedStart   bool     `json:"recommendedStart"`
+	ApplyAsSingleBatch bool     `json:"applyAsSingleBatch"`
+	Guidance           []string `json:"guidance"`
 }
 
 func PlanningHierarchy() []PlanningTier {
 	return []PlanningTier{
 		{
-			Tier: 1, Name: "organization-wide transaction type",
+			Tier: 1, Name: "organization-wide transaction type", RecommendedStart: true, ApplyAsSingleBatch: true,
 			Presets: []string{"trade", "internal-transfer", "gas-fee-only"},
 			Guidance: []string{
+				"Always suggest this tier as the first rule setup after accounting resources are ready; create all three applicable defaults unless the user declines or equivalent rules already exist.",
+				"These defaults do not require a transaction-history scan. Check existing rules, resolve the Gas Fees category/contact, and apply the missing rules in one batch.",
 				"Create one organization-wide rule for each applicable transaction type; omit wallet, asset, and address filters by default.",
 				"Trade rules keep ignoreFailPricing=false so failed-priced transactions, including possible DeFi activity, are not swept into the generic trade rule.",
 			},
