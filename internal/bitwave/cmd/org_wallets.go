@@ -46,16 +46,19 @@ var organizationWalletNetworkAliases = map[string]string{
 const organizationWalletSyncExpectation = "Wallet data typically appears within 15 minutes but can take up to 24 hours, depending on transaction history volume and network load."
 
 type orgWalletInput struct {
-	Name                    string         `json:"name"`
-	Description             string         `json:"description,omitempty"`
-	Address                 string         `json:"address"`
-	NetworkID               string         `json:"networkId"`
-	SubsidiaryID            string         `json:"subsidiaryId,omitempty"`
-	AddressType             string         `json:"addressType,omitempty"`
-	SyncStartDateSEC        int64          `json:"syncStartDateSEC,omitempty"`
-	ViewKey                 string         `json:"viewKey,omitempty"`
-	Metadata                map[string]any `json:"metadata,omitempty"`
-	IsBalanceMonitoringOnly bool           `json:"isBalanceMonitoringOnly,omitempty"`
+	Name                    string                       `json:"name"`
+	Description             string                       `json:"description,omitempty"`
+	Address                 string                       `json:"address"`
+	NetworkID               string                       `json:"networkId"`
+	SubsidiaryID            string                       `json:"subsidiaryId,omitempty"`
+	AddressType             string                       `json:"addressType,omitempty"`
+	SyncStartDateSEC        int64                        `json:"syncStartDateSEC,omitempty"`
+	ViewKey                 string                       `json:"viewKey,omitempty"`
+	Metadata                map[string]any               `json:"metadata,omitempty"`
+	IsBalanceMonitoringOnly bool                         `json:"isBalanceMonitoringOnly,omitempty"`
+	VolumeReview            walletVolumeReview           `json:"volumeReview"`
+	BabelRollupRules        []orgreports.BabelRollupRule `json:"babelRollupRules,omitempty"`
+	SolanaValidator         bool                         `json:"solanaValidator,omitempty"`
 }
 
 type orgWalletAddFlags struct {
@@ -71,6 +74,13 @@ type orgWalletAddFlags struct {
 	balanceMonitoringOnly bool
 	allowDuplicate        bool
 	concurrency           int
+	volumeReviewed        bool
+	estimatedTransactions int64
+	volumeSource          string
+	volumeEvidence        string
+	acknowledgeUnknown    bool
+	solanaValidator       bool
+	babelRollupInput      string
 }
 
 func newOrgWalletsCmd() *cobra.Command {
@@ -85,7 +95,7 @@ use the same accountBasedBlockchain creation contract as Bitwave Add Source.
 After creation, data typically appears within 15 minutes but can take up to 24
 hours depending on transaction history volume and network load.`,
 	}
-	cmd.AddCommand(newOrgWalletsListCmd(), newOrgWalletsNetworksCmd(), newOrgWalletsAddCmd())
+	cmd.AddCommand(newOrgWalletsListCmd(), newOrgWalletsNetworksCmd(), newOrgWalletsAssessCmd(), newOrgWalletsAddCmd(), newOrgWalletsRollupCmd())
 	return cmd
 }
 
@@ -166,7 +176,10 @@ use --address-type hd for a BTC or DASH xpub/derivation key.
 
 Creating a wallet starts asynchronous ingestion. Data typically appears within
 15 minutes but can take up to 24 hours depending on transaction history volume
-and network load.`,
+and network load. Before creation, run ` + "`bitwave org wallets assess`" + ` and
+review expected volume with the user. High-volume wallets require modern Babel
+rollup rules. Solana validator transactions are rolled up automatically. If the
+volume or appropriate rollup design is unclear, speak with Bitwave first.`,
 		RunE: func(cmd *cobra.Command, _ []string) error { return runOrgWalletsAdd(cmd, f) },
 	}
 	addMutationFlags(cmd, &f.transactionMutationFlags)
@@ -181,6 +194,13 @@ and network load.`,
 	cmd.Flags().BoolVar(&f.balanceMonitoringOnly, "balance-monitoring-only", false, "Create as a balance-monitoring-only wallet")
 	cmd.Flags().BoolVar(&f.allowDuplicate, "allow-duplicate", false, "Create even if the same network/address already exists")
 	cmd.Flags().IntVar(&f.concurrency, "concurrency", 8, "Maximum concurrent wallet creations")
+	cmd.Flags().BoolVar(&f.volumeReviewed, "volume-reviewed", false, "Confirm transaction volume was reviewed before creation")
+	cmd.Flags().Int64Var(&f.estimatedTransactions, "estimated-transactions", -1, "Estimated transactions in the requested sync window")
+	cmd.Flags().StringVar(&f.volumeSource, "volume-source", "", "Source of the estimate, such as user, explorer, or API")
+	cmd.Flags().StringVar(&f.volumeEvidence, "volume-evidence", "", "Short evidence or URL supporting the volume estimate")
+	cmd.Flags().BoolVar(&f.acknowledgeUnknown, "acknowledge-unknown-volume", false, "Acknowledge unknown volume and the recommendation to contact Bitwave")
+	cmd.Flags().BoolVar(&f.solanaValidator, "solana-validator", false, "Mark this as a Solana validator wallet (rollups are automatic)")
+	cmd.Flags().StringVar(&f.babelRollupInput, "babel-rollup-input", "", "Babel rollup rules JSON file for single-wallet mode")
 	return cmd
 }
 
@@ -194,6 +214,9 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 		if err := normalizeAndValidateOrgWallet(&inputs[i]); err != nil {
 			return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("wallet %d: %w", i+1, err))
 		}
+		if err := validateWalletVolumeAndRollups(inputs[i]); err != nil {
+			return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("wallet %d (%s): %w", i+1, inputs[i].Name, err))
+		}
 	}
 	if f.concurrency < 1 || f.concurrency > 50 {
 		return mutationError(cmd, operation, f.jsonOutput, errors.New("--concurrency must be between 1 and 50"))
@@ -206,7 +229,17 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 	for _, input := range inputs {
 		requests = append(requests, buildOrgWalletPayload(input))
 	}
-	preview := map[string]any{"method": "POST", "url": "organization GraphQL createWallet", "wallets": requests}
+	previewItems := make([]map[string]any, 0, len(inputs))
+	for i, input := range inputs {
+		item := map[string]any{"wallet": requests[i], "volumeAssessment": assessWalletVolume(input)}
+		if len(input.BabelRollupRules) > 0 {
+			item["afterCreate"] = map[string]any{"method": "POST", "path": "/orgs/{orgId}/wallets/{createdWalletId}/rollup", "body": orgreports.WalletRollupRequest{Address: input.Address, Type: "rollup-by-time", Rules: input.BabelRollupRules}}
+		} else if input.SolanaValidator {
+			item["rollup"] = map[string]any{"status": "automatic", "reason": "Solana validator transactions are rolled up automatically"}
+		}
+		previewItems = append(previewItems, item)
+	}
+	preview := map[string]any{"walletCreate": map[string]any{"method": "POST", "url": "organization GraphQL createWallet"}, "items": previewItems}
 	if f.dryRun {
 		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 	}
@@ -229,6 +262,15 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 		return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("check existing wallets: %w", err))
 	}
 	results := make([]map[string]any, len(inputs))
+	existingByIndex := make(map[int]*orgreports.Wallet)
+	for i, input := range inputs {
+		if f.allowDuplicate {
+			continue
+		}
+		if wallet := findExistingOrgWallet(existing, input); wallet != nil {
+			existingByIndex[i] = wallet
+		}
+	}
 	jobs := make(chan int)
 	workerCount := min(f.concurrency, len(inputs))
 	var workers sync.WaitGroup
@@ -238,19 +280,41 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 			defer workers.Done()
 			for i := range jobs {
 				input := inputs[i]
-				wallet, createErr := client.CreateOrgWallet(cmd.Context(), orgID, requests[i], nil)
-				if createErr != nil {
-					results[i] = map[string]any{"status": "failed", "input": input, "error": createErr.Error()}
-					continue
+				walletID, address := "", input.Address
+				var walletResult any
+				status := "created"
+				if existingWallet := existingByIndex[i]; existingWallet != nil {
+					walletID = existingWallet.ID
+					walletResult = existingWallet
+					status = "skipped_existing"
+				} else {
+					wallet, createErr := client.CreateOrgWallet(cmd.Context(), orgID, requests[i], nil)
+					if createErr != nil {
+						results[i] = map[string]any{"status": "failed", "input": input, "error": createErr.Error()}
+						continue
+					}
+					walletID = wallet.ID
+					walletResult = wallet
 				}
-				results[i] = map[string]any{"status": "created", "input": input, "wallet": wallet}
+				rollup := map[string]any{"status": "not_configured"}
+				if input.SolanaValidator {
+					rollup = map[string]any{"status": "automatic", "type": "solana-validator"}
+				} else if len(input.BabelRollupRules) > 0 {
+					if err := client.UpsertWalletRollup(cmd.Context(), orgID, walletID, address, input.BabelRollupRules); err != nil {
+						rollup = map[string]any{"status": "failed", "type": "rollup-by-time", "error": err.Error()}
+						results[i] = map[string]any{"status": status + "_rollup_failed", "input": input, "wallet": walletResult, "rollup": rollup}
+						continue
+					}
+					rollup = map[string]any{"status": "configured", "type": "rollup-by-time", "ruleCount": len(input.BabelRollupRules)}
+				}
+				results[i] = map[string]any{"status": status, "input": input, "wallet": walletResult, "rollup": rollup}
 			}
 		}()
 	}
 	for i, input := range inputs {
 		if !f.allowDuplicate {
-			if wallet := findExistingOrgWallet(existing, input); wallet != nil {
-				results[i] = map[string]any{"status": "skipped_existing", "input": input, "wallet": wallet}
+			if existingByIndex[i] != nil && len(input.BabelRollupRules) == 0 {
+				results[i] = map[string]any{"status": "skipped_existing", "input": input, "wallet": existingByIndex[i], "rollup": map[string]any{"status": map[bool]string{true: "automatic", false: "not_configured"}[input.SolanaValidator]}}
 				continue
 			}
 			for earlier := 0; earlier < i; earlier++ {
@@ -267,27 +331,34 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 	}
 	close(jobs)
 	workers.Wait()
-	created, skipped, failed := 0, 0, 0
+	created, skipped, failed, rollupFailed, rollupConfigured := 0, 0, 0, 0, 0
 	for _, result := range results {
-		if result["status"] == "created" {
+		resultStatus, _ := result["status"].(string)
+		if strings.HasPrefix(resultStatus, "created") {
 			created++
-		} else if result["status"] == "skipped_existing" || result["status"] == "skipped_duplicate_input" {
+		} else if strings.HasPrefix(resultStatus, "skipped_existing") || resultStatus == "skipped_duplicate_input" {
 			skipped++
-		} else if result["status"] == "failed" {
+		} else if resultStatus == "failed" {
 			failed++
+		}
+		if strings.HasSuffix(resultStatus, "_rollup_failed") {
+			rollupFailed++
+		}
+		if rollup, ok := result["rollup"].(map[string]any); ok && rollup["status"] == "configured" {
+			rollupConfigured++
 		}
 	}
 	status := "success"
-	if failed > 0 {
+	if failed > 0 || rollupFailed > 0 {
 		status = "partial_failure"
 	}
 	syncGuidance := organizationWalletSyncGuidance()
-	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "concurrency": workerCount, "wallets": results, "syncGuidance": syncGuidance}}
-	if failed > 0 {
+	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "rollupConfigured": rollupConfigured, "rollupFailed": rollupFailed, "concurrency": workerCount, "wallets": results, "syncGuidance": syncGuidance}}
+	if failed > 0 || rollupFailed > 0 {
 		_ = writeJSON(cmd.OutOrStdout(), envelope)
-		return fmt.Errorf("organization wallets: %d created, %d skipped, %d failed", created, skipped, failed)
+		return fmt.Errorf("organization wallets: %d created, %d skipped, %d failed; Babel rollups: %d configured, %d failed", created, skipped, failed, rollupConfigured, rollupFailed)
 	}
-	human := fmt.Sprintf("organization wallets: %d created, %d skipped\n%s\nCheck progress: bitwave transaction search --wallet WALLET_NAME --limit 1 --json\n", created, skipped, organizationWalletSyncExpectation)
+	human := fmt.Sprintf("organization wallets: %d created, %d skipped; Babel rollups: %d configured\n%s\nCheck progress: bitwave transaction search --wallet WALLET_NAME --limit 1 --json\n", created, skipped, rollupConfigured, organizationWalletSyncExpectation)
 	return outputMutation(cmd, f.jsonOutput, envelope, human)
 }
 
@@ -302,7 +373,22 @@ func organizationWalletSyncGuidance() map[string]any {
 
 func loadOrgWalletInputs(f orgWalletAddFlags, stdin io.Reader) ([]orgWalletInput, error) {
 	if f.input == "" {
-		return []orgWalletInput{{Name: f.name, Address: f.address, NetworkID: f.network, SubsidiaryID: f.subsidiary, AddressType: f.addressType, SyncStartDateSEC: f.syncStartDateSEC, ViewKey: f.viewKey, IsBalanceMonitoringOnly: f.balanceMonitoringOnly}}, nil
+		var estimated *int64
+		if f.estimatedTransactions >= 0 {
+			value := f.estimatedTransactions
+			estimated = &value
+		}
+		var rules []orgreports.BabelRollupRule
+		if f.babelRollupInput != "" {
+			data, err := os.ReadFile(f.babelRollupInput)
+			if err != nil {
+				return nil, fmt.Errorf("read Babel rollup input: %w", err)
+			}
+			if err := json.Unmarshal(data, &rules); err != nil {
+				return nil, fmt.Errorf("decode Babel rollup rules: %w", err)
+			}
+		}
+		return []orgWalletInput{{Name: f.name, Address: f.address, NetworkID: f.network, SubsidiaryID: f.subsidiary, AddressType: f.addressType, SyncStartDateSEC: f.syncStartDateSEC, ViewKey: f.viewKey, IsBalanceMonitoringOnly: f.balanceMonitoringOnly, VolumeReview: walletVolumeReview{Reviewed: f.volumeReviewed, EstimatedTransactions: estimated, Source: f.volumeSource, Evidence: f.volumeEvidence, AcknowledgeUnknown: f.acknowledgeUnknown}, BabelRollupRules: rules, SolanaValidator: f.solanaValidator}}, nil
 	}
 	var data []byte
 	var err error

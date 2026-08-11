@@ -439,6 +439,11 @@ func mutationError(cmd *cobra.Command, operation string, jsonOutput bool, err er
 		explicitOrg, _ := cmd.Flags().GetString("org")
 		orgID, _ := resolveReportOrg(explicitOrg)
 		detail := &reportError{Code: "invalid_request", Message: err.Error(), Retryable: false, Suggestion: "Use --dry-run to preview writes and `bitwave transaction categorization-options --json` to discover categorization IDs."}
+		if operation == "add-organization-wallets" {
+			detail.Suggestion = "Run `bitwave org wallets assess --input WALLET_JSON --json`, review volume with the user, and speak with Bitwave when volume or rollup design is uncertain."
+		} else if operation == "set-wallet-babel-rollup" {
+			detail.Suggestion = "Validate the Babel rule fields and use --dry-run to preview the rollup request before applying it."
+		}
 		var apiError *apierr.Error
 		if errors.As(err, &apiError) {
 			detail.Code = "api_error"

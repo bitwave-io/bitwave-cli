@@ -288,9 +288,16 @@ surface:
 ```sh
 $ bitwave org use ORG_ID
 $ bitwave org wallets networks
-$ bitwave org wallets add --name Treasury --address 0xABCD...1234 --network eth --yes
+$ bitwave org wallets assess --input wallets.json --json
+$ bitwave org wallets add --input wallets.json --dry-run --json
+$ bitwave org wallets add --input wallets.json --yes --json
 $ bitwave org wallets list --json
 ```
+
+Wallet creation requires an explicit transaction-volume review. High-volume
+wallets require modern Babel rollup rules unless they are Solana validators,
+which Bitwave rolls up automatically. If volume or rule design is unclear,
+speak with Bitwave before ingestion.
 
 New wallet data typically appears within 15 minutes but can take up to 24 hours
 depending on transaction history volume and network load. Check progress with

@@ -77,4 +77,7 @@ func TestOrganizationWalletAddHelpIncludesSyncWindow(t *testing.T) {
 	if !strings.Contains(cmd.Long, "15 minutes") || !strings.Contains(cmd.Long, "24 hours") {
 		t.Fatalf("add help does not explain sync timing: %q", cmd.Long)
 	}
+	if !strings.Contains(cmd.Long, "wallets assess") || !strings.Contains(cmd.Long, "Babel") || !strings.Contains(cmd.Long, "Solana validator") || !strings.Contains(cmd.Long, "speak with Bitwave") {
+		t.Fatalf("add help does not explain volume preflight: %q", cmd.Long)
+	}
 }
