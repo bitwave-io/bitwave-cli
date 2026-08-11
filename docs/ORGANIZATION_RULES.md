@@ -222,6 +222,16 @@ For the recommended one-command LLM workflow, built-in presets, ID fast path,
 client-side batch format, and lifecycle operations, see
 [`AGENT_RULE_WORKFLOW.md`](AGENT_RULE_WORKFLOW.md).
 
+For inflow and outflow discovery, use `bitwave rule flows analyze`. Its default
+`auto` source prefers Bitwave's Transaction Summary Interacting Addresses
+aggregate and falls back to bounded transaction search when necessary. The
+analysis considers uncategorized transactions only unless
+`--include-categorized` is explicit. It stops treating additional history as
+useful evidence after 100 matching uncategorized transactions in a cluster; it
+does not require the LLM to read the organization's complete transaction
+history. All address values are returned in full and must remain unabridged in
+subsequent rule conditions.
+
 `rule get RULE_ID` avoids the full list endpoint. Unfiltered lists use the
 paginated query. Text searches still require a full scan because the backend
 does not expose a text filter.

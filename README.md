@@ -399,6 +399,7 @@ choices, and apply one or many rules in a single authenticated process:
 ```sh
 bitwave rule recipes
 bitwave rule metadata-guide
+bitwave rule flows analyze --org ORG_ID
 bitwave transaction search --method-id 0xe8e33700 --limit 10
 bitwave rule context --preset simple-inflow --asset ETH --query revenue
 bitwave rule apply --preset simple-inflow --asset ETH \
@@ -412,6 +413,11 @@ The recommended first rule setup is one organization-wide, enabled rule for
 each of trade, internal transfer, and gas-fee only. Check for existing
 equivalents, then create all missing defaults in one batch without a full
 transaction scan. Granular deposit and withdrawal analysis comes afterward.
+For that analysis, `rule flows analyze` prefers the Transaction Summary
+dashboard, considers 100 matching uncategorized transactions enough
+recurring-pattern evidence, and preserves every counterparty address as a
+complete exact value. Including categorized activity requires the explicit
+`--include-categorized` flag.
 Because background rule processing runs only intermittently (roughly twice per
 day), use `bitwave rule run --org ORG_ID --yes` after creation to trigger
 processing sooner.

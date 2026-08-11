@@ -129,6 +129,46 @@ narrow the rule using stable metadata, method ID, address, asset, wallet, or
 another supported condition. Wallet becomes relevant here only when it carries
 real information about the intended treatment.
 
+### Discover Tier 2 flows without reading the full ledger
+
+Start with Bitwave's Transaction Summary dashboard data rather than exporting
+or loading every transaction into the LLM:
+
+```bash
+bitwave --quiet rule flows analyze --org ORG_ID --json
+```
+
+In `auto` mode, the CLI first reads the same Interacting Addresses aggregate
+used by Bitwave's Transaction Summary page. It groups inflows and outflows by
+counterparty across wallets and returns the highest-count uncategorized
+patterns. If that dashboard endpoint is unavailable, it falls back to a
+bounded, paginated transaction search and reports the fallback in `warnings`.
+Use `--source summary` or `--source transactions` only when a caller needs to
+force one path.
+
+The default scope is **uncategorized transactions only**. Do not include
+already categorized activity in discovery or evidence unless the user directs
+the LLM to do so; that explicit path is `--include-categorized`. The JSON
+response identifies the active scope in `transactionScope`.
+
+The LLM does not need exhaustive history. One hundred matching uncategorized
+transactions for the same counterparty is sufficient evidence that a pattern
+recurs. The response therefore reports `evidenceCount`, caps evidence retained
+for a cluster at 100, and sets `evidenceSufficient=true` at that threshold. Raw
+transactions should be inspected only when the aggregate does not explain the
+business meaning; inspect no more than 100 representative uncategorized
+matches before asking the user.
+
+Every `counterpartyAddress`, `fromAddress`, and `toAddress` is emitted as the
+complete exact value. Never shorten an address in a rule proposal, command, or
+condition—even for display—and never convert `0x123456...abcdef` text copied
+from a UI into a rule condition. Obtain the full value from the API first.
+
+Treat each cluster as a question, not an accounting answer. Ask what the
+counterparty activity represents, then resolve only the relevant category and
+contact. A recurring address may span wallets, so do not add a wallet condition
+unless wallet identity genuinely changes the required treatment.
+
 `planningTier` describes the order in which an LLM should reason about rule
 coverage. It is separate from Bitwave's numeric `priority` field; the CLI does
 not silently rewrite the priority selected by the user.
