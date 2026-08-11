@@ -282,7 +282,6 @@ func Build(plan Plan) (json.RawMessage, error) {
 		"direction": direction, "multiToken": multiToken, "autoCategorizeFee": autoCategorizeFee,
 		"allowMismatch": allowMismatch, "collapseValues": false,
 	}
-	optionalString(transfer, "id", plan.ID)
 	optionalString(transfer, "coin", plan.Asset)
 	optionalString(transfer, "methodId", strings.TrimSpace(plan.MethodID))
 	optionalString(transfer, "walletId", plan.WalletID)

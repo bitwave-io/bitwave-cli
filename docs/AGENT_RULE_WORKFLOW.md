@@ -427,6 +427,10 @@ A dedicated backend bulk mutation is not required for this to be useful. It
 would reduce HTTP calls for very large batches, but the CLI already avoids
 repeated authentication and discovery.
 
+`--input` accepts a JSON file path, `-` for stdin, or inline JSON. A spec with
+`id` is sent through Bitwave's `updateRule` mutation; a spec without `id` uses
+`createRule`. The CLI never treats `createRule` as an upsert.
+
 ## Lifecycle commands
 
 ```bash

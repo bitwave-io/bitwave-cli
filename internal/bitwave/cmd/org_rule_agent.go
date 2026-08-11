@@ -235,29 +235,46 @@ func newRuleApplyCmd() *cobra.Command {
 			}
 			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
 			results := make([]map[string]any, 0, len(plans))
+			created, updated := 0, 0
 			for index, plan := range plans {
-				result, createErr := client.CreateRule(cmd.Context(), orgID, plan.Payload)
-				item := map[string]any{"index": index, "name": plan.Spec.Name, "preset": plan.Spec.Preset, "success": createErr == nil}
+				operation := "create"
+				var result any
+				var mutationErr error
+				if strings.TrimSpace(plan.Spec.ID) != "" {
+					operation = "update"
+					result, mutationErr = client.UpdateRule(cmd.Context(), orgID, plan.Spec.ID, plan.Payload)
+				} else {
+					result, mutationErr = client.CreateRule(cmd.Context(), orgID, plan.Payload)
+				}
+				item := map[string]any{"index": index, "name": plan.Spec.Name, "preset": plan.Spec.Preset, "operation": operation, "success": mutationErr == nil}
 				if len(plan.Warnings) > 0 {
 					item["warnings"] = plan.Warnings
 				}
-				if createErr != nil {
-					item["error"] = createErr.Error()
+				if mutationErr != nil {
+					item["error"] = mutationErr.Error()
 					results = append(results, item)
 					_ = writeJSON(cmd.OutOrStdout(), map[string]any{
 						"schemaVersion": "1", "status": "partial", "operation": "apply-rules",
-						"organization": orgID, "created": index, "results": results,
+						"organization": orgID, "created": created, "updated": updated, "results": results,
 					})
-					return fmt.Errorf("apply rule %d (%s): %w", index+1, plan.Spec.Name, createErr)
+					return fmt.Errorf("apply rule %d (%s): %w", index+1, plan.Spec.Name, mutationErr)
+				}
+				if operation == "update" {
+					updated++
+				} else {
+					created++
 				}
 				item["result"] = result
 				results = append(results, item)
 			}
-			return writeJSON(cmd.OutOrStdout(), map[string]any{
+			response := map[string]any{
 				"schemaVersion": "1", "status": "success", "operation": "apply-rules",
-				"organization": orgID, "created": len(results), "results": results,
-				"warning": "The current createRule response does not include the new rule ID; no full-list lookup was performed.",
-			})
+				"organization": orgID, "created": created, "updated": updated, "results": results,
+			}
+			if created > 0 {
+				response["warning"] = "The current createRule response does not include new rule IDs; no full-list lookup was performed."
+			}
+			return writeJSON(cmd.OutOrStdout(), response)
 		},
 	}
 	addRuleAgentFlags(cmd, &f, true)
@@ -267,7 +284,7 @@ func newRuleApplyCmd() *cobra.Command {
 func addRuleAgentFlags(cmd *cobra.Command, f *ruleAgentFlags, includeMutation bool) {
 	cmd.Flags().StringVar(&f.orgID, "org", "", "Organization ID override")
 	cmd.Flags().StringVar(&f.spec.Preset, "preset", "", "Rule recipe name")
-	cmd.Flags().StringVar(&f.spec.ID, "id", "", "Existing rule ID for an upsert-style save")
+	cmd.Flags().StringVar(&f.spec.ID, "id", "", "Existing rule ID to update through Bitwave's updateRule mutation")
 	cmd.Flags().StringVar(&f.spec.Name, "name", "", "Rule name (generated when omitted)")
 	cmd.Flags().IntVar(&f.spec.Priority, "priority", 1, "Rule priority (1-10)")
 	cmd.Flags().StringVar(&f.spec.AccountingConnection, "accounting-connection", "", "Accounting connection ID or exact name")
@@ -405,7 +422,10 @@ func readAgentRuleSpecs(path string, flags agentRuleSpec, stdin io.Reader) ([]ag
 	}
 	var data []byte
 	var err error
-	if path == "-" {
+	trimmedPath := strings.TrimSpace(path)
+	if strings.HasPrefix(trimmedPath, "{") || strings.HasPrefix(trimmedPath, "[") {
+		data = []byte(trimmedPath)
+	} else if path == "-" {
 		data, err = io.ReadAll(io.LimitReader(stdin, 8<<20))
 	} else {
 		data, err = os.ReadFile(path)

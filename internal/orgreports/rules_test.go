@@ -80,6 +80,33 @@ func TestRuleContracts(t *testing.T) {
 	}
 }
 
+func TestUpdateRuleContract(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			OperationName string `json:"operationName"`
+			Variables     struct {
+				OrgID  string         `json:"orgId"`
+				RuleID string         `json:"ruleId"`
+				Rule   map[string]any `json:"rule"`
+			} `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.OperationName != "UpdateRule" || request.Variables.OrgID != "org-1" || request.Variables.RuleID != "rule-1" || request.Variables.Rule["transfer"] == nil {
+			t.Fatalf("request = %#v", request)
+		}
+		_, _ = w.Write([]byte(`{"data":{"updateRule":{"success":true,"errors":[]}}}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, func() (string, error) { return "token", nil })
+	updated, err := client.UpdateRule(context.Background(), "org-1", "rule-1", json.RawMessage(`{"transfer":{"name":"ETH inflows","walletId":"wallet-1"}}`))
+	if err != nil || !updated.Success {
+		t.Fatalf("updated = %#v err=%v", updated, err)
+	}
+}
+
 func TestRuleReadAndMutationContracts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer token" {

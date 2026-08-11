@@ -15,7 +15,7 @@ func TestRuleApplyDryRunWithIDsNeedsNoDiscovery(t *testing.T) {
 	command.SetOut(&output)
 	command.SetErr(&output)
 	command.SetArgs([]string{
-		"--org", "org-1", "--preset", "simple-inflow", "--name", "ETH revenue",
+		"--org", "org-1", "--preset", "simple-inflow", "--id", "rule-1", "--name", "ETH revenue",
 		"--accounting-connection-id", "ac-1", "--category-id", "ac-1.cat",
 		"--contact-id", "ac-1.contact", "--fee-category-id", "ac-1.gas",
 		"--fee-contact-id", "ac-1.gas-vendor", "--asset", "ETH", "--enabled", "--dry-run",
@@ -43,11 +43,12 @@ func TestRuleApplyDryRunWithIDsNeedsNoDiscovery(t *testing.T) {
 	}
 	var payload struct {
 		Transfer struct {
-			MultiToken bool `json:"multiToken"`
-			Disabled   bool `json:"disabled"`
+			MultiToken bool   `json:"multiToken"`
+			Disabled   bool   `json:"disabled"`
+			ID         string `json:"id"`
 		} `json:"transfer"`
 	}
-	if err := json.Unmarshal(result.Plans[0].Payload, &payload); err != nil || payload.Transfer.MultiToken || payload.Transfer.Disabled {
+	if err := json.Unmarshal(result.Plans[0].Payload, &payload); err != nil || payload.Transfer.MultiToken || payload.Transfer.Disabled || payload.Transfer.ID != "" {
 		t.Fatalf("payload = %#v err=%v", payload, err)
 	}
 	if len(result.Plans[0].Warnings) != 1 || !strings.Contains(result.Plans[0].Warnings[0], "no walletId") {
@@ -64,6 +65,13 @@ func TestReadAgentRuleSpecsAcceptsBatch(t *testing.T) {
       {"preset":"ignore-blank","name":"blank"}
     ]`))
 	if err != nil || len(specs) != 2 || specs[0].Preset != "trade" || specs[0].Priority != 1 || specs[1].Priority != 1 {
+		t.Fatalf("specs = %#v err=%v", specs, err)
+	}
+}
+
+func TestReadAgentRuleSpecsAcceptsInlineJSON(t *testing.T) {
+	specs, err := readAgentRuleSpecs(`[{"preset":"simple-inflow","walletId":"wallet-1"}]`, agentRuleSpec{}, strings.NewReader(""))
+	if err != nil || len(specs) != 1 || specs[0].WalletID != "wallet-1" {
 		t.Fatalf("specs = %#v err=%v", specs, err)
 	}
 }

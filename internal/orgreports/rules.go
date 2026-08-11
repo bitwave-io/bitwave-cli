@@ -62,6 +62,10 @@ const createRuleMutation = `mutation CreateRule($orgId: ID!, $rule: Rule!) {
   createRule(orgId: $orgId, rule: $rule) { success errors }
 }`
 
+const updateRuleMutation = `mutation UpdateRule($orgId: ID!, $ruleId: ID!, $rule: Rule!) {
+  updateRule(orgId: $orgId, ruleId: $ruleId, rule: $rule) { success errors }
+}`
+
 const toggleRuleMutation = `mutation ToggleRuleStatus($orgId: ID!, $ruleId: ID!, $disabled: Boolean!) {
   toggleRuleStatus(orgId: $orgId, ruleId: $ruleId, disabled: $disabled)
 }`
@@ -190,6 +194,34 @@ func (c *Client) CreateRule(ctx context.Context, orgID string, rule json.RawMess
 		return &response.Data.CreateRule, fmt.Errorf("create rule was rejected: %s", strings.TrimSpace(string(response.Data.CreateRule.Errors)))
 	}
 	return &response.Data.CreateRule, nil
+}
+
+func (c *Client) UpdateRule(ctx context.Context, orgID, ruleID string, rule json.RawMessage) (*RuleCreateResult, error) {
+	request := map[string]any{
+		"operationName": "UpdateRule",
+		"query":         updateRuleMutation,
+		"variables":     map[string]any{"orgId": orgID, "ruleId": ruleID, "rule": rule},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesMutationURL, request, true)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Data struct {
+			UpdateRule RuleCreateResult `json:"updateRule"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decode update rule response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return nil, err
+	}
+	if !response.Data.UpdateRule.Success {
+		return &response.Data.UpdateRule, fmt.Errorf("update rule was rejected: %s", strings.TrimSpace(string(response.Data.UpdateRule.Errors)))
+	}
+	return &response.Data.UpdateRule, nil
 }
 
 func (c *Client) RunRules(ctx context.Context, orgID string) error {
