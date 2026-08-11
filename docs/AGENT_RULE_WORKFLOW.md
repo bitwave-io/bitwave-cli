@@ -47,6 +47,25 @@ Supported compact apply presets:
 - `ignore-blank`
 - `metadata-categorization`
 
+### Trade fee treatment (required Bitwave behavior)
+
+A trade rule requires a **fee contact** even though its primary trade does not
+require a category or contact. Do not supply a fee category for a trade. Keep
+`autoCategorizeFee: false`; this leaves the fee inside trade treatment so the
+inventory calculation can capitalize it rather than posting it automatically
+to a period expense.
+
+```text
+Trade action
+  feeContactId: required
+  feeCategoryId: omitted
+  autoCategorizeFee: false
+```
+
+This is different from a standalone gas-only transaction, whose rule requires
+both a fee category and fee contact. It is also distinct from the
+internal-transfer recipe, which has its own fee-category/contact contract.
+
 `detailed-categorization` is documented but deliberately remains raw-input
 only. Detailed extractor lines are transaction-specific, so the CLI will not
 guess them.

@@ -53,6 +53,16 @@ func TestTradeRecipeForcesDocumentedDefaults(t *testing.T) {
 	if transfer["multiToken"] != true || transfer["allowMismatch"] != true || transfer["direction"] != "All" {
 		t.Fatalf("transfer = %#v", transfer)
 	}
+	if transfer["autoCategorizeFee"] != false {
+		t.Fatalf("trade fee must remain in trade treatment: %#v", transfer)
+	}
+	action, ok := transfer["action"].(map[string]any)
+	if !ok || action["feeContactId"] != "Manual.1" {
+		t.Fatalf("trade fee contact = %#v", action)
+	}
+	if _, exists := action["feeCategoryId"]; exists {
+		t.Fatalf("trade must not include a fee category: %#v", action)
+	}
 }
 
 func TestDetailedRecipeRequiresRawContract(t *testing.T) {

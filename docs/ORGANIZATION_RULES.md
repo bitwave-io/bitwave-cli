@@ -34,6 +34,18 @@ representative transaction samples. `rule context` and `rule plan` preserve
 those fields and return bounded `conditionCandidates`; Canton mappings in
 `metadata-guide` are examples rather than the scope of metadata rules.
 
+## Trade fees
+
+Bitwave trades require a fee contact, but normally no fee category. The compact
+`trade` preset enforces this contract: `feeContactId` is required,
+`feeCategoryId` is omitted, and `autoCategorizeFee` defaults to `false`. The fee
+therefore remains part of trade treatment for capitalization rather than being
+automatically posted to a gas-fee expense category.
+
+Do not generalize the gas-only rule to trades. A standalone gas-only transaction
+requires both a fee category and fee contact; a trade fee requires the contact
+without the category.
+
 ## List rules without filling LLM context
 
 The list command returns compact summaries and a maximum of 25 enabled rules by

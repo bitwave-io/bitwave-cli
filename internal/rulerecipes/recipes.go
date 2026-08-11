@@ -66,9 +66,9 @@ var catalog = []Recipe{
 	{
 		Name: "trade", Summary: "Categorize swap/trade transactions and their fee contact.",
 		ActionType: "TradeCategorization", DefaultDirection: "All", DefaultMulti: true, ApplySupported: true,
-		Fields:   []Field{{"feeContact", true, "Fee contact ID or exact name."}},
+		Fields:   []Field{{"feeContact", true, "Required contact for the trade fee. Trades do not take a fee category."}},
 		Defaults: map[string]any{"multiToken": true, "autoCategorizeFee": false, "allowMismatch": true},
-		Guidance: []string{"Trades use multiToken=true because Bitwave trades exchange one asset for one or more assets.", "Do not add a single --asset unless the rule is intentionally asset-specific."},
+		Guidance: []string{"Trades use multiToken=true because Bitwave trades exchange one asset for one or more assets.", "A trade fee requires feeContactId but no feeCategoryId; leaving autoCategorizeFee=false keeps the fee in trade treatment so it can be capitalized.", "Do not add a single --asset unless the rule is intentionally asset-specific."},
 	},
 	{
 		Name: "internal-transfer", Summary: "Categorize wallet-to-wallet transfers and associated fees.",

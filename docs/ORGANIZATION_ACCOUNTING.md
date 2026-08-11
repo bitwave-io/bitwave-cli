@@ -109,3 +109,11 @@ bitwave org accounting accounts list \
 
 After setup, rerun status. When `readyForRules` is true, continue to transaction
 analysis and rule planning.
+
+## Important fee-policy distinction
+
+Create a reusable fee contact for trade categorization. Trade fees require that
+contact but normally do not use a fee category: the fee remains in the trade so
+it can be capitalized. A standalone gas-only transaction is different and uses
+both a gas-fee category and fee contact. The LLM must select the treatment from
+the transaction type instead of assuming every fee takes the same category.
