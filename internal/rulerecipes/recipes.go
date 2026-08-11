@@ -77,7 +77,7 @@ func PlanningHierarchy() []PlanningTier {
 			Presets: []string{"simple-inflow", "simple-outflow", "metadata-categorization", "detailed-categorization"},
 			Guidance: []string{
 				"Direction alone is insufficient; inspect transaction evidence and narrow with stable metadata, method ID, address, asset, wallet, or another supported condition.",
-				"Flow-derived simple inflow and outflow rules are wallet-scoped by default. Retain the wallet ID emitted by flow analysis unless organization-wide treatment is an explicit decision.",
+				"Simple inflow and outflow rules should be wallet-scoped by default. Organization-wide scope is supported, but it should be a deliberate exception.",
 			},
 		},
 	}
@@ -89,14 +89,14 @@ var catalog = []Recipe{
 		ActionType: "SimpleCategorization", PlanningTier: 2, DefaultScope: "wallet", DefaultDirection: "Inbound", ApplySupported: true,
 		Fields:   []Field{{"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}, {"asset", false, "Single asset required for the match."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Retain the wallet ID from flow analysis by default; the same asset and counterparty can require different treatment in another wallet.", "Use multiToken=false when --asset identifies a single-token rule.", "Use from/to address filters only for primary transaction addresses, not token transfer lines.", "Network fees are separate FEE lines. Supply a fee category and fee contact when autoCategorizeFee=true; never silently post fees to the inflow category."},
+		Guidance: []string{"Set a wallet by default; the same asset and counterparty can require different treatment in another wallet. Use organization-wide scope only as a deliberate exception.", "Use multiToken=false when --asset identifies a single-token rule.", "Use from/to address filters only for primary transaction addresses, not token transfer lines.", "Network fees are separate FEE lines. Supply a fee category and fee contact when autoCategorizeFee=true; never silently post fees to the inflow category."},
 	},
 	{
 		Name: "simple-outflow", Summary: "Categorize matching outbound transactions to one category and contact.",
 		ActionType: "SimpleCategorization", PlanningTier: 2, DefaultScope: "wallet", DefaultDirection: "Outbound", ApplySupported: true,
 		Fields:   []Field{{"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}, {"asset", false, "Single asset required for the match."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Retain the wallet ID from flow analysis by default; the same asset and counterparty can require different treatment in another wallet.", "Use multiToken=false when --asset identifies a single-token rule.", "Network fees are separate FEE lines. Supply a fee category and fee contact when autoCategorizeFee=true; never silently post fees to the outflow category."},
+		Guidance: []string{"Set a wallet by default; the same asset and counterparty can require different treatment in another wallet. Use organization-wide scope only as a deliberate exception.", "Use multiToken=false when --asset identifies a single-token rule.", "Network fees are separate FEE lines. Supply a fee category and fee contact when autoCategorizeFee=true; never silently post fees to the outflow category."},
 	},
 	{
 		Name: "trade", Summary: "Categorize swap/trade transactions and their fee contact.",

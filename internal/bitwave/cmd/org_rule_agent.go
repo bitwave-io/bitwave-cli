@@ -685,7 +685,7 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 		warnings = append(warnings, fmt.Sprintf("%s is normally an organization-wide type rule; the requested wallet filter is retained, but a single unscoped rule is the default hierarchy.", recipe.Name))
 	}
 	if (recipe.Name == "simple-inflow" || recipe.Name == "simple-outflow") && strings.TrimSpace(walletID) == "" {
-		warnings = append(warnings, "This simple inflow/outflow rule has no walletId and can match every wallet in the organization. Flow-derived rules should retain the wallet ID emitted by `rule flows analyze`; proceed unscoped only when organization-wide treatment is deliberate.")
+		warnings = append(warnings, "This simple inflow/outflow rule has no walletId and can match every wallet in the organization. Best practice is to set a wallet; proceed unscoped only when organization-wide treatment is deliberate.")
 	}
 	if recipe.Name == "trade" && spec.IgnoreFailPricing {
 		warnings = append(warnings, "Trade ignoreFailPricing was enabled by request. The Bitwave default is unchecked/false so failed-priced transactions, including possible DeFi activity, are not swept into the generic trade rule.")

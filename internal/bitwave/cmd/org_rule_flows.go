@@ -210,7 +210,7 @@ func writeFlowAnalysis(cmd *cobra.Command, orgID, source string, scanned, skippe
 		"warnings":          warnings,
 		"transactionScope":  transactionScope,
 		"addressPolicy":     "All addresses are complete exact values; the CLI never emits abbreviated 0x123... rule conditions.",
-		"walletScopePolicy": "Flow-derived inflow and outflow rules are clustered per wallet and include that wallet's stable ID. Organization-wide simple flow rules require an explicit, deliberate decision.",
+		"walletScopePolicy": "Simple inflow and outflow rules should include a wallet by default. Flow analysis clusters per wallet and includes its stable ID; organization-wide scope is a deliberate exception.",
 		"evidencePolicy":    "By default, only uncategorized transactions count as evidence. One hundred matching uncategorized transactions is sufficient; exhaustive history review is not required.",
 		"workflow":          []string{"Start with the highest-count recurring uncategorized counterparties within each wallet.", "Keep the suggested walletId unless the user deliberately requests broader scope.", "Ask the cluster question and let the user choose the accounting treatment.", "Inspect up to 100 representative uncategorized transactions only when the aggregate is ambiguous.", "Resolve only relevant category/contact choices.", "Use rule plan to preview exact conditions and representative matches.", "Apply approved rules in one batch, run rules, then analyze remaining uncategorized flows."},
 	})

@@ -147,10 +147,10 @@ exception where the treatment genuinely differs.
 Tier 2 contains deposits/inflows and withdrawals/outflows. Direction is not
 enough to determine their accounting treatment. Inspect the transaction and
 narrow the rule using stable metadata, method ID, address, asset, wallet, or
-another supported condition. Flow-derived simple rules are wallet-scoped by
-default: keep the stable `walletId` returned by the analyzer. An unscoped simple
-inflow/outflow rule can affect every wallet and should be used only when that
-organization-wide treatment is deliberate.
+another supported condition. As a general best practice, simple inflow and
+outflow rules should include a wallet. Keep the stable `walletId` returned by
+the analyzer when available. An unscoped rule can affect every wallet and
+should be used only when that organization-wide treatment is deliberate.
 
 ### Discover Tier 2 flows without reading the full ledger
 

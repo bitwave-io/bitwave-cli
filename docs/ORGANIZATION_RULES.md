@@ -86,9 +86,10 @@ transactions can be DeFi activity and should remain outside the generic trade
 rule for review.
 
 Then plan Tier 2 granular deposit/inflow and withdrawal/outflow rules.
-Flow-derived simple inflow/outflow rules should retain the stable wallet ID
-returned by `rule flows analyze`. Omitting it broadens the rule to every wallet
-and should be a deliberate organization-wide decision, not an LLM default.
+As a general best practice, simple inflow/outflow rules should include a wallet.
+When flow analysis supplies a stable wallet ID, retain it. Omitting wallet scope
+broadens the rule to every wallet and should be a deliberate organization-wide
+decision, not an LLM default.
 Direction alone does not determine treatment, so these rules require more
 transaction evidence and narrower conditions such as stable metadata, method
 ID, address, asset, or—when genuinely relevant—wallet.
