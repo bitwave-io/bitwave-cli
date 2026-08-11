@@ -440,7 +440,15 @@ bitwave rule disable RULE_ID --yes
 bitwave rule delete RULE_ID --yes
 bitwave rule validate RULE_ID TRANSACTION_ID
 bitwave rule run --org ORG_ID --yes
+bitwave rule bulk-run --org ORG_ID --from-date YYYY-MM-DD --to-date YYYY-MM-DD --yes
 ```
+
+Prefer `bulk-run` when the user can provide a bounded date range. It uses
+Bitwave's faster Bulk Rules Run endpoint, interprets both dates in the
+organization timezone, and applies enabled rules with `executeUpdates=true`.
+When dates are omitted, it defaults to `2000-01-01` through the current date in
+that timezone.
+Use `run` only when the unbounded organization-wide trigger is intended.
 
 `rule get` uses the exact rule query and does not download the complete rule
 collection. An unfiltered `rule list` uses the paginated API. A text search

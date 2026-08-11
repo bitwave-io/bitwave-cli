@@ -252,6 +252,18 @@ func (c *Client) RunRules(ctx context.Context, orgID string) error {
 	return nil
 }
 
+func (c *Client) ExecuteBulkRules(ctx context.Context, orgID string, after, before int64) error {
+	if after <= 0 || before <= 0 || after > before {
+		return fmt.Errorf("invalid bulk rules date range: after=%d before=%d", after, before)
+	}
+	_, err := c.doEndpoint(ctx, http.MethodPost, c.BaseURL+"/org/"+url.PathEscape(orgID)+"/rules/execute", map[string]any{
+		"executeUpdates": "true",
+		"after":          after,
+		"before":         before,
+	}, true)
+	return err
+}
+
 func (c *Client) ToggleRule(ctx context.Context, orgID, ruleID string, disabled bool) error {
 	request := map[string]any{
 		"operationName": "ToggleRuleStatus", "query": toggleRuleMutation,

@@ -63,6 +63,18 @@ asynchronous run so processing begins sooner:
 bitwave rule run --org ORG_ID --yes
 ```
 
+For faster bounded processing, prefer Bulk Run with an explicit inclusive date
+range:
+
+```bash
+bitwave rule bulk-run --org ORG_ID \
+  --from-date YYYY-MM-DD --to-date YYYY-MM-DD --yes
+```
+
+Bulk Run interprets dates in the organization timezone and sends
+`executeUpdates=true` to `/org/{orgId}/rules/execute`. When omitted, the date
+range defaults to `2000-01-01` through the current date in that timezone.
+
 The response means the run was requested, not that every transaction has
 already finished processing.
 

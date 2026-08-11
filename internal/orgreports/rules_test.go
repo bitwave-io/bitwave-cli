@@ -107,6 +107,38 @@ func TestUpdateRuleContract(t *testing.T) {
 	}
 }
 
+func TestExecuteBulkRulesContract(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/org/org-1/rules/execute" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer token" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		var body struct {
+			ExecuteUpdates string `json:"executeUpdates"`
+			After          int64  `json:"after"`
+			Before         int64  `json:"before"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.ExecuteUpdates != "true" || body.After != 946684800 || body.Before != 946771199 {
+			t.Fatalf("body = %#v", body)
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, func() (string, error) { return "token", nil })
+	if err := client.ExecuteBulkRules(context.Background(), "org-1", 946684800, 946771199); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.ExecuteBulkRules(context.Background(), "org-1", 10, 1); err == nil {
+		t.Fatal("expected invalid date range to fail before request")
+	}
+}
+
 func TestRuleReadAndMutationContracts(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer token" {

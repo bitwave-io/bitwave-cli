@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -46,9 +47,76 @@ before an enabled rule is run across historical data.`,
 	cmd.AddCommand(
 		newListRulesCmd(), newGetRuleCmd(), newCreateRawRuleCmd(), newValidateRuleCmd(),
 		newToggleRuleCmd("enable", false), newToggleRuleCmd("disable", true), newDeleteRuleCmd(),
-		newRunRulesCmd(),
+		newRunRulesCmd(), newBulkRunRulesCmd(),
 		newRuleRecipesCmd(), newRuleMetadataGuideCmd(), newRuleContextCmd(), newRulePlanCmd(), newRuleApplyCmd(), newRuleFlowsCmd(),
 	)
+	return cmd
+}
+
+func newBulkRunRulesCmd() *cobra.Command {
+	var f transactionMutationFlags
+	var fromDate, toDate string
+	cmd := &cobra.Command{
+		Use:   "bulk-run",
+		Short: "Run enabled organization rules over a bounded date range using Bitwave Bulk Run",
+		Long: `Trigger Bitwave's faster Bulk Rules Run for an inclusive date range.
+
+Dates are interpreted as whole calendar days in the organization's timezone.
+When omitted, the range defaults to 2000-01-01 through the current date.
+This uses the legacy POST /org/{orgId}/rules/execute endpoint with updates
+enabled and returns when asynchronous processing has been accepted.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			operation := "bulk-run-rules"
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			org, err := client.Org(cmd.Context(), orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("load organization timezone: %w", err))
+			}
+			timezone := org.Timezone
+			if strings.TrimSpace(timezone) == "" {
+				timezone = "UTC"
+			}
+			location, err := time.LoadLocation(timezone)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("load organization timezone %q: %w", timezone, err))
+			}
+			if strings.TrimSpace(fromDate) == "" {
+				fromDate = "2000-01-01"
+			}
+			if strings.TrimSpace(toDate) == "" {
+				toDate = time.Now().In(location).Format("2006-01-02")
+			}
+			after, before, err := resolveRuleDates(fromDate, toDate, timezone)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			preview := map[string]any{
+				"method": "POST", "path": "/org/" + orgID + "/rules/execute",
+				"body":     map[string]any{"executeUpdates": "true", "after": after, "before": before},
+				"timezone": timezone, "fromDate": fromDate, "toDate": toDate,
+			}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
+			}
+			if !f.yes {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to trigger Bulk Run without --yes (use --dry-run to preview)"))
+			}
+			if err := client.ExecuteBulkRules(cmd.Context(), orgID, after, before); err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{
+				"triggered": true, "asynchronous": true, "executeUpdates": true,
+				"fromDate": fromDate, "toDate": toDate, "after": after, "before": before, "timezone": timezone,
+			}})
+		},
+	}
+	addMutationFlags(cmd, &f)
+	cmd.Flags().StringVar(&fromDate, "from-date", "", "Inclusive start date in the organization timezone (default 2000-01-01)")
+	cmd.Flags().StringVar(&toDate, "to-date", "", "Inclusive end date in the organization timezone (default current date)")
 	return cmd
 }
 
