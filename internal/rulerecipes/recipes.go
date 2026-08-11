@@ -10,10 +10,23 @@ import (
 )
 
 const (
-	SchemaVersion = "1"
-	SourceURL     = "https://docs.bitwave.io/docs/set-up-categorization-rules"
-	LastVerified  = "2026-08-11"
+	SchemaVersion     = "1"
+	SourceURL         = "https://docs.bitwave.io/docs/set-up-categorization-rules"
+	MetadataSourceURL = "https://docs.bitwave.io/docs/metadata-based-rule-categorization"
+	LastVerified      = "2026-08-11"
 )
+
+type Source struct {
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
+func Sources() []Source {
+	return []Source{
+		{Title: "Set Up Categorization Rules", URL: SourceURL},
+		{Title: "Metadata Based Rule Categorization", URL: MetadataSourceURL},
+	}
+}
 
 type Field struct {
 	Name        string `json:"name"`
@@ -76,6 +89,13 @@ var catalog = []Recipe{
 		Guidance: []string{"Use a bounded date window first because enabled rules also affect historical data.", "Do not use this preset for failed pricing or otherwise non-blank economic activity."},
 	},
 	{
+		Name: "metadata-categorization", Summary: "Categorize transactions matching one or more metadata key/value conditions.",
+		ActionType: "SimpleCategorization", DefaultDirection: "All", ApplySupported: true,
+		Fields:   []Field{{"metadata", true, "One or more metadata key/value pairs."}, {"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}},
+		Defaults: map[string]any{"metadataOperator": "AND", "multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
+		Guidance: []string{"Metadata conditions can also be attached to any other supported preset.", "Use a vendor from/to address with TransactionType when the same metadata value maps to more than one vendor-specific treatment.", "Choose multi-token handling from the sampled transactions; metadata alone does not imply it."},
+	},
+	{
 		Name: "detailed-categorization", Summary: "Categorize token-level or multi-line transaction details using extractor lines.",
 		ActionType: "DetailedCategorization", DefaultDirection: "All", ApplySupported: false,
 		Fields:   []Field{{"rawInput", true, "Use `rule create --input` until detailed line flags are implemented."}},
@@ -103,27 +123,35 @@ func Find(name string) (Recipe, bool) {
 // Plan is a fully resolved recipe. Human labels have already been converted
 // to stable Bitwave IDs before this package builds the GraphQL Rule envelope.
 type Plan struct {
-	Preset                 string
-	ID                     string
-	Name                   string
-	Priority               int
-	AccountingConnectionID string
-	CategoryID             string
-	ContactID              string
-	FeeCategoryID          string
-	FeeContactID           string
-	Asset                  string
-	Direction              string
-	WalletID               string
-	FromAddress            string
-	ToAddress              string
-	AfterDateSEC           int64
-	BeforeDateSEC          int64
-	Enabled                bool
-	MultiToken             *bool
-	AutoCategorizeFee      *bool
-	AllowMismatch          *bool
-	IgnoreFailPricing      bool
+	Preset                    string
+	ID                        string
+	Name                      string
+	Priority                  int
+	AccountingConnectionID    string
+	CategoryID                string
+	ContactID                 string
+	FeeCategoryID             string
+	FeeContactID              string
+	Asset                     string
+	Direction                 string
+	WalletID                  string
+	FromAddress               string
+	ToAddress                 string
+	AfterDateSEC              int64
+	BeforeDateSEC             int64
+	Enabled                   bool
+	MultiToken                *bool
+	AutoCategorizeFee         *bool
+	AllowMismatch             *bool
+	IgnoreFailPricing         bool
+	Metadata                  []MetadataPair
+	MetadataOperator          string
+	MetadataTransactionRecord bool
+}
+
+type MetadataPair struct {
+	Key   string `json:"key"`
+	Value string `json:"value,omitempty"`
 }
 
 func Build(plan Plan) (json.RawMessage, error) {
@@ -165,7 +193,7 @@ func Build(plan Plan) (json.RawMessage, error) {
 
 	action := map[string]any{"type": recipe.ActionType}
 	switch recipe.Name {
-	case "simple-inflow", "simple-outflow":
+	case "simple-inflow", "simple-outflow", "metadata-categorization":
 		if plan.CategoryID == "" || plan.ContactID == "" {
 			return nil, fmt.Errorf("preset %q requires category and contact", recipe.Name)
 		}
@@ -194,6 +222,9 @@ func Build(plan Plan) (json.RawMessage, error) {
 	case "ignore-blank":
 		// Ignore has no accounting action fields.
 	}
+	if recipe.Name == "metadata-categorization" && len(plan.Metadata) == 0 {
+		return nil, fmt.Errorf("preset metadata-categorization requires at least one metadata key/value pair")
+	}
 
 	transfer := map[string]any{
 		"name": plan.Name, "priority": plan.Priority, "disabled": !plan.Enabled,
@@ -211,6 +242,27 @@ func Build(plan Plan) (json.RawMessage, error) {
 	}
 	if plan.BeforeDateSEC > 0 {
 		transfer["beforeDateSEC"] = plan.BeforeDateSEC
+	}
+	if len(plan.Metadata) > 0 {
+		operator := strings.ToUpper(strings.TrimSpace(plan.MetadataOperator))
+		if operator == "" {
+			operator = "AND"
+		}
+		if operator != "AND" && operator != "OR" && operator != "NAND" && operator != "NOR" && operator != "XOR" {
+			return nil, fmt.Errorf("unsupported metadata operator %q", operator)
+		}
+		pairs := make([]MetadataPair, 0, len(plan.Metadata))
+		for _, pair := range plan.Metadata {
+			pair.Key = strings.TrimSpace(pair.Key)
+			pair.Value = strings.TrimSpace(pair.Value)
+			if pair.Key == "" {
+				return nil, fmt.Errorf("metadata key cannot be empty")
+			}
+			pairs = append(pairs, pair)
+		}
+		transfer["metadataRule"] = map[string]any{
+			"operator": operator, "metadata": pairs, "txnRecordRule": plan.MetadataTransactionRecord,
+		}
 	}
 	data, err := json.Marshal(map[string]any{"transfer": transfer})
 	return json.RawMessage(data), err

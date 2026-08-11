@@ -13,6 +13,7 @@ bitwave rule list
 bitwave rule get RULE_ID
 bitwave rule create
 bitwave rule recipes
+bitwave rule metadata-guide
 bitwave rule context
 bitwave rule plan
 bitwave rule apply

@@ -19,33 +19,36 @@ import (
 )
 
 type agentRuleSpec struct {
-	Preset                 string `json:"preset"`
-	ID                     string `json:"id,omitempty"`
-	Name                   string `json:"name,omitempty"`
-	Priority               int    `json:"priority,omitempty"`
-	AccountingConnection   string `json:"accountingConnection,omitempty"`
-	AccountingConnectionID string `json:"accountingConnectionId,omitempty"`
-	Category               string `json:"category,omitempty"`
-	CategoryID             string `json:"categoryId,omitempty"`
-	Contact                string `json:"contact,omitempty"`
-	ContactID              string `json:"contactId,omitempty"`
-	FeeCategory            string `json:"feeCategory,omitempty"`
-	FeeCategoryID          string `json:"feeCategoryId,omitempty"`
-	FeeContact             string `json:"feeContact,omitempty"`
-	FeeContactID           string `json:"feeContactId,omitempty"`
-	Asset                  string `json:"asset,omitempty"`
-	Direction              string `json:"direction,omitempty"`
-	Wallet                 string `json:"wallet,omitempty"`
-	WalletID               string `json:"walletId,omitempty"`
-	FromAddress            string `json:"fromAddress,omitempty"`
-	ToAddress              string `json:"toAddress,omitempty"`
-	FromDate               string `json:"fromDate,omitempty"`
-	ToDate                 string `json:"toDate,omitempty"`
-	Enabled                bool   `json:"enabled,omitempty"`
-	MultiToken             *bool  `json:"multiToken,omitempty"`
-	AutoCategorizeFee      *bool  `json:"autoCategorizeFee,omitempty"`
-	AllowMismatch          *bool  `json:"allowMismatch,omitempty"`
-	IgnoreFailPricing      bool   `json:"ignoreFailPricing,omitempty"`
+	Preset                    string                     `json:"preset"`
+	ID                        string                     `json:"id,omitempty"`
+	Name                      string                     `json:"name,omitempty"`
+	Priority                  int                        `json:"priority,omitempty"`
+	AccountingConnection      string                     `json:"accountingConnection,omitempty"`
+	AccountingConnectionID    string                     `json:"accountingConnectionId,omitempty"`
+	Category                  string                     `json:"category,omitempty"`
+	CategoryID                string                     `json:"categoryId,omitempty"`
+	Contact                   string                     `json:"contact,omitempty"`
+	ContactID                 string                     `json:"contactId,omitempty"`
+	FeeCategory               string                     `json:"feeCategory,omitempty"`
+	FeeCategoryID             string                     `json:"feeCategoryId,omitempty"`
+	FeeContact                string                     `json:"feeContact,omitempty"`
+	FeeContactID              string                     `json:"feeContactId,omitempty"`
+	Asset                     string                     `json:"asset,omitempty"`
+	Direction                 string                     `json:"direction,omitempty"`
+	Wallet                    string                     `json:"wallet,omitempty"`
+	WalletID                  string                     `json:"walletId,omitempty"`
+	FromAddress               string                     `json:"fromAddress,omitempty"`
+	ToAddress                 string                     `json:"toAddress,omitempty"`
+	FromDate                  string                     `json:"fromDate,omitempty"`
+	ToDate                    string                     `json:"toDate,omitempty"`
+	Enabled                   bool                       `json:"enabled,omitempty"`
+	MultiToken                *bool                      `json:"multiToken,omitempty"`
+	AutoCategorizeFee         *bool                      `json:"autoCategorizeFee,omitempty"`
+	AllowMismatch             *bool                      `json:"allowMismatch,omitempty"`
+	IgnoreFailPricing         bool                       `json:"ignoreFailPricing,omitempty"`
+	Metadata                  []rulerecipes.MetadataPair `json:"metadata,omitempty"`
+	MetadataOperator          string                     `json:"metadataOperator,omitempty"`
+	MetadataTransactionRecord bool                       `json:"metadataTransactionRecord,omitempty"`
 }
 
 type ruleAgentFlags struct {
@@ -61,6 +64,7 @@ type ruleAgentFlags struct {
 	noAutoCategorizeFee bool
 	allowMismatch       bool
 	strictMatch         bool
+	metadata            []string
 }
 
 type ruleResources struct {
@@ -78,6 +82,7 @@ type resolvedRulePlan struct {
 	Resolution map[string]any     `json:"resolution"`
 	Samples    any                `json:"samples,omitempty"`
 	NextToken  string             `json:"nextToken,omitempty"`
+	Warnings   []string           `json:"warnings,omitempty"`
 }
 
 func newRuleRecipesCmd() *cobra.Command {
@@ -95,9 +100,9 @@ func newRuleRecipesCmd() *cobra.Command {
 				recipes = recipe
 			}
 			return writeJSON(cmd.OutOrStdout(), map[string]any{
-				"schemaVersion": rulerecipes.SchemaVersion, "source": rulerecipes.SourceURL,
+				"schemaVersion": rulerecipes.SchemaVersion, "source": rulerecipes.SourceURL, "sources": rulerecipes.Sources(),
 				"lastVerified": rulerecipes.LastVerified, "recipes": recipes,
-				"agentWorkflow": []string{"context", "plan", "apply"},
+				"agentWorkflow": []string{"metadata-guide", "context", "plan", "apply"},
 			})
 		},
 	}
@@ -114,6 +119,11 @@ func newRuleContextCmd() *cobra.Command {
 			if _, ok := rulerecipes.Find(f.spec.Preset); !ok {
 				return fmt.Errorf("--preset must be one of: %s", strings.Join(recipeNames(), ", "))
 			}
+			metadata, err := parseMetadataFlags(f.metadata)
+			if err != nil {
+				return err
+			}
+			f.spec.Metadata = append(f.spec.Metadata, metadata...)
 			if f.limit < 1 || f.limit > 100 || f.sampleLimit < 0 || f.sampleLimit > 25 {
 				return errors.New("--limit must be 1-100 and --sample-limit must be 0-25")
 			}
@@ -144,6 +154,9 @@ func newRuleContextCmd() *cobra.Command {
 			}
 			samples, next, sampleErr := ruleSamples(cmd.Context(), client, orgID, resources, f.spec, f.sampleLimit)
 			warnings := []string{}
+			if len(f.spec.Metadata) > 0 || len(f.metadata) > 0 {
+				warnings = append(warnings, "Transaction search has no metadata filter; returned samples are approximate. Use rule validation once the rule ID is available.")
+			}
 			if sampleErr != nil {
 				warnings = append(warnings, "Transaction samples unavailable: "+sampleErr.Error())
 			}
@@ -264,6 +277,9 @@ func addRuleAgentFlags(cmd *cobra.Command, f *ruleAgentFlags, includeMutation bo
 	cmd.Flags().BoolVar(&f.allowMismatch, "allow-mismatch", false, "Allow action/value mismatches")
 	cmd.Flags().BoolVar(&f.strictMatch, "strict-match", false, "Reject action/value mismatches")
 	cmd.Flags().BoolVar(&f.spec.IgnoreFailPricing, "ignore-fail-pricing", false, "Allow categorization when pricing fails")
+	cmd.Flags().StringArrayVar(&f.metadata, "metadata", nil, "Metadata condition KEY=VALUE (repeatable)")
+	cmd.Flags().StringVar(&f.spec.MetadataOperator, "metadata-operator", "", "Combine metadata with AND, OR, NAND, NOR, or XOR (default AND)")
+	cmd.Flags().BoolVar(&f.spec.MetadataTransactionRecord, "metadata-transaction-record", false, "Set Bitwave's txnRecordRule metadata flag")
 	if includeMutation {
 		cmd.Flags().StringVarP(&f.input, "input", "i", "", "One rule spec or an array of specs in JSON; flags are used when omitted")
 		cmd.Flags().BoolVar(&f.yes, "yes", false, "Confirm creation of all planned rules")
@@ -291,6 +307,11 @@ func prepareAgentRulePlans(cmd *cobra.Command, f *ruleAgentFlags) ([]resolvedRul
 	}
 	if f.input == "" {
 		applyBooleanOverrides(&specs[0], f)
+		metadata, parseErr := parseMetadataFlags(f.metadata)
+		if parseErr != nil {
+			return nil, "", parseErr
+		}
+		specs[0].Metadata = append(specs[0].Metadata, metadata...)
 	}
 	orgID, err := resolveReportOrg(f.orgID)
 	if err != nil {
@@ -340,6 +361,19 @@ func applyBooleanOverrides(spec *agentRuleSpec, f *ruleAgentFlags) {
 		value := false
 		spec.AllowMismatch = &value
 	}
+}
+
+func parseMetadataFlags(values []string) ([]rulerecipes.MetadataPair, error) {
+	result := make([]rulerecipes.MetadataPair, 0, len(values))
+	for _, value := range values {
+		key, item, ok := strings.Cut(value, "=")
+		key, item = strings.TrimSpace(key), strings.TrimSpace(item)
+		if !ok || key == "" || item == "" {
+			return nil, fmt.Errorf("metadata %q must use non-empty KEY=VALUE form", value)
+		}
+		result = append(result, rulerecipes.MetadataPair{Key: key, Value: item})
+	}
+	return result, nil
 }
 
 func readAgentRuleSpecs(path string, flags agentRuleSpec, stdin io.Reader) ([]agentRuleSpec, error) {
@@ -568,7 +602,8 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 		WalletID: walletID, FromAddress: spec.FromAddress, ToAddress: spec.ToAddress,
 		AfterDateSEC: after, BeforeDateSEC: before, Enabled: spec.Enabled,
 		MultiToken: spec.MultiToken, AutoCategorizeFee: spec.AutoCategorizeFee, AllowMismatch: spec.AllowMismatch,
-		IgnoreFailPricing: spec.IgnoreFailPricing,
+		IgnoreFailPricing: spec.IgnoreFailPricing, Metadata: spec.Metadata, MetadataOperator: spec.MetadataOperator,
+		MetadataTransactionRecord: spec.MetadataTransactionRecord,
 	}
 	plan.CategoryID = categoryID
 	plan.ContactID = contactID
@@ -595,7 +630,11 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	if feeContact != nil {
 		resolution["feeContact"] = feeContact
 	}
-	return resolvedRulePlan{Spec: spec, Recipe: recipe, Payload: payload, Resolution: resolution, Samples: samples, NextToken: nextToken}, nil
+	warnings := []string{}
+	if len(spec.Metadata) > 0 {
+		warnings = append(warnings, "Transaction samples are approximate because the search endpoint does not expose metadata filtering; validate against a known transaction after obtaining the rule ID.")
+	}
+	return resolvedRulePlan{Spec: spec, Recipe: recipe, Payload: payload, Resolution: resolution, Samples: samples, NextToken: nextToken, Warnings: warnings}, nil
 }
 
 func resolveRuleDates(from, to, timezone string) (int64, int64, error) {

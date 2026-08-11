@@ -5,8 +5,12 @@ rules without a long sequence of independent CLI calls. The embedded recipes
 are derived from Bitwave's official rule guide and the deployed rule input
 contract. They are versioned, compact, and available without authentication.
 
-Source: https://docs.bitwave.io/docs/set-up-categorization-rules  
-Recipe schema: `1`  
+Source: https://docs.bitwave.io/docs/set-up-categorization-rules
+
+Metadata source: https://docs.bitwave.io/docs/metadata-based-rule-categorization
+
+Recipe schema: `1`
+
 Last verified: `2026-08-11`
 
 ## Let the LLM learn the supported patterns
@@ -24,10 +28,64 @@ Supported compact apply presets:
 - `internal-transfer`
 - `gas-fee-only`
 - `ignore-blank`
+- `metadata-categorization`
 
 `detailed-categorization` is documented but deliberately remains raw-input
 only. Detailed extractor lines are transaction-specific, so the CLI will not
 guess them.
+
+## Metadata-based rules
+
+The CLI embeds Bitwave's documented Canton metadata vocabulary, both Standard
+and Standard Specific chart-of-accounts mappings, and the general fee/reward
+patterns:
+
+```bash
+bitwave --quiet rule metadata-guide --json
+bitwave --quiet rule metadata-guide --key FeeType --chart specific --json
+bitwave --quiet rule metadata-guide \
+  --key RewardType --value input_app_reward_amount --json
+```
+
+Documented keys include `FeeType`, `RewardFeeType`, `RewardType`, and
+`TransactionType`. Metadata conditions can be added to any supported recipe:
+
+```bash
+bitwave --quiet rule apply \
+  --preset metadata-categorization \
+  --name "Canton receiver locking fees" \
+  --metadata FeeType=receiver_lock_holding_fee \
+  --metadata-operator AND \
+  --accounting-connection-id CONNECTION_ID \
+  --category-id CATEGORY_ID \
+  --contact-id CONTACT_ID \
+  --enabled --yes --org ORG_ID
+```
+
+Repeat `--metadata` to combine multiple pairs. Valid operators are `AND`, `OR`,
+`NAND`, `NOR`, and `XOR`. JSON plans use:
+
+```json
+{
+  "metadata": [
+    {"key": "FeeType", "value": "receiver_transfer_fee"}
+  ],
+  "metadataOperator": "AND",
+  "metadataTransactionRecord": false
+}
+```
+
+For vendor-specific `TransactionType=Amulet_Rules Transfer` rules, metadata is
+not sufficient to choose the accounting treatment. Add the relevant vendor
+`fromAddress` or `toAddress` and let the user select whether that relationship
+represents revenue share or a subscription fee. The official page marks its
+metadata-based internal-transfer section as under construction, so the CLI
+does not invent those mappings.
+
+The current transaction-search endpoint has no metadata filter. Samples from
+`rule context` and `rule plan` are therefore approximate when metadata is
+present, and the JSON response says so explicitly. Use Bitwave's exact rule
+validation after a rule ID is available.
 
 ## Discover only relevant choices
 
@@ -111,6 +169,18 @@ with one cached org session:
     "name": "Ignore blank transactions",
     "accountingConnectionId": "Manual",
     "enabled": false
+  },
+  {
+    "preset": "metadata-categorization",
+    "name": "Canton validator rewards",
+    "accountingConnectionId": "Manual",
+    "categoryId": "Manual.402",
+    "contactId": "Manual.validator",
+    "metadata": [
+      {"key": "RewardType", "value": "input_validator_reward_amount"}
+    ],
+    "metadataOperator": "AND",
+    "enabled": false
   }
 ]
 ```
@@ -150,4 +220,3 @@ The most valuable future Bitwave API changes are:
 Until creation returns an ID, fast apply reports success without performing a
 slow full-list lookup. Exact server validation can be run once the caller has a
 rule ID.
-

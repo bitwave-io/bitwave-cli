@@ -44,7 +44,7 @@ before an enabled rule is run across historical data.`,
 	cmd.AddCommand(
 		newListRulesCmd(), newGetRuleCmd(), newCreateRawRuleCmd(), newValidateRuleCmd(),
 		newToggleRuleCmd("enable", false), newToggleRuleCmd("disable", true), newDeleteRuleCmd(),
-		newRuleRecipesCmd(), newRuleContextCmd(), newRulePlanCmd(), newRuleApplyCmd(),
+		newRuleRecipesCmd(), newRuleMetadataGuideCmd(), newRuleContextCmd(), newRulePlanCmd(), newRuleApplyCmd(),
 	)
 	return cmd
 }

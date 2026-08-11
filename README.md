@@ -349,6 +349,7 @@ choices, and apply one or many rules in a single authenticated process:
 
 ```sh
 bitwave rule recipes --json
+bitwave rule metadata-guide --key FeeType --json
 bitwave rule context --preset simple-inflow --asset ETH --query revenue
 bitwave rule apply --preset simple-inflow --asset ETH \
   --accounting-connection-id CONNECTION_ID \

@@ -60,3 +60,44 @@ func TestDetailedRecipeRequiresRawContract(t *testing.T) {
 		t.Fatal("expected guidance-only preset to reject compact apply")
 	}
 }
+
+func TestMetadataCategorizationBuildsMetadataCondition(t *testing.T) {
+	payload, err := Build(Plan{
+		Preset: "metadata-categorization", Name: "Canton receiver fee", Priority: 1,
+		AccountingConnectionID: "ac-1", CategoryID: "ac-1.expense", ContactID: "ac-1.canton",
+		MetadataOperator: "or", MetadataTransactionRecord: true,
+		Metadata: []MetadataPair{{Key: "FeeType", Value: "receiver_lock_holding_fee"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Transfer struct {
+			MetadataRule struct {
+				Operator      string         `json:"operator"`
+				Metadata      []MetadataPair `json:"metadata"`
+				TxnRecordRule bool           `json:"txnRecordRule"`
+			} `json:"metadataRule"`
+		} `json:"transfer"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	condition := decoded.Transfer.MetadataRule
+	if condition.Operator != "OR" || !condition.TxnRecordRule || len(condition.Metadata) != 1 || condition.Metadata[0].Key != "FeeType" {
+		t.Fatalf("metadata condition = %#v", condition)
+	}
+}
+
+func TestMetadataGuideIncludesDocumentedCantonPattern(t *testing.T) {
+	guide := MetadataGuide()
+	found := false
+	for _, pattern := range guide.GeneralPatterns {
+		if pattern.Key == "RewardType" && pattern.Value == "input_app_reward_amount" && pattern.SpecificCategory == "Application Interaction Rewards" {
+			found = true
+		}
+	}
+	if !found || guide.InternalTransferStatus == "" {
+		t.Fatalf("metadata guide missing documented pattern or construction warning: %#v", guide)
+	}
+}
