@@ -26,3 +26,10 @@ func TestResolveBuildVersion(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveRuntimeVersionKeepsLinkerValue(t *testing.T) {
+	info := &debug.BuildInfo{Main: debug.Module{Version: "v0.2.5-0.20260812000000-abcdef123456"}}
+	if got := resolveRuntimeVersion("0.3.0-dev", info, true); got != "0.3.0-dev" {
+		t.Fatalf("resolveRuntimeVersion() = %q, want %q", got, "0.3.0-dev")
+	}
+}

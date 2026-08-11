@@ -20,18 +20,22 @@ import (
 
 const developmentVersion = "0.3.0-dev"
 
-// Version is replaced by GoReleaser or Make via -ldflags. Versioned `go
-// install` builds have no ldflags, so init falls back to the module version
-// embedded in Go build information instead of reporting a stale dev version.
-var Version = developmentVersion
+// Version is populated by GoReleaser or Make via -ldflags. Empty is the
+// unambiguous linker sentinel: versioned `go install` builds have no ldflags,
+// so init falls back to the module version embedded in Go build information.
+var Version string
 
 func init() {
-	// An ldflags value is authoritative for release and local packaged builds.
-	if Version != developmentVersion {
-		return
-	}
 	info, ok := debug.ReadBuildInfo()
-	Version = resolveBuildVersion(Version, info, ok)
+	Version = resolveRuntimeVersion(Version, info, ok)
+}
+
+func resolveRuntimeVersion(linkerVersion string, info *debug.BuildInfo, ok bool) string {
+	// An ldflags value is authoritative for release and local packaged builds.
+	if strings.TrimSpace(linkerVersion) != "" {
+		return linkerVersion
+	}
+	return resolveBuildVersion(developmentVersion, info, ok)
 }
 
 func resolveBuildVersion(fallback string, info *debug.BuildInfo, ok bool) string {
