@@ -63,6 +63,25 @@ round trip per wallet. Tune this with `--concurrency` (1–50) for the org and
 network mix. Authentication is resolved once per batch; wallet sync remains an
 asynchronous Bitwave service concern.
 
+## Waiting for wallet data
+
+Creating a wallet confirms that Bitwave accepted the source; it does not mean
+all historical transactions are immediately available. Wallet data typically
+appears within **15 minutes**, but a large history or a busy network can take up
+to **24 hours**.
+
+Check one wallet without downloading its full history:
+
+```bash
+bitwave transaction search --wallet "WALLET_NAME" --limit 1 --json
+```
+
+A result with `count: 0` during that window means no indexed transactions are
+available yet. It does not, by itself, mean wallet creation or sync failed. An
+LLM should report the wallet as “waiting for data” and retry later. If it still
+returns no expected data after 24 hours, investigate the wallet address,
+network selection, and Bitwave sync status.
+
 Before creating anything, the CLI validates supplied subsidiary IDs and checks
 for an existing wallet with the same network and address. Existing matches are
 reported as `skipped_existing`; use `--allow-duplicate` only when intentional.

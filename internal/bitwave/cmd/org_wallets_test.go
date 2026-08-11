@@ -60,3 +60,13 @@ func TestUnknownNetworkIsForwardCompatible(t *testing.T) {
 		t.Fatalf("networkId = %v", got)
 	}
 }
+
+func TestOrganizationWalletSyncGuidance(t *testing.T) {
+	guidance := organizationWalletSyncGuidance()
+	if guidance["expectedDuration"] != "15 minutes to 24 hours" {
+		t.Fatalf("expectedDuration = %v", guidance["expectedDuration"])
+	}
+	if guidance["checkCommand"] != "bitwave transaction search --wallet WALLET_NAME --limit 1 --json" {
+		t.Fatalf("checkCommand = %v", guidance["checkCommand"])
+	}
+}

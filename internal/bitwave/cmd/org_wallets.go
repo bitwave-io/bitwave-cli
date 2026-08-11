@@ -43,6 +43,8 @@ var organizationWalletNetworkAliases = map[string]string{
 	"stacks": "stx", "stellar": "xlm", "zcash": "zec", "zetachain": "zeta",
 }
 
+const organizationWalletSyncExpectation = "Wallet data typically appears within 15 minutes but can take up to 24 hours, depending on transaction history volume and network load."
+
 type orgWalletInput struct {
 	Name                    string         `json:"name"`
 	Description             string         `json:"description,omitempty"`
@@ -78,7 +80,10 @@ func newOrgWalletsCmd() *cobra.Command {
 		Short:   "List or add wallets in the active Bitwave organization",
 		Long: `Manage product wallets in the active Bitwave organization. This is
 separate from the top-level local-ledger wallets command. Blockchain addresses
-use the same accountBasedBlockchain creation contract as Bitwave Add Source.`,
+use the same accountBasedBlockchain creation contract as Bitwave Add Source.
+
+After creation, data typically appears within 15 minutes but can take up to 24
+hours depending on transaction history volume and network load.`,
 	}
 	cmd.AddCommand(newOrgWalletsListCmd(), newOrgWalletsNetworksCmd(), newOrgWalletsAddCmd())
 	return cmd
@@ -272,12 +277,23 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 	if failed > 0 {
 		status = "partial_failure"
 	}
-	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "concurrency": workerCount, "wallets": results}}
+	syncGuidance := organizationWalletSyncGuidance()
+	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "concurrency": workerCount, "wallets": results, "syncGuidance": syncGuidance}}
 	if failed > 0 {
 		_ = writeJSON(cmd.OutOrStdout(), envelope)
 		return fmt.Errorf("organization wallets: %d created, %d skipped, %d failed", created, skipped, failed)
 	}
-	return outputMutation(cmd, f.jsonOutput, envelope, fmt.Sprintf("organization wallets: %d created, %d skipped\n", created, skipped))
+	human := fmt.Sprintf("organization wallets: %d created, %d skipped\n%s\nCheck progress: bitwave transaction search --wallet WALLET_NAME --limit 1 --json\n", created, skipped, organizationWalletSyncExpectation)
+	return outputMutation(cmd, f.jsonOutput, envelope, human)
+}
+
+func organizationWalletSyncGuidance() map[string]any {
+	return map[string]any{
+		"expectedDuration": "15 minutes to 24 hours",
+		"dependsOn":        []string{"transaction history volume", "network load"},
+		"message":          organizationWalletSyncExpectation,
+		"checkCommand":     "bitwave transaction search --wallet WALLET_NAME --limit 1 --json",
+	}
 }
 
 func loadOrgWalletInputs(f orgWalletAddFlags, stdin io.Reader) ([]orgWalletInput, error) {

@@ -292,6 +292,10 @@ $ bitwave org wallets add --name Treasury --address 0xABCD...1234 --network eth 
 $ bitwave org wallets list --json
 ```
 
+New wallet data typically appears within 15 minutes but can take up to 24 hours
+depending on transaction history volume and network load. Check progress with
+`bitwave transaction search --wallet "WALLET_NAME" --limit 1 --json`.
+
 Batch onboarding, subsidiary validation, duplicate detection, HD wallets, and
 network-specific fields are documented in
 [`docs/ORGANIZATION_WALLETS.md`](docs/ORGANIZATION_WALLETS.md).
