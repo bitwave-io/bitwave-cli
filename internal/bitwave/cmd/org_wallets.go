@@ -79,6 +79,8 @@ type orgWalletAddFlags struct {
 	volumeSource          string
 	volumeEvidence        string
 	acknowledgeUnknown    bool
+	overrideVolumeRisk    bool
+	overrideReason        string
 	solanaValidator       bool
 	babelRollupInput      string
 }
@@ -179,7 +181,9 @@ Creating a wallet starts asynchronous ingestion. Data typically appears within
 and network load. Before creation, run ` + "`bitwave org wallets assess`" + ` and
 review expected volume with the user. High-volume wallets require modern Babel
 rollup rules. Solana validator transactions are rolled up automatically. If the
-volume or appropriate rollup design is unclear, speak with Bitwave first.`,
+volume or appropriate rollup design is unclear, speak with Bitwave first. A user
+may explicitly accept the ingestion risk with --override-volume-risk and a
+recorded --override-reason; this does not bypass invalid wallet or rollup input.`,
 		RunE: func(cmd *cobra.Command, _ []string) error { return runOrgWalletsAdd(cmd, f) },
 	}
 	addMutationFlags(cmd, &f.transactionMutationFlags)
@@ -199,6 +203,8 @@ volume or appropriate rollup design is unclear, speak with Bitwave first.`,
 	cmd.Flags().StringVar(&f.volumeSource, "volume-source", "", "Source of the estimate, such as user, explorer, or API")
 	cmd.Flags().StringVar(&f.volumeEvidence, "volume-evidence", "", "Short evidence or URL supporting the volume estimate")
 	cmd.Flags().BoolVar(&f.acknowledgeUnknown, "acknowledge-unknown-volume", false, "Acknowledge unknown volume and the recommendation to contact Bitwave")
+	cmd.Flags().BoolVar(&f.overrideVolumeRisk, "override-volume-risk", false, "Proceed despite unknown/high volume or missing rollups (requires --override-reason)")
+	cmd.Flags().StringVar(&f.overrideReason, "override-reason", "", "Reason the user chose to override the volume/rollup safeguard")
 	cmd.Flags().BoolVar(&f.solanaValidator, "solana-validator", false, "Mark this as a Solana validator wallet (rollups are automatic)")
 	cmd.Flags().StringVar(&f.babelRollupInput, "babel-rollup-input", "", "Babel rollup rules JSON file for single-wallet mode")
 	return cmd
@@ -331,7 +337,12 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 	}
 	close(jobs)
 	workers.Wait()
-	created, skipped, failed, rollupFailed, rollupConfigured := 0, 0, 0, 0, 0
+	created, skipped, failed, rollupFailed, rollupConfigured, riskOverrides := 0, 0, 0, 0, 0, 0
+	for _, input := range inputs {
+		if input.VolumeReview.OverrideRisk {
+			riskOverrides++
+		}
+	}
 	for _, result := range results {
 		resultStatus, _ := result["status"].(string)
 		if strings.HasPrefix(resultStatus, "created") {
@@ -353,12 +364,12 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 		status = "partial_failure"
 	}
 	syncGuidance := organizationWalletSyncGuidance()
-	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "rollupConfigured": rollupConfigured, "rollupFailed": rollupFailed, "concurrency": workerCount, "wallets": results, "syncGuidance": syncGuidance}}
+	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "rollupConfigured": rollupConfigured, "rollupFailed": rollupFailed, "volumeRiskOverrides": riskOverrides, "concurrency": workerCount, "wallets": results, "syncGuidance": syncGuidance}}
 	if failed > 0 || rollupFailed > 0 {
 		_ = writeJSON(cmd.OutOrStdout(), envelope)
 		return fmt.Errorf("organization wallets: %d created, %d skipped, %d failed; Babel rollups: %d configured, %d failed", created, skipped, failed, rollupConfigured, rollupFailed)
 	}
-	human := fmt.Sprintf("organization wallets: %d created, %d skipped; Babel rollups: %d configured\n%s\nCheck progress: bitwave transaction search --wallet WALLET_NAME --limit 1 --json\n", created, skipped, rollupConfigured, organizationWalletSyncExpectation)
+	human := fmt.Sprintf("organization wallets: %d created, %d skipped; Babel rollups: %d configured; volume-risk overrides: %d\n%s\nCheck progress: bitwave transaction search --wallet WALLET_NAME --limit 1 --json\n", created, skipped, rollupConfigured, riskOverrides, organizationWalletSyncExpectation)
 	return outputMutation(cmd, f.jsonOutput, envelope, human)
 }
 
@@ -388,7 +399,7 @@ func loadOrgWalletInputs(f orgWalletAddFlags, stdin io.Reader) ([]orgWalletInput
 				return nil, fmt.Errorf("decode Babel rollup rules: %w", err)
 			}
 		}
-		return []orgWalletInput{{Name: f.name, Address: f.address, NetworkID: f.network, SubsidiaryID: f.subsidiary, AddressType: f.addressType, SyncStartDateSEC: f.syncStartDateSEC, ViewKey: f.viewKey, IsBalanceMonitoringOnly: f.balanceMonitoringOnly, VolumeReview: walletVolumeReview{Reviewed: f.volumeReviewed, EstimatedTransactions: estimated, Source: f.volumeSource, Evidence: f.volumeEvidence, AcknowledgeUnknown: f.acknowledgeUnknown}, BabelRollupRules: rules, SolanaValidator: f.solanaValidator}}, nil
+		return []orgWalletInput{{Name: f.name, Address: f.address, NetworkID: f.network, SubsidiaryID: f.subsidiary, AddressType: f.addressType, SyncStartDateSEC: f.syncStartDateSEC, ViewKey: f.viewKey, IsBalanceMonitoringOnly: f.balanceMonitoringOnly, VolumeReview: walletVolumeReview{Reviewed: f.volumeReviewed, EstimatedTransactions: estimated, Source: f.volumeSource, Evidence: f.volumeEvidence, AcknowledgeUnknown: f.acknowledgeUnknown, OverrideRisk: f.overrideVolumeRisk, OverrideReason: f.overrideReason}, BabelRollupRules: rules, SolanaValidator: f.solanaValidator}}, nil
 	}
 	var data []byte
 	var err error

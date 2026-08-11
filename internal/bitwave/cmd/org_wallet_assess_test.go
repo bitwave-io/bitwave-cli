@@ -57,6 +57,62 @@ func TestUnknownVolumeRequiresAcknowledgement(t *testing.T) {
 	}
 }
 
+func TestVolumeRiskOverrideRequiresReasonAndAllowsHighVolumeWithoutRollups(t *testing.T) {
+	input := orgWalletInput{
+		Name: "High volume override", NetworkID: "eth",
+		VolumeReview: walletVolumeReview{
+			Reviewed: true, EstimatedTransactions: int64Pointer(20_000_000),
+			Source: "explorer", Evidence: "20m transactions", OverrideRisk: true,
+		},
+	}
+	if err := validateWalletVolumeAndRollups(input); err == nil || !strings.Contains(err.Error(), "overrideReason") {
+		t.Fatalf("expected override reason guard, got %v", err)
+	}
+	if got := assessWalletVolume(input).Decision; got != "needs_user_input" {
+		t.Fatalf("decision without reason = %q", got)
+	}
+
+	input.VolumeReview.OverrideReason = "User requires full unrolled history for an approved migration test"
+	if err := validateWalletVolumeAndRollups(input); err != nil {
+		t.Fatalf("explicit override rejected: %v", err)
+	}
+	assessment := assessWalletVolume(input)
+	if assessment.Decision != "ready_with_volume_risk_override" || !assessment.RiskOverride || assessment.OverrideReason == "" {
+		t.Fatalf("assessment = %#v", assessment)
+	}
+}
+
+func TestVolumeRiskOverrideAllowsUnknownVolume(t *testing.T) {
+	input := orgWalletInput{
+		Name: "Unknown override", NetworkID: "eth",
+		VolumeReview: walletVolumeReview{Reviewed: true, OverrideRisk: true, OverrideReason: "User explicitly accepted unknown ingestion volume"},
+	}
+	if err := validateWalletVolumeAndRollups(input); err != nil {
+		t.Fatalf("explicit unknown-volume override rejected: %v", err)
+	}
+	if got := assessWalletVolume(input).Decision; got != "ready_with_volume_risk_override" {
+		t.Fatalf("decision = %q", got)
+	}
+}
+
+func TestVolumeRiskOverrideDoesNotBypassInvalidConfiguration(t *testing.T) {
+	baseReview := walletVolumeReview{
+		Reviewed: true, EstimatedTransactions: int64Pointer(20_000_000), Source: "explorer",
+		Evidence: "20m transactions", OverrideRisk: true, OverrideReason: "User accepted ingestion risk",
+	}
+	invalidRule := validBabelRule()
+	invalidRule.FingerPrint = "madeUp"
+	input := orgWalletInput{Name: "Invalid Babel", NetworkID: "eth", VolumeReview: baseReview, BabelRollupRules: []orgreports.BabelRollupRule{invalidRule}}
+	if err := validateWalletVolumeAndRollups(input); err == nil || !strings.Contains(err.Error(), "unsupported fingerPrint") {
+		t.Fatalf("override bypassed invalid Babel rule: %v", err)
+	}
+
+	input = orgWalletInput{Name: "Invalid validator", NetworkID: "sol", SolanaValidator: true, VolumeReview: baseReview, BabelRollupRules: []orgreports.BabelRollupRule{validBabelRule()}}
+	if err := validateWalletVolumeAndRollups(input); err == nil || !strings.Contains(err.Error(), "automatically") {
+		t.Fatalf("override bypassed Solana validator guard: %v", err)
+	}
+}
+
 func TestSolanaValidatorUsesAutomaticRollups(t *testing.T) {
 	input := orgWalletInput{
 		Name: "Validator", NetworkID: "sol", SolanaValidator: true,
@@ -95,7 +151,7 @@ func TestWalletAssessmentPromptsCoverResearchAndSupport(t *testing.T) {
 	text := strings.ToLower(strings.TrimSpace(strings.Join([]string{
 		prompts[0]["question"].(string), prompts[len(prompts)-1]["question"].(string),
 	}, " ")))
-	if !strings.Contains(text, "how many") || !strings.Contains(text, "bitwave") {
+	if !strings.Contains(text, "how many") || !strings.Contains(text, "explicitly") {
 		t.Fatalf("prompts = %#v", prompts)
 	}
 }

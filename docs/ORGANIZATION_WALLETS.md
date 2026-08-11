@@ -55,6 +55,31 @@ If a reliable count cannot be found, the LLM must explain the uncertainty to
 the user. Creation then requires `acknowledgeUnknown: true`. The CLI always
 recommends speaking with Bitwave when volume or rollup design is uncertain.
 
+### Explicit user override
+
+The preflight is a guardrail, not a prohibition. If the user understands the
+risk and still wants to ingest unknown or high volume without the recommended
+Babel rules, record an explicit override:
+
+```json
+"volumeReview": {
+  "reviewed": true,
+  "estimatedTransactions": 20000000,
+  "source": "explorer API",
+  "evidence": "20,004,811 transactions in the requested window",
+  "overrideRisk": true,
+  "overrideReason": "User requires full unrolled history for an approved migration test"
+}
+```
+
+Single-wallet mode uses `--override-volume-risk --override-reason "..."`.
+The assessment and mutation JSON preserve the override and reason, and the
+result reports `volumeRiskOverrides`. An override accepts only the
+unknown/high-volume ingestion risk and the absence of recommended rollups. It
+does not bypass volume review, malformed Babel rules, invalid wallet inputs, or
+the Solana-validator configuration checks. The recommendation to consult
+Bitwave still applies.
+
 ## Add one blockchain wallet
 
 ```bash
@@ -67,6 +92,13 @@ bitwave org wallets add \
   --volume-source "block explorer" \
   --volume-evidence "approximately 42k transactions" \
   --yes
+```
+
+To proceed after an informed decision despite the volume safeguard, add:
+
+```bash
+  --override-volume-risk \
+  --override-reason "User explicitly approved full unrolled ingestion"
 ```
 
 Use `--subsidiary SUBSIDIARY_ID` when applicable. Common names such as
