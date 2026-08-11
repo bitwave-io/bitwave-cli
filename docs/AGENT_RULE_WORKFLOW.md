@@ -56,6 +56,32 @@ Supported compact apply presets:
 - `ignore-blank`
 - `metadata-categorization`
 
+## Plan rules in hierarchy order
+
+Rule planning starts with transaction type, not wallet. `rule recipes` returns
+this as the machine-readable `planningHierarchy`.
+
+Tier 1 contains the organization-wide type rules:
+
+1. Trade
+2. Internal transfer
+3. Gas-fee only
+
+Create one applicable rule of each type for the organization. Leave wallet,
+asset, address, and date filters empty by default; do not create one trade,
+internal-transfer, or gas-only rule per wallet. Add scope only for a deliberate
+exception where the treatment genuinely differs.
+
+Tier 2 contains deposits/inflows and withdrawals/outflows. Direction is not
+enough to determine their accounting treatment. Inspect the transaction and
+narrow the rule using stable metadata, method ID, address, asset, wallet, or
+another supported condition. Wallet becomes relevant here only when it carries
+real information about the intended treatment.
+
+`planningTier` describes the order in which an LLM should reason about rule
+coverage. It is separate from Bitwave's numeric `priority` field; the CLI does
+not silently rewrite the priority selected by the user.
+
 ### Trade fee treatment (required Bitwave behavior)
 
 A trade rule requires a **fee contact** even though its primary trade does not
@@ -63,6 +89,12 @@ require a category or contact. Do not supply a fee category for a trade. Keep
 `autoCategorizeFee: false`; this leaves the fee inside trade treatment so the
 inventory calculation can capitalize it rather than posting it automatically
 to a period expense.
+
+Keep `ignoreFailPricing: false`—the "ignore failed pricing" checkbox remains
+unchecked—for the organization-wide trade rule. Some transactions identified
+as trades can represent DeFi activity. If pricing fails, the generic trade rule
+should not sweep those transactions into automatic trade categorization. The
+CLI warns if an LLM enables this setting but honors the explicit request.
 
 ```text
 Trade action

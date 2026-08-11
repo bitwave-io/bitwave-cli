@@ -38,6 +38,10 @@ func TestSimpleInflowUsesSingleTokenAndPrimaryFeeDefaults(t *testing.T) {
 }
 
 func TestTradeRecipeForcesDocumentedDefaults(t *testing.T) {
+	recipe, ok := Find("trade")
+	if !ok || recipe.PlanningTier != 1 || recipe.DefaultScope != "organization" || recipe.Defaults["ignoreFailPricing"] != false {
+		t.Fatalf("trade recipe hierarchy = %#v", recipe)
+	}
 	payload, err := Build(Plan{
 		Preset: "trade", Name: "All trades", Priority: 1,
 		AccountingConnectionID: "Manual", FeeContactID: "Manual.1",
@@ -62,6 +66,23 @@ func TestTradeRecipeForcesDocumentedDefaults(t *testing.T) {
 	}
 	if _, exists := action["feeCategoryId"]; exists {
 		t.Fatalf("trade must not include a fee category: %#v", action)
+	}
+}
+
+func TestPlanningHierarchyStartsWithOrganizationWideTypes(t *testing.T) {
+	hierarchy := PlanningHierarchy()
+	if len(hierarchy) != 2 || hierarchy[0].Tier != 1 || hierarchy[1].Tier != 2 {
+		t.Fatalf("hierarchy = %#v", hierarchy)
+	}
+	want := []string{"trade", "internal-transfer", "gas-fee-only"}
+	for i, preset := range want {
+		if hierarchy[0].Presets[i] != preset {
+			t.Fatalf("tier 1 presets = %#v", hierarchy[0].Presets)
+		}
+		recipe, ok := Find(preset)
+		if !ok || recipe.DefaultScope != "organization" {
+			t.Fatalf("recipe %q = %#v", preset, recipe)
+		}
 	}
 }
 

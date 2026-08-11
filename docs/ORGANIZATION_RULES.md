@@ -46,6 +46,27 @@ Do not generalize the gas-only rule to trades. A standalone gas-only transaction
 requires both a fee category and fee contact; a trade fee requires the contact
 without the category.
 
+## Rule planning hierarchy
+
+Start with Tier 1 organization-wide transaction-type rules: trade,
+internal transfer, and gas-fee only. These normally have no wallet filter; one
+rule applies across the organization's wallets. A wallet-specific version is
+an exception, not the default.
+
+Keep `ignoreFailPricing=false` on the trade rule. Failed-priced trade-like
+transactions can be DeFi activity and should remain outside the generic trade
+rule for review.
+
+Then plan Tier 2 granular deposit/inflow and withdrawal/outflow rules.
+Direction alone does not determine treatment, so these rules require more
+transaction evidence and narrower conditions such as stable metadata, method
+ID, address, asset, or—when genuinely relevant—wallet.
+
+`bitwave rule recipes --json` exposes the same policy through
+`planningHierarchy`, `planningTier`, and `defaultScope` for
+LLM clients. These are advisory defaults; requested filters and settings are
+retained with warnings.
+
 ## List rules without filling LLM context
 
 The list command returns compact summaries and a maximum of 25 enabled rules by

@@ -40,6 +40,8 @@ type Recipe struct {
 	Name             string         `json:"name"`
 	Summary          string         `json:"summary"`
 	ActionType       string         `json:"actionType"`
+	PlanningTier     int            `json:"planningTier"`
+	DefaultScope     string         `json:"defaultScope"`
 	DefaultDirection string         `json:"defaultDirection"`
 	DefaultMulti     bool           `json:"defaultMultiToken"`
 	ApplySupported   bool           `json:"applySupported"`
@@ -48,58 +50,86 @@ type Recipe struct {
 	Guidance         []string       `json:"guidance"`
 }
 
+type PlanningTier struct {
+	Tier     int      `json:"tier"`
+	Name     string   `json:"name"`
+	Presets  []string `json:"presets"`
+	Guidance []string `json:"guidance"`
+}
+
+func PlanningHierarchy() []PlanningTier {
+	return []PlanningTier{
+		{
+			Tier: 1, Name: "organization-wide transaction type",
+			Presets: []string{"trade", "internal-transfer", "gas-fee-only"},
+			Guidance: []string{
+				"Create one organization-wide rule for each applicable transaction type; omit wallet, asset, and address filters by default.",
+				"Trade rules keep ignoreFailPricing=false so failed-priced transactions, including possible DeFi activity, are not swept into the generic trade rule.",
+			},
+		},
+		{
+			Tier: 2, Name: "granular deposit and withdrawal behavior",
+			Presets: []string{"simple-inflow", "simple-outflow", "metadata-categorization", "detailed-categorization"},
+			Guidance: []string{
+				"Direction alone is insufficient; inspect transaction evidence and narrow with stable metadata, method ID, address, asset, wallet, or another supported condition.",
+				"Wallet scope is appropriate only when the intended treatment genuinely differs by wallet.",
+			},
+		},
+	}
+}
+
 var catalog = []Recipe{
 	{
 		Name: "simple-inflow", Summary: "Categorize matching inbound transactions to one category and contact.",
-		ActionType: "SimpleCategorization", DefaultDirection: "Inbound", ApplySupported: true,
+		ActionType: "SimpleCategorization", PlanningTier: 2, DefaultScope: "transaction-specific", DefaultDirection: "Inbound", ApplySupported: true,
 		Fields:   []Field{{"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}, {"asset", false, "Single asset required for the match."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
 		Guidance: []string{"Use multiToken=false when --asset identifies a single-token rule.", "Use from/to address filters only for primary transaction addresses, not token transfer lines."},
 	},
 	{
 		Name: "simple-outflow", Summary: "Categorize matching outbound transactions to one category and contact.",
-		ActionType: "SimpleCategorization", DefaultDirection: "Outbound", ApplySupported: true,
+		ActionType: "SimpleCategorization", PlanningTier: 2, DefaultScope: "transaction-specific", DefaultDirection: "Outbound", ApplySupported: true,
 		Fields:   []Field{{"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}, {"asset", false, "Single asset required for the match."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
 		Guidance: []string{"Use multiToken=false when --asset identifies a single-token rule.", "Specify a separate fee category/contact when fees should not use the primary categorization."},
 	},
 	{
 		Name: "trade", Summary: "Categorize swap/trade transactions and their fee contact.",
-		ActionType: "TradeCategorization", DefaultDirection: "All", DefaultMulti: true, ApplySupported: true,
+		ActionType: "TradeCategorization", PlanningTier: 1, DefaultScope: "organization", DefaultDirection: "All", DefaultMulti: true, ApplySupported: true,
 		Fields:   []Field{{"feeContact", true, "Required contact for the trade fee. Trades do not take a fee category."}},
-		Defaults: map[string]any{"multiToken": true, "autoCategorizeFee": false, "allowMismatch": true},
-		Guidance: []string{"Trades use multiToken=true because Bitwave trades exchange one asset for one or more assets.", "A trade fee requires feeContactId but no feeCategoryId; leaving autoCategorizeFee=false keeps the fee in trade treatment so it can be capitalized.", "Do not add a single --asset unless the rule is intentionally asset-specific."},
+		Defaults: map[string]any{"multiToken": true, "autoCategorizeFee": false, "allowMismatch": true, "ignoreFailPricing": false},
+		Guidance: []string{"Create one organization-wide trade rule; omit wallet, asset, address, and date filters by default.", "Keep ignoreFailPricing=false (the checkbox unchecked). Failed-priced transactions can represent DeFi activity and should not be swept into the generic trade rule.", "Trades use multiToken=true because Bitwave trades exchange one asset for one or more assets.", "A trade fee requires feeContactId but no feeCategoryId; leaving autoCategorizeFee=false keeps the fee in trade treatment so it can be capitalized."},
 	},
 	{
 		Name: "internal-transfer", Summary: "Categorize wallet-to-wallet transfers and associated fees.",
-		ActionType: "InternalTransferCategorization", DefaultDirection: "All", ApplySupported: true,
+		ActionType: "InternalTransferCategorization", PlanningTier: 1, DefaultScope: "organization", DefaultDirection: "All", ApplySupported: true,
 		Fields:   []Field{{"feeCategory", true, "Fee category ID or exact name."}, {"feeContact", true, "Fee contact ID or exact name."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Enable multi-token only when matching transfers contain more than one transferred asset.", "Use --wallet to constrain the rule when different wallets require different fee treatment."},
+		Guidance: []string{"Create one organization-wide internal-transfer rule and omit wallet filters by default.", "Enable multi-token only when matching transfers contain more than one transferred asset.", "Add wallet scope only for an explicit exception where treatment genuinely differs."},
 	},
 	{
 		Name: "gas-fee-only", Summary: "Categorize transactions containing only network/contract execution fees.",
-		ActionType: "InternalTransferCategorization", DefaultDirection: "Empty", ApplySupported: true,
+		ActionType: "InternalTransferCategorization", PlanningTier: 1, DefaultScope: "organization", DefaultDirection: "Empty", ApplySupported: true,
 		Fields:   []Field{{"feeCategory", true, "Category used for the gas fee."}, {"feeContact", true, "Contact used for the gas fee."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Direction Empty is the deployed Bitwave condition for transactions without a primary fund flow.", "Leave wallet empty for org-wide gas treatment or create one rule per wallet."},
+		Guidance: []string{"Create one organization-wide gas-fee-only rule and omit wallet filters by default.", "Direction Empty is the deployed Bitwave condition for transactions without a primary fund flow.", "Add wallet scope only for an explicit exception where treatment genuinely differs."},
 	},
 	{
 		Name: "ignore-blank", Summary: "Ignore transactions that contain no transferred value.",
-		ActionType: "Ignore", DefaultDirection: "Empty", ApplySupported: true,
+		ActionType: "Ignore", PlanningTier: 2, DefaultScope: "transaction-specific", DefaultDirection: "Empty", ApplySupported: true,
 		Fields: []Field{}, Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": false, "allowMismatch": false},
 		Guidance: []string{"Use a bounded date window first because enabled rules also affect historical data.", "Do not use this preset for failed pricing or otherwise non-blank economic activity."},
 	},
 	{
 		Name: "metadata-categorization", Summary: "Categorize transactions matching one or more metadata key/value conditions.",
-		ActionType: "SimpleCategorization", DefaultDirection: "All", ApplySupported: true,
+		ActionType: "SimpleCategorization", PlanningTier: 2, DefaultScope: "transaction-specific", DefaultDirection: "All", ApplySupported: true,
 		Fields:   []Field{{"metadata", true, "One or more observed transaction metadata key/value pairs."}, {"methodId", false, "Observed smart-contract method ID."}, {"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}},
 		Defaults: map[string]any{"metadataOperator": "AND", "multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
 		Guidance: []string{"Prefer stable, repeated metadata or methodId conditions whenever sampled transaction data exposes them; this applies across networks, not only Canton.", "Metadata conditions and methodId can also be attached to any other supported preset.", "Use wallet, address, direction, and asset only to disambiguate or narrow a metadata/methodId rule.", "Do not turn transaction-specific metadata such as hashes, block numbers, timestamps, IDs, or nonces into reusable rules.", "Choose multi-token handling from the sampled transactions; metadata alone does not imply it."},
 	},
 	{
 		Name: "detailed-categorization", Summary: "Categorize token-level or multi-line transaction details using extractor lines.",
-		ActionType: "DetailedCategorization", DefaultDirection: "All", ApplySupported: false,
+		ActionType: "DetailedCategorization", PlanningTier: 2, DefaultScope: "transaction-specific", DefaultDirection: "All", ApplySupported: false,
 		Fields:   []Field{{"rawInput", true, "Use `rule create --input` until detailed line flags are implemented."}},
 		Defaults: map[string]any{"multiToken": true},
 		Guidance: []string{"Use detailed rules for token transfer-line addresses and for splitting multiple lines to different categories/contacts.", "The compact preset intentionally does not guess extractor-line semantics."},

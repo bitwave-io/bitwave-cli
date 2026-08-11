@@ -106,6 +106,7 @@ func newRuleRecipesCmd() *cobra.Command {
 				"schemaVersion": rulerecipes.SchemaVersion, "source": rulerecipes.SourceURL, "sources": rulerecipes.Sources(),
 				"lastVerified": rulerecipes.LastVerified, "recipes": recipes,
 				"agentWorkflow":     []string{"metadata-guide", "context", "plan", "apply"},
+				"planningHierarchy": rulerecipes.PlanningHierarchy(),
 				"conditionStrategy": guide.Recommendation, "candidateConditions": guide.CandidateConditions,
 			})
 		},
@@ -228,6 +229,9 @@ func newRuleApplyCmd() *cobra.Command {
 			for index, plan := range plans {
 				result, createErr := client.CreateRule(cmd.Context(), orgID, plan.Payload)
 				item := map[string]any{"index": index, "name": plan.Spec.Name, "preset": plan.Spec.Preset, "success": createErr == nil}
+				if len(plan.Warnings) > 0 {
+					item["warnings"] = plan.Warnings
+				}
 				if createErr != nil {
 					item["error"] = createErr.Error()
 					results = append(results, item)
@@ -638,6 +642,12 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 		resolution["feeContact"] = feeContact
 	}
 	warnings := []string{}
+	if recipe.DefaultScope == "organization" && (strings.TrimSpace(spec.Wallet) != "" || strings.TrimSpace(spec.WalletID) != "") {
+		warnings = append(warnings, fmt.Sprintf("%s is normally an organization-wide type rule; the requested wallet filter is retained, but a single unscoped rule is the default hierarchy.", recipe.Name))
+	}
+	if recipe.Name == "trade" && spec.IgnoreFailPricing {
+		warnings = append(warnings, "Trade ignoreFailPricing was enabled by request. The Bitwave default is unchecked/false so failed-priced transactions, including possible DeFi activity, are not swept into the generic trade rule.")
+	}
 	if len(spec.Metadata) > 0 {
 		warnings = append(warnings, "Transaction samples are approximate because the search endpoint does not expose metadata filtering; validate against a known transaction after obtaining the rule ID.")
 	}
