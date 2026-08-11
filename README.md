@@ -412,6 +412,9 @@ The recommended first rule setup is one organization-wide, enabled rule for
 each of trade, internal transfer, and gas-fee only. Check for existing
 equivalents, then create all missing defaults in one batch without a full
 transaction scan. Granular deposit and withdrawal analysis comes afterward.
+Because background rule processing runs only intermittently (roughly twice per
+day), use `bitwave rule run --org ORG_ID --yes` after creation to trigger
+processing sooner.
 
 See [Agent-Native Categorization Rules](docs/AGENT_RULE_WORKFLOW.md) for the
 presets, name-to-ID discovery path, client-side batch format, and lifecycle

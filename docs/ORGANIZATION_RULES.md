@@ -55,6 +55,17 @@ connection and Gas Fees resources are ready, create the missing rules in one
 batch unless the user declines, and verify them with one list call. No full
 transaction scan is needed for this starting set.
 
+Rules normally run in the background approximately twice per day. Creation or
+enablement is not immediate execution. After the default batch, trigger an
+asynchronous run so processing begins sooner:
+
+```bash
+bitwave rule run --org ORG_ID --yes
+```
+
+The response means the run was requested, not that every transaction has
+already finished processing.
+
 Before applying, check for equivalent existing rules so rerunning onboarding
 does not create duplicates. Leave wallet, asset, address, and date filters
 empty. Trade uses the Gas Fees contact only and keeps

@@ -67,6 +67,7 @@ func PlanningHierarchy() []PlanningTier {
 			Guidance: []string{
 				"Always suggest this tier as the first rule setup after accounting resources are ready; create all three applicable defaults unless the user declines or equivalent rules already exist.",
 				"These defaults do not require a transaction-history scan. Check existing rules, resolve the Gas Fees category/contact, and apply the missing rules in one batch.",
+				"After creation, trigger `bitwave rule run --yes`; background rule processing is intermittent (approximately twice daily), so creation alone does not apply rules immediately.",
 				"Create one organization-wide rule for each applicable transaction type; omit wallet, asset, and address filters by default.",
 				"Trade rules keep ignoreFailPricing=false so failed-priced transactions, including possible DeFi activity, are not swept into the generic trade rule.",
 			},

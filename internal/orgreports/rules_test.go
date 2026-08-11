@@ -39,7 +39,14 @@ func TestRuleContracts(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Fatal(err)
 			}
-			if request.OperationName != "CreateRule" || request.Variables.OrgID != "org-1" || request.Variables.Rule["transfer"] == nil {
+			if request.Variables.OrgID != "org-1" {
+				t.Fatalf("request = %#v", request)
+			}
+			if request.OperationName == "RunRulesForOrg" {
+				_, _ = w.Write([]byte(`{"data":{"runRulesForOrg":true}}`))
+				return
+			}
+			if request.OperationName != "CreateRule" || request.Variables.Rule["transfer"] == nil {
 				t.Fatalf("request = %#v", request)
 			}
 			_, _ = w.Write([]byte(`{"data":{"createRule":{"success":true,"errors":[]}}}`))
@@ -63,6 +70,9 @@ func TestRuleContracts(t *testing.T) {
 	created, err := client.CreateRule(ctx, "org-1", json.RawMessage(`{"transfer":{"name":"ETH inflows"}}`))
 	if err != nil || !created.Success {
 		t.Fatalf("created = %#v err=%v", created, err)
+	}
+	if err := client.RunRules(ctx, "org-1"); err != nil {
+		t.Fatalf("run rules: %v", err)
 	}
 	validation, err := client.ValidateRule(ctx, "org-1", "txn-1", "rule-1")
 	if err != nil || string(validation) != `{"valid":true}` {

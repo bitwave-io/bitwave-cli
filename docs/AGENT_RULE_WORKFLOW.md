@@ -79,6 +79,8 @@ analyzing the organization's transaction history. The fast sequence is:
 3. Submit all missing Tier 1 rules through one authenticated `rule apply`
    process.
 4. Verify the resulting rules once.
+5. Trigger `bitwave rule run --yes` so the new rules begin processing without
+   waiting for the background schedule.
 
 Each default is enabled, organization-wide, and uses Bitwave rule priority `1`.
 It has no wallet, asset, address, or date filter. The trade rule uses the Gas
@@ -88,6 +90,22 @@ Do not create duplicates when an equivalent rule is already present.
 
 Only after this default batch should the LLM analyze transaction history for
 Tier 2 deposit/inflow and withdrawal/outflow rules.
+
+### Creation is not execution
+
+Bitwave's background rule processing runs intermittently, approximately twice
+per day. Creating or enabling a rule does not immediately apply it to existing
+transactions. After creating the default batch—or whenever the user wants new
+rules processed sooner—trigger the asynchronous organization-wide run:
+
+```bash
+bitwave --quiet rule run --org ORG_ID --yes
+```
+
+The command confirms that processing was triggered; it does not claim that the
+entire transaction history has already finished. If an active or recently
+completed run already exists, the server remains authoritative about whether a
+new run starts.
 
 Tier 1 contains the organization-wide type rules:
 
@@ -325,6 +343,7 @@ bitwave rule enable RULE_ID --yes
 bitwave rule disable RULE_ID --yes
 bitwave rule delete RULE_ID --yes
 bitwave rule validate RULE_ID TRANSACTION_ID
+bitwave rule run --org ORG_ID --yes
 ```
 
 `rule get` uses the exact rule query and does not download the complete rule

@@ -70,6 +70,10 @@ const deleteRuleMutation = `mutation DeleteRule($orgId: ID!, $ruleId: ID!) {
   deleteRule(orgId: $orgId, ruleId: $ruleId)
 }`
 
+const runRulesMutation = `mutation RunRulesForOrg($orgId: ID!) {
+  runRulesForOrg(orgId: $orgId)
+}`
+
 type RuleCreateResult struct {
 	Success bool            `json:"success"`
 	Errors  json.RawMessage `json:"errors,omitempty"`
@@ -186,6 +190,34 @@ func (c *Client) CreateRule(ctx context.Context, orgID string, rule json.RawMess
 		return &response.Data.CreateRule, fmt.Errorf("create rule was rejected: %s", strings.TrimSpace(string(response.Data.CreateRule.Errors)))
 	}
 	return &response.Data.CreateRule, nil
+}
+
+func (c *Client) RunRules(ctx context.Context, orgID string) error {
+	request := map[string]any{
+		"operationName": "RunRulesForOrg",
+		"query":         runRulesMutation,
+		"variables":     map[string]any{"orgId": orgID},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesMutationURL, request, true)
+	if err != nil {
+		return err
+	}
+	var response struct {
+		Data struct {
+			Success bool `json:"runRulesForOrg"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return fmt.Errorf("decode run rules response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return err
+	}
+	if !response.Data.Success {
+		return fmt.Errorf("run rules request was rejected")
+	}
+	return nil
 }
 
 func (c *Client) ToggleRule(ctx context.Context, orgID, ruleID string, disabled bool) error {

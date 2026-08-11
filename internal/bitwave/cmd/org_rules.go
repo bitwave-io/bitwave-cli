@@ -46,8 +46,43 @@ before an enabled rule is run across historical data.`,
 	cmd.AddCommand(
 		newListRulesCmd(), newGetRuleCmd(), newCreateRawRuleCmd(), newValidateRuleCmd(),
 		newToggleRuleCmd("enable", false), newToggleRuleCmd("disable", true), newDeleteRuleCmd(),
+		newRunRulesCmd(),
 		newRuleRecipesCmd(), newRuleMetadataGuideCmd(), newRuleContextCmd(), newRulePlanCmd(), newRuleApplyCmd(),
 	)
+	return cmd
+}
+
+func newRunRulesCmd() *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{
+		Use:   "run",
+		Short: "Trigger organization categorization rules now instead of waiting for the background schedule",
+		Long: `Trigger an asynchronous organization-wide rules run.
+
+Bitwave normally runs rules in the background roughly twice per day. Creating
+or enabling a rule does not apply it immediately. Use this command after rule
+setup when the user wants processing to begin sooner.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			operation := "run-rules"
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			preview := map[string]any{"operation": "RunRulesForOrg", "variables": map[string]any{"orgId": orgID}}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
+			}
+			if !f.yes {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to trigger an organization-wide rules run without --yes (use --dry-run to preview)"))
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			if err := client.RunRules(cmd.Context(), orgID); err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"triggered": true, "asynchronous": true}})
+		},
+	}
+	addMutationFlags(cmd, &f)
 	return cmd
 }
 
