@@ -444,6 +444,12 @@ func mutationError(cmd *cobra.Command, operation string, jsonOutput bool, err er
 			detail.Suggestion = "Run `bitwave org wallets assess --input WALLET_JSON --json`, review volume with the user, and speak with Bitwave when volume or rollup design is uncertain."
 		} else if operation == "set-wallet-babel-rollup" {
 			detail.Suggestion = "Validate the Babel rule fields and use --dry-run to preview the rollup request before applying it."
+		} else if operation == "run-rules" {
+			detail.Suggestion = "Retry once in case a recent or active run is being deduplicated. If the trigger still fails, open Bitwave Rules and select Run Rules; creating rules does not apply them immediately."
+			if strings.Contains(strings.ToLower(err.Error()), "internal server error") {
+				detail.Code = "rules_run_trigger_failed"
+				detail.Retryable = true
+			}
 		}
 		var apiError *apierr.Error
 		if errors.As(err, &apiError) {

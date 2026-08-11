@@ -66,6 +66,10 @@ bitwave rule run --org ORG_ID --yes
 The response means the run was requested, not that every transaction has
 already finished processing.
 
+If the trigger repeatedly returns a server-side error, use the **Run Rules**
+action on Bitwave's Rules page. The CLI should clearly distinguish this trigger
+failure from rule-creation failure.
+
 Before applying, check for equivalent existing rules so rerunning onboarding
 does not create duplicates. Leave wallet, asset, address, and date filters
 empty. Trade uses the Gas Fees contact only and keeps

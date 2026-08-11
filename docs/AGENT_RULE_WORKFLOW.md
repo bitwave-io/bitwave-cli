@@ -107,6 +107,11 @@ entire transaction history has already finished. If an active or recently
 completed run already exists, the server remains authoritative about whether a
 new run starts.
 
+If the CLI trigger returns a persistent server-side error, explain that the
+rules were created but have not been run yet, then direct the user to Bitwave's
+Rules page and the **Run Rules** action. Do not imply that rule creation itself
+processed the transactions.
+
 Tier 1 contains the organization-wide type rules:
 
 1. Trade
