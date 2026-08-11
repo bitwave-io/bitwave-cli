@@ -322,7 +322,9 @@ If none exists, the response gives an LLM one concise choice: connect the
 client's external accounting system in the Bitwave web app, or create a manual
 Bitwave connection with `bitwave org accounting manual create --yes --json`.
 Bitwave provides Digital Assets automatically; the CLI prevents creating a
-duplicate. Additional client-specific accounts can be imported with `bitwave
+duplicate. Manual creation adds only the conservative General Revenue, General
+Expense, and Gas Fees categories and their matching contacts. Additional
+client-specific accounts can be imported with `bitwave
 org accounting accounts import --input accounts.json --yes --json`. See
 [`docs/ORGANIZATION_ACCOUNTING.md`](docs/ORGANIZATION_ACCOUNTING.md).
 

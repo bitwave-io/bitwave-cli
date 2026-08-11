@@ -50,13 +50,28 @@ Create the manual connection:
 bitwave org accounting manual create --yes --json
 ```
 
-This operation is retry-safe: if a manual connection already exists, the CLI
-returns `skipped_existing` with its ID.
+This operation is retry-safe. It creates the conservative starter categories
+and contacts immediately after the connection. If the manual connection or any
+starter resource already exists, the CLI reuses it and creates only what is
+missing.
 
 Creating the connection also makes Bitwave's built-in Digital Assets account
 available. A zero-length categories response therefore means "no additional
 client-specific categories yet," not "no chart of accounts." Never create a
 second Digital Assets category.
+
+Inspect the conservative starter set without writing, or reapply it later:
+
+```bash
+bitwave org accounting starter show --accounting-connection CONNECTION_ID --json
+bitwave org accounting starter apply --accounting-connection CONNECTION_ID --yes --json
+```
+
+The apply command is idempotent by enabled resource name. It creates only
+General Revenue, General Expense, and Gas Fees categories, plus General
+Customer, General Vendor, and Gas Fees contacts. These are broad fallbacks that
+make the common simple-inflow, simple-outflow, gas-only, and trade-fee workflows
+possible; they are not a substitute for the client's accounting policy.
 
 Create one additional client-specific account:
 
@@ -122,6 +137,13 @@ them. Prefer the client's supplied chart. If none is supplied, transaction
 analysis may suggest a small set of evidence-backed revenue, expense,
 liability, or equity categories and counterparties; the LLM should present the
 proposal before creating them.
+
+The CLI's returned `starter.guardrails` is authoritative context for an LLM.
+An LLM may analyze transactions and recommend additional resources, but it must
+describe those as proposals and obtain the user's approval before creating
+them. It must not reinterpret Bitwave mechanics—for example, it cannot invent
+asset accounts, attach a fee category to trades, or require primary categories
+and contacts for internal transfers.
 
 ## Important fee-policy distinction
 

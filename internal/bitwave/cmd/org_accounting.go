@@ -29,6 +29,7 @@ type accountingReadiness struct {
 	ConnectionCount           int                               `json:"connectionCount"`
 	AdditionalCategoryCount   int                               `json:"additionalCategoryCount"`
 	ContactCount              int                               `json:"contactCount"`
+	Starter                   accountingStarterPolicy           `json:"starter"`
 	Prompt                    map[string]any                    `json:"prompt,omitempty"`
 	NextCommands              []string                          `json:"nextCommands"`
 }
@@ -40,6 +41,13 @@ type chartAccountInput struct {
 	Type         string `json:"type"`
 	Code         string `json:"code"`
 	Description  string `json:"description"`
+}
+
+type accountingStarterPolicy struct {
+	AutomaticAccounts []string                        `json:"automaticAccounts"`
+	Categories        []chartAccountInput             `json:"categories"`
+	Contacts          []orgreports.CreateContactInput `json:"contacts"`
+	Guardrails        []string                        `json:"guardrails"`
 }
 
 func newOrgAccountingCmd() *cobra.Command {
@@ -55,8 +63,30 @@ automatically. External provider authorization remains in the Bitwave web app;
 manual setup and imports of additional client-specific accounts are available
 here.`,
 	}
-	cmd.AddCommand(newOrgAccountingStatusCmd(), newOrgAccountingConnectionsCmd(), newOrgAccountingManualCmd(), newOrgAccountingAccountsCmd())
+	cmd.AddCommand(newOrgAccountingStatusCmd(), newOrgAccountingConnectionsCmd(), newOrgAccountingManualCmd(), newOrgAccountingAccountsCmd(), newOrgAccountingStarterCmd())
 	return cmd
+}
+
+func starterPolicy(connectionID string) accountingStarterPolicy {
+	return accountingStarterPolicy{
+		AutomaticAccounts: []string{"Digital Assets"},
+		Categories: []chartAccountInput{
+			{ConnectionID: connectionID, ID: "bitwave-starter-general-revenue", Code: "BW-4000", Name: "General Revenue", Type: "revenue", Description: "Starter fallback; replace with the client's revenue accounts when supplied"},
+			{ConnectionID: connectionID, ID: "bitwave-starter-general-expense", Code: "BW-6000", Name: "General Expense", Type: "expense", Description: "Starter fallback; replace with the client's expense accounts when supplied"},
+			{ConnectionID: connectionID, ID: "bitwave-starter-gas-fees", Code: "BW-6100", Name: "Gas Fees", Type: "expense", Description: "Standalone network and contract-execution gas fees"},
+		},
+		Contacts: []orgreports.CreateContactInput{
+			{ConnectionID: connectionID, RemoteID: "bitwave-starter-general-customer", Name: "General Customer", Type: "Customer"},
+			{ConnectionID: connectionID, RemoteID: "bitwave-starter-general-vendor", Name: "General Vendor", Type: "Vendor"},
+			{ConnectionID: connectionID, RemoteID: "bitwave-starter-gas-fees", Name: "Gas Fees", Type: "Vendor"},
+		},
+		Guardrails: []string{
+			"Never create another Digital Assets account or token/network/protocol-specific asset accounts unless the user explicitly requests them.",
+			"Treat starter revenue and expense resources as fallbacks, not inferred accounting policy.",
+			"Trade rules use the Gas Fees contact with no fee category and autoCategorizeFee=false.",
+			"Require the user to specify or approve every additional category and contact.",
+		},
+	}
 }
 
 func newOrgAccountingStatusCmd() *cobra.Command {
@@ -118,6 +148,11 @@ func buildAccountingReadiness(connections []orgreports.AccountingConnection, cat
 		Connections: active, ConnectionCount: len(active), AdditionalCategoryCount: availableAccounts, ContactCount: availableContacts,
 		NextCommands: []string{"bitwave org accounting status --json"},
 	}
+	if len(active) == 1 {
+		readiness.Starter = starterPolicy(active[0].ID)
+	} else {
+		readiness.Starter = starterPolicy("")
+	}
 	switch {
 	case len(active) == 0:
 		readiness.Decision = "choose_accounting_setup"
@@ -136,11 +171,12 @@ func buildAccountingReadiness(connections []orgreports.AccountingConnection, cat
 		readiness.Prompt = map[string]any{
 			"question": "Bitwave already provides the Digital Assets account. Which additional client-specific categorization accounts and contacts should be added?",
 			"choices": []map[string]string{
+				{"id": "apply_starter", "label": "Create conservative starter set", "next": "bitwave org accounting starter apply --yes --json"},
 				{"id": "provide_lists", "label": "Provide accounts and contacts", "next": "Use the client's chart and counterparty list; do not invent specialized digital-asset accounts."},
 				{"id": "analyze_transactions", "label": "Analyze transactions", "next": "Suggest only minimal revenue/expense categories and contacts supported by transaction evidence."},
 			},
 		}
-		readiness.NextCommands = []string{"bitwave org accounting accounts import --input accounts.json --dry-run --json", "bitwave org accounting status --json"}
+		readiness.NextCommands = []string{"bitwave org accounting starter apply --dry-run --json", "bitwave org accounting starter apply --yes --json", "bitwave org accounting status --json"}
 	case availableContacts == 0:
 		readiness.Decision = "contacts_required"
 		readiness.InteractionRequired = true
@@ -195,14 +231,14 @@ func newOrgAccountingManualCmd() *cobra.Command {
 func newOrgAccountingManualCreateCmd() *cobra.Command {
 	var f transactionMutationFlags
 	cmd := &cobra.Command{
-		Use: "create", Short: "Create a manual accounting connection and its default Bitwave accounts",
+		Use: "create", Short: "Create a manual connection and conservative starter categories and contacts",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			operation := "create-manual-accounting-connection"
 			orgID, err := resolveReportOrg(f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
-			preview := map[string]any{"method": "POST", "path": "/orgs/" + orgID + "/connections/manual"}
+			preview := map[string]any{"method": "POST", "path": "/orgs/" + orgID + "/connections/manual", "starter": starterPolicy("")}
 			if f.dryRun {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 			}
@@ -219,7 +255,11 @@ func newOrgAccountingManualCreateCmd() *cobra.Command {
 			}
 			for _, connection := range connections {
 				if !connection.Disabled && (strings.Contains(strings.ToLower(connection.Type), "manual") || strings.EqualFold(connection.Name, "manual")) {
-					envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "skipped_existing", "connectionId": connection.ID, "nextCommand": "bitwave org accounting status --json"}}
+					starter, err := applyStarter(cmd, client, orgID, starterPolicy(connection.ID))
+					if err != nil {
+						return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("apply starter to existing manual connection: %w", err))
+					}
+					envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "skipped_existing", "connectionId": connection.ID, "starter": starter, "nextCommand": "bitwave org accounting status --json"}}
 					return outputMutation(cmd, f.jsonOutput, envelope, "manual accounting connection already exists: "+connection.ID+"\n")
 				}
 			}
@@ -227,7 +267,11 @@ func newOrgAccountingManualCreateCmd() *cobra.Command {
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("create manual accounting connection: %w", err))
 			}
-			envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"connectionId": response.ConnectionID, "nextCommand": "bitwave org accounting status --json"}}
+			starter, err := applyStarter(cmd, client, orgID, starterPolicy(response.ConnectionID))
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("manual connection %s was created but starter setup failed: %w", response.ConnectionID, err))
+			}
+			envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"connectionId": response.ConnectionID, "starter": starter, "nextCommand": "bitwave org accounting status --json"}}
 			return outputMutation(cmd, f.jsonOutput, envelope, "created manual accounting connection "+response.ConnectionID+"\n")
 		},
 	}

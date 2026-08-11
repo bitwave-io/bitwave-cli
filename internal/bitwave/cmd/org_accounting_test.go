@@ -61,6 +61,28 @@ func TestChartAccountValidationRejectsAutomaticDigitalAssets(t *testing.T) {
 	}
 }
 
+func TestStarterPolicyIsMinimalAndEncodesBitwaveGuardrails(t *testing.T) {
+	policy := starterPolicy("ac-1")
+	if len(policy.AutomaticAccounts) != 1 || policy.AutomaticAccounts[0] != "Digital Assets" {
+		t.Fatalf("automatic accounts = %#v", policy.AutomaticAccounts)
+	}
+	if len(policy.Categories) != 3 || len(policy.Contacts) != 3 {
+		t.Fatalf("starter = %#v", policy)
+	}
+	for _, category := range policy.Categories {
+		if category.ConnectionID != "ac-1" || strings.EqualFold(category.Name, "Digital Assets") {
+			t.Fatalf("category = %#v", category)
+		}
+	}
+	if policy.Contacts[2].Name != "Gas Fees" || policy.Contacts[2].Type != "Vendor" {
+		t.Fatalf("gas contact = %#v", policy.Contacts[2])
+	}
+	joined := strings.Join(policy.Guardrails, " ")
+	if !strings.Contains(joined, "no fee category") || !strings.Contains(joined, "user") {
+		t.Fatalf("guardrails = %#v", policy.Guardrails)
+	}
+}
+
 func TestOrgAccountingHelpExplainsExternalAndManualChoice(t *testing.T) {
 	cmd := newOrgAccountingCmd()
 	if !strings.Contains(cmd.Long, "external accounting system") || !strings.Contains(cmd.Long, "manual") {

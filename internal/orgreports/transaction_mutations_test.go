@@ -76,15 +76,27 @@ func TestTransactionMutationContracts(t *testing.T) {
 				t.Fatalf("method = %s", r.Method)
 			}
 			var body struct {
-				Variables struct {
-					OrgID string                `json:"orgId"`
-					Input InternalTransferInput `json:"input"`
+				OperationName string `json:"operationName"`
+				Variables     struct {
+					OrgID   string                `json:"orgId"`
+					Input   InternalTransferInput `json:"input"`
+					Contact CreateContactInput    `json:"contact"`
 				} `json:"variables"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatal(err)
 			}
-			if body.Variables.OrgID != "org-1" || body.Variables.Input.FromWalletID != "wallet-a" {
+			if body.Variables.OrgID != "org-1" {
+				t.Fatalf("body = %#v", body)
+			}
+			if body.OperationName == "CreateContact" {
+				if body.Variables.Contact.Name != "Gas Fees" || body.Variables.Contact.Type != "Vendor" {
+					t.Fatalf("contact body = %#v", body)
+				}
+				_, _ = w.Write([]byte(`{"data":{"createContact":"contact-created"}}`))
+				return
+			}
+			if body.Variables.Input.FromWalletID != "wallet-a" {
 				t.Fatalf("body = %#v", body)
 			}
 			_, _ = w.Write([]byte(`{"data":{"createInternalTransfer":{"id":"txn-transfer"}}}`))
@@ -152,6 +164,10 @@ func TestTransactionMutationContracts(t *testing.T) {
 	account, err := c.CreateChartAccount(ctx, "org-1", CreateChartAccountInput{ConnectionID: "ac-1", Source: "manual", ID: "4000", Name: "Revenue", Type: "revenue", Code: "4000"})
 	if err != nil || account.ID != "cat-created" {
 		t.Fatalf("account = %#v err=%v", account, err)
+	}
+	contactID, err := c.CreateContact(ctx, "org-1", CreateContactInput{ConnectionID: "ac-1", RemoteID: "gas-fees", Name: "Gas Fees", Type: "Vendor"})
+	if err != nil || contactID != "contact-created" {
+		t.Fatalf("contact id = %q err=%v", contactID, err)
 	}
 	search, err := c.SearchTransactions(ctx, "org-1", TransactionSearchRequest{Limit: 25, Filters: TransactionExportFilters{FromAddresses: []string{"0xabc"}}})
 	if err != nil || len(search.Transactions) != 1 || search.NextToken != "next-1" {

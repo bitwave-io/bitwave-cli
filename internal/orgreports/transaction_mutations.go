@@ -59,10 +59,18 @@ type Category struct {
 type Contact struct {
 	ID                     string `json:"id"`
 	Name                   string `json:"name"`
+	RemoteID               string `json:"remoteId,omitempty"`
 	Enabled                bool   `json:"enabled"`
 	Source                 string `json:"source,omitempty"`
 	Type                   string `json:"type,omitempty"`
 	AccountingConnectionID string `json:"accountingConnectionId,omitempty"`
+}
+
+type CreateContactInput struct {
+	ConnectionID string `json:"connectionId"`
+	RemoteID     string `json:"remoteId"`
+	Name         string `json:"name"`
+	Type         string `json:"type"`
 }
 
 type AccountingConnection struct {
@@ -324,4 +332,32 @@ func (c *Client) CreateChartAccount(ctx context.Context, orgID string, input Cre
 		return nil, err
 	}
 	return &response, nil
+}
+
+func (c *Client) CreateContact(ctx context.Context, orgID string, input CreateContactInput) (string, error) {
+	request := map[string]any{
+		"operationName": "CreateContact",
+		"query":         `mutation CreateContact($orgId: ID!, $contact: CreateContactInput!) { createContact(orgId: $orgId, contact: $contact) }`,
+		"variables":     map[string]any{"orgId": orgID, "contact": input},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesMutationURL, request, true)
+	if err != nil {
+		return "", err
+	}
+	var response struct {
+		Data struct {
+			CreateContact string `json:"createContact"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return "", fmt.Errorf("decode create contact response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(response.Data.CreateContact) == "" {
+		return "", fmt.Errorf("create contact returned an empty id")
+	}
+	return response.Data.CreateContact, nil
 }

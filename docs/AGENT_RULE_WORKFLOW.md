@@ -31,6 +31,12 @@ client-specific categories or contacts. Never create a duplicate Digital
 Assets account. When `readyForRules` is true, continue immediately without
 asking again. `rule context` also embeds this readiness object.
 
+If the user has not supplied a chart or contact list, use `bitwave org
+accounting starter show --json` as the maximum default scope. The LLM may
+recommend additions from transaction evidence, but must present them as a
+proposal and require user approval. It must not silently create anything beyond
+the CLI starter set.
+
 See `docs/ORGANIZATION_ACCOUNTING.md` for manual connection and chart import.
 
 ## Let the LLM learn the supported patterns
