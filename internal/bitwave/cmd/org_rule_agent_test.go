@@ -17,7 +17,8 @@ func TestRuleApplyDryRunWithIDsNeedsNoDiscovery(t *testing.T) {
 	command.SetArgs([]string{
 		"--org", "org-1", "--preset", "simple-inflow", "--name", "ETH revenue",
 		"--accounting-connection-id", "ac-1", "--category-id", "ac-1.cat",
-		"--contact-id", "ac-1.contact", "--asset", "ETH", "--enabled", "--dry-run",
+		"--contact-id", "ac-1.contact", "--fee-category-id", "ac-1.gas",
+		"--fee-contact-id", "ac-1.gas-vendor", "--asset", "ETH", "--enabled", "--dry-run",
 	})
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -50,8 +51,27 @@ func TestReadAgentRuleSpecsAcceptsBatch(t *testing.T) {
       {"preset":"trade","name":"trades"},
       {"preset":"ignore-blank","name":"blank"}
     ]`))
-	if err != nil || len(specs) != 2 || specs[0].Preset != "trade" {
+	if err != nil || len(specs) != 2 || specs[0].Preset != "trade" || specs[0].Priority != 1 || specs[1].Priority != 1 {
 		t.Fatalf("specs = %#v err=%v", specs, err)
+	}
+}
+
+func TestReadAgentRuleSpecsDefaultsOnlyOmittedPriority(t *testing.T) {
+	specs, err := readAgentRuleSpecs("-", agentRuleSpec{}, strings.NewReader(`[
+      {"preset":"simple-inflow"},
+      {"preset":"simple-outflow","priority":0},
+      {"preset":"trade","priority":7}
+    ]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := []int{specs[0].Priority, specs[1].Priority, specs[2].Priority}; got[0] != 1 || got[1] != 0 || got[2] != 7 {
+		t.Fatalf("priorities = %#v", got)
+	}
+
+	single, err := readAgentRuleSpecs("-", agentRuleSpec{}, strings.NewReader(`{"preset":"simple-inflow"}`))
+	if err != nil || len(single) != 1 || single[0].Priority != 1 {
+		t.Fatalf("single = %#v err=%v", single, err)
 	}
 }
 
@@ -69,7 +89,8 @@ func TestMetadataRuleApplyDryRun(t *testing.T) {
 	command.SetArgs([]string{
 		"--org", "org-1", "--preset", "metadata-categorization", "--name", "Canton fee",
 		"--accounting-connection-id", "ac-1", "--category-id", "ac-1.expense",
-		"--contact-id", "ac-1.vendor", "--metadata", "FeeType=receiver_lock_holding_fee",
+		"--contact-id", "ac-1.vendor", "--fee-category-id", "ac-1.gas",
+		"--fee-contact-id", "ac-1.gas-vendor", "--metadata", "FeeType=receiver_lock_holding_fee",
 		"--metadata-operator", "AND", "--method-id", "0xe8e33700", "--dry-run",
 	})
 	if err := command.Execute(); err != nil {
@@ -97,6 +118,35 @@ func TestMetadataRuleApplyDryRun(t *testing.T) {
 	condition := result.Plans[0].Payload.Transfer.MetadataRule
 	if condition.Operator != "AND" || len(condition.Metadata) != 1 || condition.Metadata[0].Value != "receiver_lock_holding_fee" || result.Plans[0].Payload.Transfer.MethodID != "0xe8e33700" {
 		t.Fatalf("metadata condition = %#v", condition)
+	}
+}
+
+func TestSimpleRuleRejectsImplicitPrimaryFeeAccounting(t *testing.T) {
+	command := newRuleApplyCmd()
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	command.SetArgs([]string{
+		"--org", "org-1", "--preset", "simple-outflow", "--name", "Vendor payment",
+		"--accounting-connection-id", "ac-1", "--category-id", "ac-1.expense",
+		"--contact-id", "ac-1.vendor", "--asset", "ETH", "--dry-run",
+	})
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "separate fee lines") {
+		t.Fatalf("error = %v output=%s", err, output.String())
+	}
+
+	command = newRuleApplyCmd()
+	output.Reset()
+	command.SetOut(&output)
+	command.SetErr(&output)
+	command.SetArgs([]string{
+		"--org", "org-1", "--preset", "simple-outflow", "--name", "Vendor payment",
+		"--accounting-connection-id", "ac-1", "--category-id", "ac-1.expense",
+		"--contact-id", "ac-1.vendor", "--asset", "ETH", "--no-auto-categorize-fee", "--dry-run",
+	})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("explicit fee opt-out failed: %v output=%s", err, output.String())
 	}
 }
 

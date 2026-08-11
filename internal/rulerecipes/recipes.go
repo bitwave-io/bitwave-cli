@@ -89,14 +89,14 @@ var catalog = []Recipe{
 		ActionType: "SimpleCategorization", PlanningTier: 2, DefaultScope: "transaction-specific", DefaultDirection: "Inbound", ApplySupported: true,
 		Fields:   []Field{{"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}, {"asset", false, "Single asset required for the match."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Use multiToken=false when --asset identifies a single-token rule.", "Use from/to address filters only for primary transaction addresses, not token transfer lines."},
+		Guidance: []string{"Use multiToken=false when --asset identifies a single-token rule.", "Use from/to address filters only for primary transaction addresses, not token transfer lines.", "Network fees are separate FEE lines. Supply a fee category and fee contact when autoCategorizeFee=true; never silently post fees to the inflow category."},
 	},
 	{
 		Name: "simple-outflow", Summary: "Categorize matching outbound transactions to one category and contact.",
 		ActionType: "SimpleCategorization", PlanningTier: 2, DefaultScope: "transaction-specific", DefaultDirection: "Outbound", ApplySupported: true,
 		Fields:   []Field{{"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}, {"asset", false, "Single asset required for the match."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Use multiToken=false when --asset identifies a single-token rule.", "Specify a separate fee category/contact when fees should not use the primary categorization."},
+		Guidance: []string{"Use multiToken=false when --asset identifies a single-token rule.", "Network fees are separate FEE lines. Supply a fee category and fee contact when autoCategorizeFee=true; never silently post fees to the outflow category."},
 	},
 	{
 		Name: "trade", Summary: "Categorize swap/trade transactions and their fee contact.",

@@ -163,6 +163,13 @@ Example structure for a simple categorization rule:
 }
 ```
 
+For ordinary inflows and outflows, network fees are separate `FEE` lines. A
+simple rule with `autoCategorizeFee: true` must use an explicit fee category
+and fee contact—normally Gas Fees—not the primary Revenue or Expense category.
+The agent-native planner rejects an omitted fee mapping rather than silently
+copying the primary category/contact. Set `autoCategorizeFee: false` only when
+another deliberate workflow will handle those fee lines.
+
 The example deliberately uses `direction: All`. For an inflow-only or
 outflow-only rule, copy the exact direction value used by a comparable rule
 returned from `rule list --full`; the server remains authoritative for the

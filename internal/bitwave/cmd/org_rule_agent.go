@@ -404,11 +404,22 @@ func readAgentRuleSpecs(path string, flags agentRuleSpec, stdin io.Reader) ([]ag
 	if err != nil {
 		return nil, fmt.Errorf("read rule plan: %w", err)
 	}
-	var specs []agentRuleSpec
-	if err := json.Unmarshal(data, &specs); err == nil {
+	var rawSpecs []json.RawMessage
+	if err := json.Unmarshal(data, &rawSpecs); err == nil {
+		specs := make([]agentRuleSpec, 0, len(rawSpecs))
+		for index, raw := range rawSpecs {
+			spec := agentRuleSpec{Priority: 1}
+			if err := json.Unmarshal(raw, &spec); err != nil {
+				return nil, fmt.Errorf("rule plan item %d: %w", index+1, err)
+			}
+			specs = append(specs, spec)
+		}
 		return specs, nil
 	}
-	var spec agentRuleSpec
+	// Initialize defaults before decoding so an omitted JSON field behaves like
+	// its CLI flag. An explicitly supplied zero still overwrites the default and
+	// is rejected by normal rule validation.
+	spec := agentRuleSpec{Priority: 1}
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return nil, fmt.Errorf("rule plan input must be one JSON object or an array: %w", err)
 	}
@@ -548,8 +559,6 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	if err != nil {
 		return resolvedRulePlan{}, fmt.Errorf("fee %w", err)
 	}
-	// Simple recipes use the primary category/contact for fees unless the
-	// caller deliberately selects separate fee accounting.
 	categoryID, contactID := spec.CategoryID, spec.ContactID
 	feeCategoryID, feeContactID := spec.FeeCategoryID, spec.FeeContactID
 	if category != nil {
@@ -565,11 +574,12 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 		feeContactID = feeContact.ID
 	}
 	if recipe.ActionType == "SimpleCategorization" {
-		if feeCategoryID == "" {
-			feeCategoryID = categoryID
+		autoCategorizeFee, _ := recipe.Defaults["autoCategorizeFee"].(bool)
+		if spec.AutoCategorizeFee != nil {
+			autoCategorizeFee = *spec.AutoCategorizeFee
 		}
-		if feeContactID == "" {
-			feeContactID = contactID
+		if autoCategorizeFee && (feeCategoryID == "" || feeContactID == "") {
+			return resolvedRulePlan{}, fmt.Errorf("preset %q categorizes separate fee lines and requires both fee category and fee contact; provide --fee-category-id and --fee-contact-id (or names), or use --no-auto-categorize-fee", recipe.Name)
 		}
 	}
 	if connectionID == "" {

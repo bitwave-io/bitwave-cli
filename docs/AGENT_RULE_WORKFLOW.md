@@ -318,6 +318,8 @@ bitwave --quiet rule plan \
   --from-address 0x1234 \
   --category "Sales (4000)" \
   --contact "Treasury" \
+  --fee-category "Gas Fees" \
+  --fee-contact "Gas Fees" \
   --enabled \
   --org ORG_ID
 ```
@@ -338,6 +340,8 @@ bitwave --quiet rule apply \
   --accounting-connection-id CONNECTION_ID \
   --category-id CATEGORY_ID \
   --contact-id CONTACT_ID \
+  --fee-category-id GAS_CATEGORY_ID \
+  --fee-contact-id GAS_CONTACT_ID \
   --enabled --yes \
   --org ORG_ID
 ```
@@ -351,11 +355,24 @@ the LLM enough authority to include `--yes`; the LLM does not need to ask the
 same confirmation again. Ambiguous scope, categories, contacts, or historical
 date coverage still require clarification.
 
+Network fees on ordinary inflows and outflows are separate `FEE` transaction
+lines. When a simple or metadata categorization rule uses the default
+`autoCategorizeFee=true`, the CLI requires an explicit fee category and fee
+contact—normally the client's Gas Fees selections. It never silently copies a
+Revenue or General Expense category onto the fee line. Use
+`--no-auto-categorize-fee` only when leaving fee lines for another deliberate
+treatment.
+
 ## Client-side batch
 
 `rule apply --input` accepts one spec or an array of up to 100 specs. Resources
 are discovered once and the existing create mutation is called sequentially
 with one cached org session:
+
+JSON input follows the same priority default as the CLI flags: when `priority`
+is omitted, the CLI sets it to `1`. An explicitly supplied value outside
+Bitwave's `1`–`10` range—including `0`—is rejected instead of being sent to the
+API. An LLM does not need to manufacture a priority merely to use batch input.
 
 ```json
 [
@@ -378,6 +395,8 @@ with one cached org session:
     "accountingConnectionId": "Manual",
     "categoryId": "Manual.402",
     "contactId": "Manual.validator",
+    "feeCategoryId": "Manual.gas",
+    "feeContactId": "Manual.gas-vendor",
     "metadata": [
       {"key": "RewardType", "value": "input_validator_reward_amount"}
     ],
