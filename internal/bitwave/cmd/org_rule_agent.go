@@ -165,7 +165,7 @@ func newRuleContextCmd() *cobra.Command {
 				warnings = append(warnings, "Transaction samples unavailable: "+sampleErr.Error())
 			}
 			recipe, _ := rulerecipes.Find(f.spec.Preset)
-			accounting := buildAccountingReadiness(resources.Connections, resources.Categories)
+			accounting := buildAccountingReadiness(resources.Connections, resources.Categories, resources.Contacts)
 			return writeJSON(cmd.OutOrStdout(), map[string]any{
 				"schemaVersion": "1", "organization": orgID, "recipe": recipe,
 				"accountingConnections": resources.Connections, "wallets": matchingWallets(resources.Wallets, f.spec.Wallet, f.limit),

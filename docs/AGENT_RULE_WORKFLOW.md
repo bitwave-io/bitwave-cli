@@ -23,10 +23,13 @@ Before analyzing categories or creating rules, run:
 bitwave --quiet org accounting status --json
 ```
 
-If `interactionRequired` is true, ask the single prompt returned by the CLI:
-connect the client's external accounting system in Bitwave, or create a manual
-Bitwave chart of accounts. When `readyForRules` is true, continue immediately
-without asking again. `rule context` also embeds this readiness object.
+If `interactionRequired` is true, ask the single prompt returned by the CLI.
+With no connection, ask whether to connect the client's external accounting
+system or create a manual Bitwave connection. Once connected, recognize that
+Bitwave supplies Digital Assets automatically and ask only for missing
+client-specific categories or contacts. Never create a duplicate Digital
+Assets account. When `readyForRules` is true, continue immediately without
+asking again. `rule context` also embeds this readiness object.
 
 See `docs/ORGANIZATION_ACCOUNTING.md` for manual connection and chart import.
 

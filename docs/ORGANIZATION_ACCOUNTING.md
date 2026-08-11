@@ -1,8 +1,10 @@
 # Accounting setup before categorization
 
-An organization needs an accounting connection and available chart of accounts
-before an LLM can create meaningful categorization rules. Category IDs are
-scoped to an accounting connection. Prompt for this choice either immediately
+An organization needs an accounting connection before an LLM can create
+meaningful categorization rules. Bitwave automatically supplies the Digital
+Assets account for that connection; it is not a category the user or LLM should
+create. Additional category IDs and contacts are scoped to the accounting
+connection. Prompt for client-specific accounts and contacts either immediately
 before wallet onboarding or immediately after wallet creation; do not wait
 until the user asks to create their first rule.
 
@@ -16,8 +18,11 @@ The response is deliberately compact:
 
 - `choose_accounting_setup`: ask one question—connect the client's external
   accounting system, or create a manual Bitwave chart.
-- `chart_of_accounts_required`: wait for the external chart to sync or import a
-  manual chart.
+- `client_categories_and_contacts_needed`: the connection and automatic Digital
+  Assets account are ready; ask for the client's additional accounts and
+  contacts, or offer a transaction-based minimal proposal.
+- `client_categories_needed` / `contacts_required`: collect only the missing
+  client-specific resource.
 - `ready_for_categorization_and_rules`: continue without another prompt.
 
 `rule context` includes the same `accountingReadiness` object. An LLM should not
@@ -37,7 +42,7 @@ The provider's chart should be created and maintained in that accounting
 system, then synced into Bitwave. The CLI will not write manual accounts into an
 external connection.
 
-## Manual Bitwave chart
+## Manual Bitwave accounting connection
 
 Create the manual connection:
 
@@ -48,7 +53,12 @@ bitwave org accounting manual create --yes --json
 This operation is retry-safe: if a manual connection already exists, the CLI
 returns `skipped_existing` with its ID.
 
-Create one account:
+Creating the connection also makes Bitwave's built-in Digital Assets account
+available. A zero-length categories response therefore means "no additional
+client-specific categories yet," not "no chart of accounts." Never create a
+second Digital Assets category.
+
+Create one additional client-specific account:
 
 ```bash
 bitwave org accounting accounts create \
@@ -65,14 +75,6 @@ Or import a chart in one command:
 ```json
 {
   "accounts": [
-    {
-      "connectionId": "CONNECTION_ID",
-      "id": "1000",
-      "code": "1000",
-      "name": "Digital Assets",
-      "type": "asset",
-      "description": "Cryptocurrency and token holdings"
-    },
     {
       "connectionId": "CONNECTION_ID",
       "id": "4000",
@@ -112,6 +114,14 @@ bitwave org accounting accounts list \
 
 After setup, rerun status. When `readyForRules` is true, continue to transaction
 analysis and rule planning.
+
+Do not auto-seed staking, DeFi, wrapped-token, bridge, exchange, network, or
+token-specific asset accounts. Those conflict with Bitwave's automatic Digital
+Assets treatment unless the client's accounting policy explicitly calls for
+them. Prefer the client's supplied chart. If none is supplied, transaction
+analysis may suggest a small set of evidence-backed revenue, expense,
+liability, or equity categories and counterparties; the LLM should present the
+proposal before creating them.
 
 ## Important fee-policy distinction
 

@@ -320,9 +320,10 @@ $ bitwave org accounting status --json
 
 If none exists, the response gives an LLM one concise choice: connect the
 client's external accounting system in the Bitwave web app, or create a manual
-Bitwave chart with `bitwave org accounting manual create --yes --json`.
-Chart accounts can then be imported with `bitwave org accounting accounts
-import --input accounts.json --yes --json`. See
+Bitwave connection with `bitwave org accounting manual create --yes --json`.
+Bitwave provides Digital Assets automatically; the CLI prevents creating a
+duplicate. Additional client-specific accounts can be imported with `bitwave
+org accounting accounts import --input accounts.json --yes --json`. See
 [`docs/ORGANIZATION_ACCOUNTING.md`](docs/ORGANIZATION_ACCOUNTING.md).
 
 ---

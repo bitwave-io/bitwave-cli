@@ -20,14 +20,17 @@ import (
 var chartAccountTypes = []string{"asset", "bank", "equity", "expense", "liability", "other", "revenue"}
 
 type accountingReadiness struct {
-	ReadyForRules       bool                              `json:"readyForRules"`
-	Decision            string                            `json:"decision"`
-	InteractionRequired bool                              `json:"interactionRequired"`
-	Connections         []orgreports.AccountingConnection `json:"connections"`
-	ConnectionCount     int                               `json:"connectionCount"`
-	ChartAccountCount   int                               `json:"chartAccountCount"`
-	Prompt              map[string]any                    `json:"prompt,omitempty"`
-	NextCommands        []string                          `json:"nextCommands"`
+	AccountingConnectionReady bool                              `json:"accountingConnectionReady"`
+	BuiltInDigitalAssets      bool                              `json:"builtInDigitalAssets"`
+	ReadyForRules             bool                              `json:"readyForRules"`
+	Decision                  string                            `json:"decision"`
+	InteractionRequired       bool                              `json:"interactionRequired"`
+	Connections               []orgreports.AccountingConnection `json:"connections"`
+	ConnectionCount           int                               `json:"connectionCount"`
+	AdditionalCategoryCount   int                               `json:"additionalCategoryCount"`
+	ContactCount              int                               `json:"contactCount"`
+	Prompt                    map[string]any                    `json:"prompt,omitempty"`
+	NextCommands              []string                          `json:"nextCommands"`
 }
 
 type chartAccountInput struct {
@@ -42,13 +45,15 @@ type chartAccountInput struct {
 func newOrgAccountingCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accounting",
-		Short: "Prepare an accounting connection and chart of accounts before categorization",
+		Short: "Prepare an accounting connection and client-specific accounts before categorization",
 		Long: `Inspect accounting readiness before creating categorization rules.
 
 If no connection exists, an LLM should ask one concise question: connect the
 organization's external accounting system in Bitwave, or create a manual
-Bitwave chart of accounts. External provider authorization remains in the
-Bitwave web app; manual setup and chart import are available here.`,
+Bitwave accounting connection. Bitwave supplies the Digital Assets account
+automatically. External provider authorization remains in the Bitwave web app;
+manual setup and imports of additional client-specific accounts are available
+here.`,
 	}
 	cmd.AddCommand(newOrgAccountingStatusCmd(), newOrgAccountingConnectionsCmd(), newOrgAccountingManualCmd(), newOrgAccountingAccountsCmd())
 	return cmd
@@ -72,9 +77,13 @@ func newOrgAccountingStatusCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("list chart accounts: %w", err)
 			}
+			contacts, err := client.Contacts(cmd.Context(), resolvedOrg)
+			if err != nil {
+				return fmt.Errorf("list contacts: %w", err)
+			}
 			return writeJSON(cmd.OutOrStdout(), map[string]any{
 				"schemaVersion": "1", "organization": resolvedOrg,
-				"readiness": buildAccountingReadiness(connections, categories),
+				"readiness": buildAccountingReadiness(connections, categories, contacts),
 			})
 		},
 	}
@@ -83,7 +92,7 @@ func newOrgAccountingStatusCmd() *cobra.Command {
 	return cmd
 }
 
-func buildAccountingReadiness(connections []orgreports.AccountingConnection, categories []orgreports.Category) accountingReadiness {
+func buildAccountingReadiness(connections []orgreports.AccountingConnection, categories []orgreports.Category, contacts []orgreports.Contact) accountingReadiness {
 	active := make([]orgreports.AccountingConnection, 0, len(connections))
 	activeIDs := map[string]bool{}
 	for _, connection := range connections {
@@ -98,8 +107,15 @@ func buildAccountingReadiness(connections []orgreports.AccountingConnection, cat
 			availableAccounts++
 		}
 	}
+	availableContacts := 0
+	for _, contact := range contacts {
+		if contact.Enabled && activeIDs[contact.AccountingConnectionID] {
+			availableContacts++
+		}
+	}
 	readiness := accountingReadiness{
-		Connections: active, ConnectionCount: len(active), ChartAccountCount: availableAccounts,
+		AccountingConnectionReady: len(active) > 0, BuiltInDigitalAssets: len(active) > 0,
+		Connections: active, ConnectionCount: len(active), AdditionalCategoryCount: availableAccounts, ContactCount: availableContacts,
 		NextCommands: []string{"bitwave org accounting status --json"},
 	}
 	switch {
@@ -114,16 +130,26 @@ func buildAccountingReadiness(connections []orgreports.AccountingConnection, cat
 			},
 		}
 		readiness.NextCommands = []string{"bitwave org accounting manual create --yes --json", "bitwave org accounting status --json"}
-	case availableAccounts == 0:
-		readiness.Decision = "chart_of_accounts_required"
+	case availableAccounts == 0 && availableContacts == 0:
+		readiness.Decision = "client_categories_and_contacts_needed"
 		readiness.InteractionRequired = true
 		readiness.Prompt = map[string]any{
-			"question": "The accounting connection has no available chart accounts. Should we wait for the external chart to sync, or import a manual Bitwave chart?",
+			"question": "Bitwave already provides the Digital Assets account. Which additional client-specific categorization accounts and contacts should be added?",
 			"choices": []map[string]string{
-				{"id": "wait_for_sync", "label": "Wait for sync", "next": "Rerun accounting status after the external connection syncs."},
-				{"id": "import_manual", "label": "Import manual chart", "next": "bitwave org accounting accounts import --input accounts.json --yes --json"},
+				{"id": "provide_lists", "label": "Provide accounts and contacts", "next": "Use the client's chart and counterparty list; do not invent specialized digital-asset accounts."},
+				{"id": "analyze_transactions", "label": "Analyze transactions", "next": "Suggest only minimal revenue/expense categories and contacts supported by transaction evidence."},
 			},
 		}
+		readiness.NextCommands = []string{"bitwave org accounting accounts import --input accounts.json --dry-run --json", "bitwave org accounting status --json"}
+	case availableContacts == 0:
+		readiness.Decision = "contacts_required"
+		readiness.InteractionRequired = true
+		readiness.Prompt = map[string]any{"question": "Which contacts should be created for the client's non-trade categorization and required trade fee contact?"}
+		readiness.NextCommands = []string{"Create or import client contacts, including the trade fee contact.", "bitwave org accounting status --json"}
+	case availableAccounts == 0:
+		readiness.Decision = "client_categories_needed"
+		readiness.InteractionRequired = true
+		readiness.Prompt = map[string]any{"question": "Which client-specific revenue, expense, liability, or equity categories should be added? Digital Assets already exists automatically."}
 		readiness.NextCommands = []string{"bitwave org accounting accounts import --input accounts.json --dry-run --json", "bitwave org accounting status --json"}
 	default:
 		readiness.ReadyForRules = true
@@ -426,6 +452,9 @@ func validateChartAccount(input chartAccountInput) error {
 	}
 	if strings.TrimSpace(input.Name) == "" {
 		return errors.New("name is required")
+	}
+	if strings.EqualFold(strings.TrimSpace(input.Name), "Digital Assets") {
+		return errors.New("Digital Assets is provided automatically by Bitwave; do not create a duplicate account")
 	}
 	if !stringIn(strings.ToLower(strings.TrimSpace(input.Type)), chartAccountTypes...) {
 		return fmt.Errorf("type must be one of: %s", strings.Join(chartAccountTypes, ", "))
