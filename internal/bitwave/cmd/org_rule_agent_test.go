@@ -26,7 +26,13 @@ func TestRuleApplyDryRunWithIDsNeedsNoDiscovery(t *testing.T) {
 	var result struct {
 		Status string `json:"status"`
 		Plans  []struct {
-			Payload json.RawMessage `json:"payload"`
+			Payload  json.RawMessage `json:"payload"`
+			Warnings []string        `json:"warnings"`
+			Scope    struct {
+				ActualScope string `json:"actualScope"`
+				Recommended bool   `json:"recommended"`
+				Risk        string `json:"risk"`
+			} `json:"scopeAssessment"`
 		} `json:"plans"`
 	}
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
@@ -43,6 +49,12 @@ func TestRuleApplyDryRunWithIDsNeedsNoDiscovery(t *testing.T) {
 	}
 	if err := json.Unmarshal(result.Plans[0].Payload, &payload); err != nil || payload.Transfer.MultiToken || payload.Transfer.Disabled {
 		t.Fatalf("payload = %#v err=%v", payload, err)
+	}
+	if len(result.Plans[0].Warnings) != 1 || !strings.Contains(result.Plans[0].Warnings[0], "no walletId") {
+		t.Fatalf("wallet scope warnings = %#v", result.Plans[0].Warnings)
+	}
+	if result.Plans[0].Scope.ActualScope != "organization" || result.Plans[0].Scope.Recommended || result.Plans[0].Scope.Risk != "broad-simple-flow" {
+		t.Fatalf("scope assessment = %#v", result.Plans[0].Scope)
 	}
 }
 

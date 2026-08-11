@@ -81,10 +81,19 @@ type resolvedRulePlan struct {
 	Recipe              rulerecipes.Recipe       `json:"recipe"`
 	Payload             json.RawMessage          `json:"payload"`
 	Resolution          map[string]any           `json:"resolution"`
+	ScopeAssessment     ruleScopeAssessment      `json:"scopeAssessment"`
 	Samples             any                      `json:"samples,omitempty"`
 	ConditionCandidates []ruleConditionCandidate `json:"conditionCandidates,omitempty"`
 	NextToken           string                   `json:"nextToken,omitempty"`
 	Warnings            []string                 `json:"warnings,omitempty"`
+}
+
+type ruleScopeAssessment struct {
+	DefaultScope    string `json:"defaultScope"`
+	ActualScope     string `json:"actualScope"`
+	Recommended     bool   `json:"recommended"`
+	OverrideAllowed bool   `json:"overrideAllowed"`
+	Risk            string `json:"risk,omitempty"`
 }
 
 func newRuleRecipesCmd() *cobra.Command {
@@ -655,13 +664,30 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	if recipe.DefaultScope == "organization" && (strings.TrimSpace(spec.Wallet) != "" || strings.TrimSpace(spec.WalletID) != "") {
 		warnings = append(warnings, fmt.Sprintf("%s is normally an organization-wide type rule; the requested wallet filter is retained, but a single unscoped rule is the default hierarchy.", recipe.Name))
 	}
+	if (recipe.Name == "simple-inflow" || recipe.Name == "simple-outflow") && strings.TrimSpace(walletID) == "" {
+		warnings = append(warnings, "This simple inflow/outflow rule has no walletId and can match every wallet in the organization. Flow-derived rules should retain the wallet ID emitted by `rule flows analyze`; proceed unscoped only when organization-wide treatment is deliberate.")
+	}
 	if recipe.Name == "trade" && spec.IgnoreFailPricing {
 		warnings = append(warnings, "Trade ignoreFailPricing was enabled by request. The Bitwave default is unchecked/false so failed-priced transactions, including possible DeFi activity, are not swept into the generic trade rule.")
 	}
 	if len(spec.Metadata) > 0 {
 		warnings = append(warnings, "Transaction samples are approximate because the search endpoint does not expose metadata filtering; validate against a known transaction after obtaining the rule ID.")
 	}
-	return resolvedRulePlan{Spec: spec, Recipe: recipe, Payload: payload, Resolution: resolution, Samples: samples, NextToken: nextToken, ConditionCandidates: ruleConditionCandidates(samples, 25), Warnings: warnings}, nil
+	scope := ruleScopeAssessment{
+		DefaultScope: recipe.DefaultScope, ActualScope: "organization", Recommended: true, OverrideAllowed: true,
+	}
+	if strings.TrimSpace(walletID) != "" {
+		scope.ActualScope = "wallet"
+	}
+	if recipe.DefaultScope == "organization" {
+		scope.Recommended = scope.ActualScope == "organization"
+	} else if recipe.DefaultScope == "wallet" {
+		scope.Recommended = scope.ActualScope == "wallet"
+	}
+	if (recipe.Name == "simple-inflow" || recipe.Name == "simple-outflow") && scope.ActualScope == "organization" {
+		scope.Risk = "broad-simple-flow"
+	}
+	return resolvedRulePlan{Spec: spec, Recipe: recipe, Payload: payload, Resolution: resolution, ScopeAssessment: scope, Samples: samples, NextToken: nextToken, ConditionCandidates: ruleConditionCandidates(samples, 25), Warnings: warnings}, nil
 }
 
 func resolveRuleDates(from, to, timezone string) (int64, int64, error) {

@@ -147,8 +147,10 @@ exception where the treatment genuinely differs.
 Tier 2 contains deposits/inflows and withdrawals/outflows. Direction is not
 enough to determine their accounting treatment. Inspect the transaction and
 narrow the rule using stable metadata, method ID, address, asset, wallet, or
-another supported condition. Wallet becomes relevant here only when it carries
-real information about the intended treatment.
+another supported condition. Flow-derived simple rules are wallet-scoped by
+default: keep the stable `walletId` returned by the analyzer. An unscoped simple
+inflow/outflow rule can affect every wallet and should be used only when that
+organization-wide treatment is deliberate.
 
 ### Discover Tier 2 flows without reading the full ledger
 
@@ -161,7 +163,7 @@ bitwave --quiet rule flows analyze --org ORG_ID --json
 
 In `auto` mode, the CLI first reads the same Interacting Addresses aggregate
 used by Bitwave's Transaction Summary page. It groups inflows and outflows by
-counterparty across wallets and returns the highest-count uncategorized
+wallet and counterparty and returns the highest-count uncategorized
 patterns. If that dashboard endpoint is unavailable, it falls back to a
 bounded, paginated transaction search and reports the fallback in `warnings`.
 Use `--source summary` or `--source transactions` only when a caller needs to
@@ -320,6 +322,7 @@ broader address-only or asset-only rule.
 bitwave --quiet rule plan \
   --preset simple-inflow \
   --name "ETH inflows from treasury to revenue" \
+  --wallet-id WALLET_ID \
   --asset ETH \
   --from-address 0x1234 \
   --category "Sales (4000)" \
@@ -332,6 +335,9 @@ bitwave --quiet rule plan \
 
 `plan` resolves exact names to stable IDs, returns representative transactions,
 and prints the exact GraphQL rule envelope. It never changes the organization.
+Its `scopeAssessment` is machine-readable: an unscoped simple inflow/outflow
+plan reports `recommended=false` and `risk="broad-simple-flow"`. This is an
+advisory override, not a blocker.
 
 ## Fast apply
 
@@ -342,6 +348,7 @@ flags. This skips all discovery endpoints and sends only the rule mutation:
 bitwave --quiet rule apply \
   --preset simple-inflow \
   --name "ETH inflows to Sales (4000)" \
+  --wallet-id WALLET_ID \
   --asset ETH \
   --accounting-connection-id CONNECTION_ID \
   --category-id CATEGORY_ID \
