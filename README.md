@@ -294,12 +294,11 @@ $ bitwave org wallets add --input wallets.json --yes --json
 $ bitwave org wallets list --json
 ```
 
-Wallet creation requires an explicit transaction-volume review. High-volume
-wallets require modern Babel rollup rules unless they are Solana validators,
-which Bitwave rolls up automatically, or the user records an explicit
-volume-risk override and reason. The override does not bypass invalid wallet,
-rollup, or validator configuration. If volume or rule design is unclear, speak
-with Bitwave before ingestion.
+Wallet volume preflight is advisory and does not slow or block creation.
+Unknown volume and high-volume wallets without Babel rules produce structured
+warnings that an LLM can surface briefly. Solana validator transactions are
+rolled up automatically. If volume or rule design is unclear, speak with
+Bitwave; an explicit volume-risk override and reason can be recorded for audit.
 
 New wallet data typically appears within 15 minutes but can take up to 24 hours
 depending on transaction history volume and network load. Check progress with

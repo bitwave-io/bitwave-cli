@@ -16,37 +16,46 @@ func validBabelRule() orgreports.BabelRollupRule {
 	}
 }
 
-func TestVolumeReviewRequiredBeforeWalletCreation(t *testing.T) {
+func TestMissingVolumeReviewWarnsButDoesNotBlockWalletCreation(t *testing.T) {
 	input := orgWalletInput{Name: "Wallet", NetworkID: "eth"}
-	err := validateWalletVolumeAndRollups(input)
-	if err == nil || !strings.Contains(err.Error(), "volume review is required") {
-		t.Fatalf("error = %v", err)
+	if err := validateWalletVolumeAndRollups(input); err != nil {
+		t.Fatalf("advisory preflight blocked creation: %v", err)
+	}
+	assessment := assessWalletVolume(input)
+	if assessment.Decision != "ready_with_volume_warning" || assessment.Blocking || assessment.InteractionRequired || len(assessment.Warnings) != 1 {
+		t.Fatalf("assessment = %#v", assessment)
 	}
 }
 
-func TestHighVolumeWalletRequiresBabelRules(t *testing.T) {
+func TestHighVolumeWalletWithoutBabelRulesWarnsButDoesNotBlock(t *testing.T) {
 	input := orgWalletInput{
 		Name: "High volume", NetworkID: "eth",
 		VolumeReview: walletVolumeReview{Reviewed: true, EstimatedTransactions: int64Pointer(20_000_000), Source: "explorer", Evidence: "20m transactions"},
 	}
-	err := validateWalletVolumeAndRollups(input)
-	if err == nil || !strings.Contains(err.Error(), "define Babel rollup rules") {
-		t.Fatalf("error = %v", err)
+	if err := validateWalletVolumeAndRollups(input); err != nil {
+		t.Fatalf("advisory rollup warning blocked creation: %v", err)
+	}
+	assessment := assessWalletVolume(input)
+	if assessment.Decision != "ready_with_rollup_warning" || len(assessment.Warnings) == 0 {
+		t.Fatalf("assessment = %#v", assessment)
 	}
 	input.BabelRollupRules = []orgreports.BabelRollupRule{validBabelRule()}
 	if err := validateWalletVolumeAndRollups(input); err != nil {
 		t.Fatalf("valid high-volume plan rejected: %v", err)
 	}
-	assessment := assessWalletVolume(input)
+	assessment = assessWalletVolume(input)
 	if assessment.Decision != "ready" || assessment.Risk != "high" {
 		t.Fatalf("assessment = %#v", assessment)
 	}
 }
 
-func TestUnknownVolumeRequiresAcknowledgement(t *testing.T) {
+func TestUnknownVolumeAcknowledgementChangesDecisionButIsNotRequired(t *testing.T) {
 	input := orgWalletInput{Name: "Unknown", NetworkID: "eth", VolumeReview: walletVolumeReview{Reviewed: true}}
-	if err := validateWalletVolumeAndRollups(input); err == nil {
-		t.Fatal("expected unknown-volume guard")
+	if err := validateWalletVolumeAndRollups(input); err != nil {
+		t.Fatalf("unknown volume blocked creation: %v", err)
+	}
+	if got := assessWalletVolume(input).Decision; got != "ready_with_volume_warning" {
+		t.Fatalf("decision = %q", got)
 	}
 	input.VolumeReview.AcknowledgeUnknown = true
 	if err := validateWalletVolumeAndRollups(input); err != nil {
@@ -57,7 +66,21 @@ func TestUnknownVolumeRequiresAcknowledgement(t *testing.T) {
 	}
 }
 
-func TestVolumeRiskOverrideRequiresReasonAndAllowsHighVolumeWithoutRollups(t *testing.T) {
+func TestEstimateProvenanceWarnsButDoesNotBlock(t *testing.T) {
+	input := orgWalletInput{
+		Name: "Estimated", NetworkID: "eth",
+		VolumeReview: walletVolumeReview{Reviewed: true, EstimatedTransactions: int64Pointer(42_000)},
+	}
+	if err := validateWalletVolumeAndRollups(input); err != nil {
+		t.Fatalf("missing estimate provenance blocked creation: %v", err)
+	}
+	assessment := assessWalletVolume(input)
+	if assessment.Decision != "ready" || len(assessment.Warnings) == 0 {
+		t.Fatalf("assessment = %#v", assessment)
+	}
+}
+
+func TestVolumeRiskOverrideReasonIsRecommendedButNotRequired(t *testing.T) {
 	input := orgWalletInput{
 		Name: "High volume override", NetworkID: "eth",
 		VolumeReview: walletVolumeReview{
@@ -65,11 +88,12 @@ func TestVolumeRiskOverrideRequiresReasonAndAllowsHighVolumeWithoutRollups(t *te
 			Source: "explorer", Evidence: "20m transactions", OverrideRisk: true,
 		},
 	}
-	if err := validateWalletVolumeAndRollups(input); err == nil || !strings.Contains(err.Error(), "overrideReason") {
-		t.Fatalf("expected override reason guard, got %v", err)
+	if err := validateWalletVolumeAndRollups(input); err != nil {
+		t.Fatalf("override without reason blocked creation: %v", err)
 	}
-	if got := assessWalletVolume(input).Decision; got != "needs_user_input" {
-		t.Fatalf("decision without reason = %q", got)
+	withoutReason := assessWalletVolume(input)
+	if withoutReason.Decision != "ready_with_volume_risk_override" || len(withoutReason.Warnings) < 2 {
+		t.Fatalf("assessment without reason = %#v", withoutReason)
 	}
 
 	input.VolumeReview.OverrideReason = "User requires full unrolled history for an approved migration test"

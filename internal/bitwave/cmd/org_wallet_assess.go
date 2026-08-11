@@ -27,12 +27,17 @@ type walletVolumeAssessment struct {
 	NetworkID             string   `json:"networkId"`
 	Risk                  string   `json:"risk"`
 	Decision              string   `json:"decision"`
+	Blocking              bool     `json:"blocking"`
+	InteractionRequired   bool     `json:"interactionRequired"`
 	EstimatedTransactions *int64   `json:"estimatedTransactions,omitempty"`
+	EstimateSource        string   `json:"estimateSource,omitempty"`
+	EstimateEvidence      string   `json:"estimateEvidence,omitempty"`
 	HighVolumeThreshold   int64    `json:"highVolumeThreshold"`
 	BabelRollupRuleCount  int      `json:"babelRollupRuleCount"`
 	SolanaValidator       bool     `json:"solanaValidator"`
 	RiskOverride          bool     `json:"riskOverride"`
 	OverrideReason        string   `json:"overrideReason,omitempty"`
+	Warnings              []string `json:"warnings,omitempty"`
 	Questions             []string `json:"questions,omitempty"`
 	Recommendations       []string `json:"recommendations"`
 }
@@ -47,7 +52,8 @@ func newOrgWalletsAssessCmd() *cobra.Command {
 The LLM should ask the user about expected transaction volume and, when
 possible, research the address with a block explorer or network API. Record the
 estimated transactions for the requested sync window, the source, and evidence
-in volumeReview. Unknown or high volume is never silently treated as safe.`,
+in volumeReview. This command is advisory: it reports warnings and never changes
+Bitwave. Wallet creation can continue after a warning without an override.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if strings.TrimSpace(input) == "" {
 				return errors.New("--input is required")
@@ -59,6 +65,9 @@ in volumeReview. Unknown or high volume is never silently treated as safe.`,
 			assessments := make([]walletVolumeAssessment, 0, len(inputs))
 			for i := range inputs {
 				if err := normalizeAndValidateOrgWallet(&inputs[i]); err != nil {
+					return fmt.Errorf("wallet %d: %w", i+1, err)
+				}
+				if err := validateWalletVolumeAndRollups(inputs[i]); err != nil {
 					return fmt.Errorf("wallet %d: %w", i+1, err)
 				}
 				assessments = append(assessments, assessWalletVolume(inputs[i]))
@@ -93,6 +102,7 @@ func assessWalletVolume(input orgWalletInput) walletVolumeAssessment {
 	a := walletVolumeAssessment{
 		Wallet: input.Name, NetworkID: input.NetworkID, Risk: "unknown", Decision: "needs_user_input",
 		EstimatedTransactions: input.VolumeReview.EstimatedTransactions, HighVolumeThreshold: highVolumeWalletThreshold,
+		EstimateSource: input.VolumeReview.Source, EstimateEvidence: input.VolumeReview.Evidence,
 		BabelRollupRuleCount: len(input.BabelRollupRules), SolanaValidator: input.SolanaValidator,
 		RiskOverride: input.VolumeReview.OverrideRisk, OverrideReason: input.VolumeReview.OverrideReason,
 		Recommendations: []string{},
@@ -102,21 +112,31 @@ func assessWalletVolume(input orgWalletInput) walletVolumeAssessment {
 	}
 	if input.VolumeReview.OverrideRisk && strings.TrimSpace(input.VolumeReview.OverrideReason) == "" {
 		a.Questions = append(a.Questions, "Record why the user explicitly chose to override the volume or rollup safeguard.")
-		a.Recommendations = append(a.Recommendations, "An override requires volumeReview.overrideReason and does not bypass invalid wallet or Babel configuration.")
-		return a
+		a.Warnings = append(a.Warnings, "A volume-risk override was recorded without a reason.")
+		a.Recommendations = append(a.Recommendations, "Add volumeReview.overrideReason for a useful audit trail; creation is not blocked.")
 	}
 	if input.VolumeReview.EstimatedTransactions == nil {
 		a.Questions = append(a.Questions, "Provide an estimated transaction count or explicitly acknowledge that volume is unknown.")
+		a.Warnings = append(a.Warnings, "Transaction volume is unknown; a large history may take longer to ingest.")
 		a.Recommendations = append(a.Recommendations, "Research the address using a block explorer or network API and speak with Bitwave if volume remains unknown.")
 		if input.VolumeReview.Reviewed && input.VolumeReview.OverrideRisk {
 			a.Decision = "ready_with_volume_risk_override"
 			a.Recommendations = append(a.Recommendations, "Proceeding by explicit user override without a reliable volume estimate; monitor ingestion closely.")
 		} else if input.VolumeReview.Reviewed && input.VolumeReview.AcknowledgeUnknown {
 			a.Decision = "ready_with_unknown_volume_warning"
+		} else {
+			a.Decision = "ready_with_volume_warning"
 		}
 		return a
 	}
 	count := *input.VolumeReview.EstimatedTransactions
+	if !input.VolumeReview.Reviewed {
+		a.Warnings = append(a.Warnings, "The supplied transaction estimate has not been reviewed with the user.")
+	}
+	if strings.TrimSpace(input.VolumeReview.Source) == "" || strings.TrimSpace(input.VolumeReview.Evidence) == "" {
+		a.Warnings = append(a.Warnings, "The transaction estimate has incomplete source or evidence metadata.")
+		a.Recommendations = append(a.Recommendations, "Record estimateSource and estimateEvidence when available so the user can judge confidence.")
+	}
 	switch {
 	case count >= highVolumeWalletThreshold:
 		a.Risk = "high"
@@ -138,18 +158,21 @@ func assessWalletVolume(input orgWalletInput) walletVolumeAssessment {
 		return a
 	}
 	if count >= highVolumeWalletThreshold && len(input.BabelRollupRules) == 0 {
+		a.Warnings = append(a.Warnings, fmt.Sprintf("Estimated volume is %d transactions and no Babel rollup rules were supplied.", count))
 		if input.VolumeReview.Reviewed && input.VolumeReview.OverrideRisk {
 			a.Decision = "ready_with_volume_risk_override"
 			a.Recommendations = append(a.Recommendations, "The user explicitly overrode the Babel rollup recommendation; monitor ingestion closely and speak with Bitwave if processing degrades.")
 		} else {
-			a.Decision = "needs_babel_rollups"
-			a.Questions = append(a.Questions, "Define Babel rollup rules before creating this high-volume wallet, or record an explicit user override with a reason.")
+			a.Decision = "ready_with_rollup_warning"
+			a.Questions = append(a.Questions, "Should Babel rollup rules be defined before creating this high-volume wallet?")
 			a.Recommendations = append(a.Recommendations, "Choose fingerprints, cadence, handling, and separation dimensions; speak with Bitwave if unsure.")
 		}
 		return a
 	}
 	if input.VolumeReview.Reviewed {
 		a.Decision = "ready"
+	} else {
+		a.Decision = "ready_with_volume_warning"
 	}
 	if a.Risk == "high" {
 		a.Recommendations = append(a.Recommendations, "Review the proposed Babel rules with Bitwave for very large imports.")
@@ -158,23 +181,8 @@ func assessWalletVolume(input orgWalletInput) walletVolumeAssessment {
 }
 
 func validateWalletVolumeAndRollups(input orgWalletInput) error {
-	if !input.VolumeReview.Reviewed {
-		return errors.New("volume review is required before wallet creation; run `bitwave org wallets assess --input ...` and set volumeReview.reviewed=true")
-	}
-	if input.VolumeReview.OverrideRisk && strings.TrimSpace(input.VolumeReview.OverrideReason) == "" {
-		return errors.New("volumeReview.overrideReason is required when overrideRisk=true")
-	}
-	if input.VolumeReview.EstimatedTransactions == nil && !input.VolumeReview.AcknowledgeUnknown && !input.VolumeReview.OverrideRisk {
-		return errors.New("transaction volume is unknown; provide volumeReview.estimatedTransactions or set acknowledgeUnknown=true after discussing the risk (speak with Bitwave if unsure)")
-	}
 	if input.VolumeReview.EstimatedTransactions != nil && *input.VolumeReview.EstimatedTransactions < 0 {
 		return errors.New("volumeReview.estimatedTransactions cannot be negative")
-	}
-	if input.VolumeReview.EstimatedTransactions != nil && strings.TrimSpace(input.VolumeReview.Source) == "" {
-		return errors.New("volumeReview.source is required when an estimated transaction count is provided")
-	}
-	if input.VolumeReview.EstimatedTransactions != nil && strings.TrimSpace(input.VolumeReview.Evidence) == "" {
-		return errors.New("volumeReview.evidence is required when an estimated transaction count is provided")
 	}
 	if input.SolanaValidator {
 		if input.NetworkID != "sol" {
@@ -188,9 +196,6 @@ func validateWalletVolumeAndRollups(input orgWalletInput) error {
 		if err := validateBabelRollupRule(rule); err != nil {
 			return fmt.Errorf("Babel rollup rule %d: %w", i+1, err)
 		}
-	}
-	if !input.VolumeReview.OverrideRisk && !input.SolanaValidator && input.VolumeReview.EstimatedTransactions != nil && *input.VolumeReview.EstimatedTransactions >= highVolumeWalletThreshold && len(input.BabelRollupRules) == 0 {
-		return fmt.Errorf("estimated volume is %d transactions; define Babel rollup rules before creation or speak with Bitwave", *input.VolumeReview.EstimatedTransactions)
 	}
 	return nil
 }

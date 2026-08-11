@@ -23,24 +23,36 @@ not require an immediate CLI release.
 
 A wallet with millions of historical transactions should not be ingested as if
 it were a normal treasury address. Large unrolled histories can be difficult to
-process and expensive to correct after ingestion. The CLI therefore requires a
-volume review before wallet creation.
+process and expensive to correct after ingestion. Volume preflight is therefore
+recommended, but it is advisory: missing information produces warnings and
+never blocks wallet creation.
 
 The LLM should ask the user about wallet usage and expected volume. When
 possible, it should independently estimate the address's transaction count for
 the intended sync window using a block explorer, network indexer, or API. The
-CLI does not pretend it can derive a reliable count uniformly across every
-chain; it records and evaluates the evidence supplied by the user or LLM.
+CLI does not currently pretend it can derive a reliable count uniformly across
+every chain. It records and evaluates estimates supplied by the user or LLM.
+The assessment schema includes `estimateSource` and `estimateEvidence` so a
+future on-chain or Bitwave-backed estimator can enrich the same flow without
+introducing a new interaction or breaking existing agents.
 
 ```bash
 bitwave org wallets assess --input wallets.json --json
 ```
 
-The response contains structured prompts, per-wallet readiness decisions, and
-recommendations. The current high-volume threshold of 1,000,000 transactions is
-an operational CLI heuristic, not a published Bitwave platform limit.
+The response contains structured prompts, per-wallet decisions, warnings, and
+recommendations. It does not call Bitwave, query a chain, or change anything.
+The current high-volume threshold of 1,000,000 transactions is an operational
+CLI heuristic, not a published Bitwave platform limit.
 
-Every wallet input must include:
+An LLM does not need to run `assess` as a separate conversational step. The
+`add` command performs the same assessment inline, emits warnings, and proceeds
+when invoked with `--yes`. Use `assess` only when the user wants planning detail
+before creation. `blocking: false` and `interactionRequired: false` explicitly
+tell an agent that it should not stop to debate an advisory warning with the
+user.
+
+When an estimate is available, a wallet input can include:
 
 ```json
 "volumeReview": {
@@ -51,15 +63,25 @@ Every wallet input must include:
 }
 ```
 
-If a reliable count cannot be found, the LLM must explain the uncertainty to
-the user. Creation then requires `acknowledgeUnknown: true`. The CLI always
-recommends speaking with Bitwave when volume or rollup design is uncertain.
+If a reliable count cannot be found, the LLM should give one concise warning
+and continue when the user has asked it to add the wallet. No acknowledgement
+or override ceremony is required. `acknowledgeUnknown` and `overrideRisk` are
+optional audit fields, not permission gates. The CLI recommends speaking with
+Bitwave when volume or rollup design is uncertain.
+
+### What `--dry-run` does
+
+`bitwave org wallets add --dry-run` validates wallet input and prints the exact
+wallet-creation and follow-up rollup requests that would be made. It does not
+create a wallet, call an explorer, or discover transaction volume. Any volume
+shown in a dry-run comes from `volumeReview`, whether populated by the user, an
+LLM, or a future data provider. Dry-run is optional; it is useful for inspection
+and automation tests, not a required onboarding step.
 
 ### Explicit user override
 
-The preflight is a guardrail, not a prohibition. If the user understands the
-risk and still wants to ingest unknown or high volume without the recommended
-Babel rules, record an explicit override:
+If the user wants an audit record showing they consciously accepted the risk,
+record an explicit override:
 
 ```json
 "volumeReview": {
@@ -73,12 +95,10 @@ Babel rules, record an explicit override:
 ```
 
 Single-wallet mode uses `--override-volume-risk --override-reason "..."`.
-The assessment and mutation JSON preserve the override and reason, and the
-result reports `volumeRiskOverrides`. An override accepts only the
-unknown/high-volume ingestion risk and the absence of recommended rollups. It
-does not bypass volume review, malformed Babel rules, invalid wallet inputs, or
-the Solana-validator configuration checks. The recommendation to consult
-Bitwave still applies.
+The reason is recommended, not required. Assessment and mutation JSON preserve
+the override, and the result reports `volumeRiskOverrides`. An override does
+not change execution—it records the decision. Malformed Babel rules, invalid
+wallet inputs, and incorrect Solana-validator configuration remain errors.
 
 ## Add one blockchain wallet
 
@@ -94,7 +114,7 @@ bitwave org wallets add \
   --yes
 ```
 
-To proceed after an informed decision despite the volume safeguard, add:
+To record an informed decision, optionally add:
 
 ```bash
   --override-volume-risk \
@@ -149,8 +169,9 @@ asynchronous Bitwave service concern.
 
 ## Modern Babel rollups
 
-High-volume non-validator wallets require `babelRollupRules`. These are attached
-immediately after `createWallet` through Bitwave's modern
+High-volume non-validator wallets should generally use `babelRollupRules`.
+Missing rules produce a warning rather than blocking creation. Supplied rules
+are attached immediately after `createWallet` through Bitwave's modern
 `/orgs/{orgId}/wallets/{walletId}/rollup` endpoint. They are **not** the legacy
 `accountBasedBlockchain.rollupConfig`.
 

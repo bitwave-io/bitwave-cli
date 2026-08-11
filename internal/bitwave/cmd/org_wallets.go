@@ -179,11 +179,10 @@ use --address-type hd for a BTC or DASH xpub/derivation key.
 Creating a wallet starts asynchronous ingestion. Data typically appears within
 15 minutes but can take up to 24 hours depending on transaction history volume
 and network load. Before creation, run ` + "`bitwave org wallets assess`" + ` and
-review expected volume with the user. High-volume wallets require modern Babel
-rollup rules. Solana validator transactions are rolled up automatically. If the
-volume or appropriate rollup design is unclear, speak with Bitwave first. A user
-may explicitly accept the ingestion risk with --override-volume-risk and a
-recorded --override-reason; this does not bypass invalid wallet or rollup input.`,
+review expected volume with the user. Volume review and Babel rollups are
+advisory warnings, not creation gates. Solana validator transactions are rolled
+up automatically. If uncertain, speak with Bitwave. --dry-run only previews
+requests; it does not query on-chain volume.`,
 		RunE: func(cmd *cobra.Command, _ []string) error { return runOrgWalletsAdd(cmd, f) },
 	}
 	addMutationFlags(cmd, &f.transactionMutationFlags)
@@ -198,12 +197,12 @@ recorded --override-reason; this does not bypass invalid wallet or rollup input.
 	cmd.Flags().BoolVar(&f.balanceMonitoringOnly, "balance-monitoring-only", false, "Create as a balance-monitoring-only wallet")
 	cmd.Flags().BoolVar(&f.allowDuplicate, "allow-duplicate", false, "Create even if the same network/address already exists")
 	cmd.Flags().IntVar(&f.concurrency, "concurrency", 8, "Maximum concurrent wallet creations")
-	cmd.Flags().BoolVar(&f.volumeReviewed, "volume-reviewed", false, "Confirm transaction volume was reviewed before creation")
+	cmd.Flags().BoolVar(&f.volumeReviewed, "volume-reviewed", false, "Record that transaction volume was reviewed before creation")
 	cmd.Flags().Int64Var(&f.estimatedTransactions, "estimated-transactions", -1, "Estimated transactions in the requested sync window")
 	cmd.Flags().StringVar(&f.volumeSource, "volume-source", "", "Source of the estimate, such as user, explorer, or API")
 	cmd.Flags().StringVar(&f.volumeEvidence, "volume-evidence", "", "Short evidence or URL supporting the volume estimate")
-	cmd.Flags().BoolVar(&f.acknowledgeUnknown, "acknowledge-unknown-volume", false, "Acknowledge unknown volume and the recommendation to contact Bitwave")
-	cmd.Flags().BoolVar(&f.overrideVolumeRisk, "override-volume-risk", false, "Proceed despite unknown/high volume or missing rollups (requires --override-reason)")
+	cmd.Flags().BoolVar(&f.acknowledgeUnknown, "acknowledge-unknown-volume", false, "Record acknowledgement of unknown volume")
+	cmd.Flags().BoolVar(&f.overrideVolumeRisk, "override-volume-risk", false, "Record explicit acceptance of unknown/high-volume ingestion risk")
 	cmd.Flags().StringVar(&f.overrideReason, "override-reason", "", "Reason the user chose to override the volume/rollup safeguard")
 	cmd.Flags().BoolVar(&f.solanaValidator, "solana-validator", false, "Mark this as a Solana validator wallet (rollups are automatic)")
 	cmd.Flags().StringVar(&f.babelRollupInput, "babel-rollup-input", "", "Babel rollup rules JSON file for single-wallet mode")
@@ -236,8 +235,13 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 		requests = append(requests, buildOrgWalletPayload(input))
 	}
 	previewItems := make([]map[string]any, 0, len(inputs))
+	volumeWarningCount := 0
+	assessments := make([]walletVolumeAssessment, 0, len(inputs))
 	for i, input := range inputs {
-		item := map[string]any{"wallet": requests[i], "volumeAssessment": assessWalletVolume(input)}
+		assessment := assessWalletVolume(input)
+		assessments = append(assessments, assessment)
+		volumeWarningCount += len(assessment.Warnings)
+		item := map[string]any{"wallet": requests[i], "volumeAssessment": assessment}
 		if len(input.BabelRollupRules) > 0 {
 			item["afterCreate"] = map[string]any{"method": "POST", "path": "/orgs/{orgId}/wallets/{createdWalletId}/rollup", "body": orgreports.WalletRollupRequest{Address: input.Address, Type: "rollup-by-time", Rules: input.BabelRollupRules}}
 		} else if input.SolanaValidator {
@@ -251,6 +255,11 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 	}
 	if !f.yes {
 		return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
+	}
+	for _, assessment := range assessments {
+		for _, warning := range assessment.Warnings {
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: wallet %q: %s\n", assessment.Wallet, warning)
+		}
 	}
 
 	// Resolve the token once before fan-out. Refreshing and rewriting the same
@@ -364,7 +373,7 @@ func runOrgWalletsAdd(cmd *cobra.Command, f orgWalletAddFlags) error {
 		status = "partial_failure"
 	}
 	syncGuidance := organizationWalletSyncGuidance()
-	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "rollupConfigured": rollupConfigured, "rollupFailed": rollupFailed, "volumeRiskOverrides": riskOverrides, "concurrency": workerCount, "wallets": results, "syncGuidance": syncGuidance}}
+	envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"created": created, "skipped": skipped, "failed": failed, "rollupConfigured": rollupConfigured, "rollupFailed": rollupFailed, "volumeWarnings": volumeWarningCount, "volumeRiskOverrides": riskOverrides, "volumeAssessments": assessments, "concurrency": workerCount, "wallets": results, "syncGuidance": syncGuidance}}
 	if failed > 0 || rollupFailed > 0 {
 		_ = writeJSON(cmd.OutOrStdout(), envelope)
 		return fmt.Errorf("organization wallets: %d created, %d skipped, %d failed; Babel rollups: %d configured, %d failed", created, skipped, failed, rollupConfigured, rollupFailed)
