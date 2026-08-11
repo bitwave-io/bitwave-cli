@@ -25,6 +25,11 @@ bitwave rule delete RULE_ID
 
 `rules` is accepted as an alias for `rule`.
 
+The agent workflow prefers stable metadata or `methodId` conditions found in
+representative transaction samples. `rule context` and `rule plan` preserve
+those fields and return bounded `conditionCandidates`; Canton mappings in
+`metadata-guide` are examples rather than the scope of metadata rules.
+
 ## List rules without filling LLM context
 
 The list command returns compact summaries and a maximum of 25 enabled rules by

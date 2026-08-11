@@ -34,6 +34,7 @@ type agentRuleSpec struct {
 	FeeContact                string                     `json:"feeContact,omitempty"`
 	FeeContactID              string                     `json:"feeContactId,omitempty"`
 	Asset                     string                     `json:"asset,omitempty"`
+	MethodID                  string                     `json:"methodId,omitempty"`
 	Direction                 string                     `json:"direction,omitempty"`
 	Wallet                    string                     `json:"wallet,omitempty"`
 	WalletID                  string                     `json:"walletId,omitempty"`
@@ -76,13 +77,14 @@ type ruleResources struct {
 }
 
 type resolvedRulePlan struct {
-	Spec       agentRuleSpec      `json:"spec"`
-	Recipe     rulerecipes.Recipe `json:"recipe"`
-	Payload    json.RawMessage    `json:"payload"`
-	Resolution map[string]any     `json:"resolution"`
-	Samples    any                `json:"samples,omitempty"`
-	NextToken  string             `json:"nextToken,omitempty"`
-	Warnings   []string           `json:"warnings,omitempty"`
+	Spec                agentRuleSpec            `json:"spec"`
+	Recipe              rulerecipes.Recipe       `json:"recipe"`
+	Payload             json.RawMessage          `json:"payload"`
+	Resolution          map[string]any           `json:"resolution"`
+	Samples             any                      `json:"samples,omitempty"`
+	ConditionCandidates []ruleConditionCandidate `json:"conditionCandidates,omitempty"`
+	NextToken           string                   `json:"nextToken,omitempty"`
+	Warnings            []string                 `json:"warnings,omitempty"`
 }
 
 func newRuleRecipesCmd() *cobra.Command {
@@ -99,10 +101,12 @@ func newRuleRecipesCmd() *cobra.Command {
 				}
 				recipes = recipe
 			}
+			guide := rulerecipes.MetadataGuide()
 			return writeJSON(cmd.OutOrStdout(), map[string]any{
 				"schemaVersion": rulerecipes.SchemaVersion, "source": rulerecipes.SourceURL, "sources": rulerecipes.Sources(),
 				"lastVerified": rulerecipes.LastVerified, "recipes": recipes,
-				"agentWorkflow": []string{"metadata-guide", "context", "plan", "apply"},
+				"agentWorkflow":     []string{"metadata-guide", "context", "plan", "apply"},
+				"conditionStrategy": guide.Recommendation, "candidateConditions": guide.CandidateConditions,
 			})
 		},
 	}
@@ -165,7 +169,8 @@ func newRuleContextCmd() *cobra.Command {
 				"schemaVersion": "1", "organization": orgID, "recipe": recipe,
 				"accountingConnections": resources.Connections, "wallets": matchingWallets(resources.Wallets, f.spec.Wallet, f.limit),
 				"categories": categories, "contacts": contacts, "samples": samples, "nextToken": next,
-				"filters": f.spec, "warnings": warnings,
+				"conditionCandidates": ruleConditionCandidates(samples, 25),
+				"filters":             f.spec, "warnings": warnings,
 			})
 		},
 	}
@@ -262,6 +267,7 @@ func addRuleAgentFlags(cmd *cobra.Command, f *ruleAgentFlags, includeMutation bo
 	cmd.Flags().StringVar(&f.spec.FeeContact, "fee-contact", "", "Fee contact ID or exact name")
 	cmd.Flags().StringVar(&f.spec.FeeContactID, "fee-contact-id", "", "Stable fee contact ID (skips contact discovery)")
 	cmd.Flags().StringVar(&f.spec.Asset, "asset", "", "Rule coin/ticker")
+	cmd.Flags().StringVar(&f.spec.MethodID, "method-id", "", "Smart-contract method ID observed in transaction data")
 	cmd.Flags().StringVar(&f.spec.Direction, "direction", "", "Inbound, Outbound, All, Empty, or NA")
 	cmd.Flags().StringVar(&f.spec.Wallet, "wallet", "", "Wallet ID or exact name")
 	cmd.Flags().StringVar(&f.spec.WalletID, "wallet-id", "", "Stable wallet ID (skips wallet discovery)")
@@ -598,7 +604,7 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	}
 	plan := rulerecipes.Plan{
 		Preset: spec.Preset, ID: spec.ID, Name: spec.Name, Priority: spec.Priority,
-		AccountingConnectionID: connectionID, Asset: strings.ToUpper(strings.TrimSpace(spec.Asset)), Direction: canonicalRuleDirection(spec.Direction),
+		AccountingConnectionID: connectionID, Asset: strings.ToUpper(strings.TrimSpace(spec.Asset)), MethodID: strings.TrimSpace(spec.MethodID), Direction: canonicalRuleDirection(spec.Direction),
 		WalletID: walletID, FromAddress: spec.FromAddress, ToAddress: spec.ToAddress,
 		AfterDateSEC: after, BeforeDateSEC: before, Enabled: spec.Enabled,
 		MultiToken: spec.MultiToken, AutoCategorizeFee: spec.AutoCategorizeFee, AllowMismatch: spec.AllowMismatch,
@@ -634,7 +640,7 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	if len(spec.Metadata) > 0 {
 		warnings = append(warnings, "Transaction samples are approximate because the search endpoint does not expose metadata filtering; validate against a known transaction after obtaining the rule ID.")
 	}
-	return resolvedRulePlan{Spec: spec, Recipe: recipe, Payload: payload, Resolution: resolution, Samples: samples, NextToken: nextToken, Warnings: warnings}, nil
+	return resolvedRulePlan{Spec: spec, Recipe: recipe, Payload: payload, Resolution: resolution, Samples: samples, NextToken: nextToken, ConditionCandidates: ruleConditionCandidates(samples, 25), Warnings: warnings}, nil
 }
 
 func resolveRuleDates(from, to, timezone string) (int64, int64, error) {
@@ -797,7 +803,7 @@ func connectionFromItemID(id string) string {
 	return ""
 }
 
-func ruleSamples(ctx context.Context, client *orgreports.Client, orgID string, resources *ruleResources, spec agentRuleSpec, limit int) (any, string, error) {
+func ruleSamples(ctx context.Context, client *orgreports.Client, orgID string, resources *ruleResources, spec agentRuleSpec, limit int) ([]compactTransaction, string, error) {
 	if limit == 0 {
 		return nil, "", nil
 	}
@@ -822,6 +828,7 @@ func ruleSamples(ctx context.Context, client *orgreports.Client, orgID string, r
 	filters := orgreports.TransactionExportFilters{
 		WalletIDs: walletIDs, FromAddresses: uniqueNonEmpty([]string{spec.FromAddress}),
 		ToAddresses: uniqueNonEmpty([]string{spec.ToAddress}), DateRange: optionalDateRange(spec.FromDate, spec.ToDate),
+		MethodIDs: uniqueNonEmpty([]string{spec.MethodID}),
 	}
 	if spec.Asset != "" {
 		// Rule assets are coin/ticker values while search asset filters are

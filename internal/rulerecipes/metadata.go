@@ -17,7 +17,12 @@ type MetadataPattern struct {
 
 type MetadataKnowledge struct {
 	Source                 Source            `json:"source"`
-	Network                string            `json:"network"`
+	MethodIDSource         Source            `json:"methodIdSource"`
+	Applicability          string            `json:"applicability"`
+	Recommendation         []string          `json:"recommendation"`
+	CandidateConditions    []string          `json:"candidateConditions"`
+	MethodIDGuidance       []string          `json:"methodIdGuidance"`
+	ExampleNetwork         string            `json:"exampleNetwork"`
 	Operators              []string          `json:"operators"`
 	DocumentedKeys         []string          `json:"documentedKeys"`
 	StandardChart          []AccountMapping  `json:"standardChart"`
@@ -30,7 +35,22 @@ type MetadataKnowledge struct {
 func MetadataGuide() MetadataKnowledge {
 	return MetadataKnowledge{
 		Source:         Source{Title: "Metadata Based Rule Categorization", URL: MetadataSourceURL},
-		Network:        "Canton",
+		MethodIDSource: Source{Title: "How to Use Rules", URL: RuleUsageSourceURL},
+		Applicability:  "Metadata-based and method-ID conditions are general Bitwave rule capabilities. The fixed mappings below are Canton examples, not a restriction on other clients or networks.",
+		Recommendation: []string{
+			"Inspect representative transaction data before proposing a rule.",
+			"Prefer stable, repeated, semantically meaningful metadata key/value pairs when available.",
+			"Prefer methodId for repeated smart-contract calls when it separates the intended activity.",
+			"Combine metadata or methodId with wallet, address, direction, or asset only when needed to prevent overmatching.",
+			"Preview and validate against known matching and non-matching transactions before enabling a broad rule.",
+		},
+		CandidateConditions: []string{"metadata", "methodId", "wallet", "fromAddress", "toAddress", "direction", "coin"},
+		MethodIDGuidance: []string{
+			"methodId is a first-class Bitwave rule condition and is especially useful for repeated DeFi or smart-contract interactions.",
+			"Read methodId from sampled transaction data; do not ask the user to know it in advance.",
+			"The same method can have different accounting meaning across contracts or wallets, so add a stable narrowing condition when the sample shows ambiguity.",
+		},
+		ExampleNetwork: "Canton",
 		Operators:      []string{"AND", "OR", "NAND", "NOR", "XOR"},
 		DocumentedKeys: []string{"FeeType", "RewardFeeType", "RewardType", "TransactionType"},
 		StandardChart: []AccountMapping{

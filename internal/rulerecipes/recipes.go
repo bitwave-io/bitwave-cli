@@ -10,10 +10,11 @@ import (
 )
 
 const (
-	SchemaVersion     = "1"
-	SourceURL         = "https://docs.bitwave.io/docs/set-up-categorization-rules"
-	MetadataSourceURL = "https://docs.bitwave.io/docs/metadata-based-rule-categorization"
-	LastVerified      = "2026-08-11"
+	SchemaVersion      = "1"
+	SourceURL          = "https://docs.bitwave.io/docs/set-up-categorization-rules"
+	MetadataSourceURL  = "https://docs.bitwave.io/docs/metadata-based-rule-categorization"
+	RuleUsageSourceURL = "https://docs.bitwave.io/docs/how-to-use-rules"
+	LastVerified       = "2026-08-11"
 )
 
 type Source struct {
@@ -25,6 +26,7 @@ func Sources() []Source {
 	return []Source{
 		{Title: "Set Up Categorization Rules", URL: SourceURL},
 		{Title: "Metadata Based Rule Categorization", URL: MetadataSourceURL},
+		{Title: "How to Use Rules", URL: RuleUsageSourceURL},
 	}
 }
 
@@ -91,9 +93,9 @@ var catalog = []Recipe{
 	{
 		Name: "metadata-categorization", Summary: "Categorize transactions matching one or more metadata key/value conditions.",
 		ActionType: "SimpleCategorization", DefaultDirection: "All", ApplySupported: true,
-		Fields:   []Field{{"metadata", true, "One or more metadata key/value pairs."}, {"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}},
+		Fields:   []Field{{"metadata", true, "One or more observed transaction metadata key/value pairs."}, {"methodId", false, "Observed smart-contract method ID."}, {"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}},
 		Defaults: map[string]any{"metadataOperator": "AND", "multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Metadata conditions can also be attached to any other supported preset.", "Use a vendor from/to address with TransactionType when the same metadata value maps to more than one vendor-specific treatment.", "Choose multi-token handling from the sampled transactions; metadata alone does not imply it."},
+		Guidance: []string{"Prefer stable, repeated metadata or methodId conditions whenever sampled transaction data exposes them; this applies across networks, not only Canton.", "Metadata conditions and methodId can also be attached to any other supported preset.", "Use wallet, address, direction, and asset only to disambiguate or narrow a metadata/methodId rule.", "Do not turn transaction-specific metadata such as hashes, block numbers, timestamps, IDs, or nonces into reusable rules.", "Choose multi-token handling from the sampled transactions; metadata alone does not imply it."},
 	},
 	{
 		Name: "detailed-categorization", Summary: "Categorize token-level or multi-line transaction details using extractor lines.",
@@ -133,6 +135,7 @@ type Plan struct {
 	FeeCategoryID             string
 	FeeContactID              string
 	Asset                     string
+	MethodID                  string
 	Direction                 string
 	WalletID                  string
 	FromAddress               string
@@ -234,6 +237,7 @@ func Build(plan Plan) (json.RawMessage, error) {
 	}
 	optionalString(transfer, "id", plan.ID)
 	optionalString(transfer, "coin", plan.Asset)
+	optionalString(transfer, "methodId", strings.TrimSpace(plan.MethodID))
 	optionalString(transfer, "walletId", plan.WalletID)
 	optionalString(transfer, "fromAddress", strings.TrimSpace(plan.FromAddress))
 	optionalString(transfer, "toAddress", strings.TrimSpace(plan.ToAddress))

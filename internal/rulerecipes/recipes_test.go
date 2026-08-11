@@ -65,7 +65,7 @@ func TestMetadataCategorizationBuildsMetadataCondition(t *testing.T) {
 	payload, err := Build(Plan{
 		Preset: "metadata-categorization", Name: "Canton receiver fee", Priority: 1,
 		AccountingConnectionID: "ac-1", CategoryID: "ac-1.expense", ContactID: "ac-1.canton",
-		MetadataOperator: "or", MetadataTransactionRecord: true,
+		MethodID: "0xe8e33700", MetadataOperator: "or", MetadataTransactionRecord: true,
 		Metadata: []MetadataPair{{Key: "FeeType", Value: "receiver_lock_holding_fee"}},
 	})
 	if err != nil {
@@ -73,6 +73,7 @@ func TestMetadataCategorizationBuildsMetadataCondition(t *testing.T) {
 	}
 	var decoded struct {
 		Transfer struct {
+			MethodID     string `json:"methodId"`
 			MetadataRule struct {
 				Operator      string         `json:"operator"`
 				Metadata      []MetadataPair `json:"metadata"`
@@ -84,7 +85,7 @@ func TestMetadataCategorizationBuildsMetadataCondition(t *testing.T) {
 		t.Fatal(err)
 	}
 	condition := decoded.Transfer.MetadataRule
-	if condition.Operator != "OR" || !condition.TxnRecordRule || len(condition.Metadata) != 1 || condition.Metadata[0].Key != "FeeType" {
+	if condition.Operator != "OR" || !condition.TxnRecordRule || len(condition.Metadata) != 1 || condition.Metadata[0].Key != "FeeType" || decoded.Transfer.MethodID != "0xe8e33700" {
 		t.Fatalf("metadata condition = %#v", condition)
 	}
 }

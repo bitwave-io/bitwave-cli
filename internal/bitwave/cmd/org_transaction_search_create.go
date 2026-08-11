@@ -15,7 +15,7 @@ import (
 
 type transactionSearchFlags struct {
 	orgID, from, to, nextToken, sortBy, sortDirection string
-	wallets, assets, types, states                    []string
+	wallets, assets, types, states, methodIDs         []string
 	categorization, reconciliation, ignored           []string
 	search, transactionIDs, fromAddresses             []string
 	toAddresses, addresses, operations                []string
@@ -42,6 +42,7 @@ an LLM does not need to load the organization's entire transaction history.`,
 	cmd.Flags().StringSliceVar(&f.wallets, "wallet", nil, "Wallet ID or exact name (repeatable)")
 	cmd.Flags().StringSliceVar(&f.assets, "asset", nil, "Asset ID (repeatable)")
 	cmd.Flags().StringSliceVar(&f.types, "type", nil, "Transaction type, such as send, receive, trade, or transfer")
+	cmd.Flags().StringSliceVar(&f.methodIDs, "method-id", nil, "Smart-contract method ID (repeatable)")
 	cmd.Flags().StringSliceVar(&f.operations, "operation", nil, "Transaction operation, such as Send or Receive")
 	cmd.Flags().StringSliceVar(&f.states, "state", nil, "Transaction workflow state")
 	cmd.Flags().StringSliceVar(&f.categorization, "categorization", nil, "Categorization status")
@@ -101,7 +102,7 @@ func runSearchOrgTransactions(cmd *cobra.Command, f transactionSearchFlags) erro
 		Timezone: org.Timezone, Limit: f.limit, NextToken: f.nextToken, SortBy: f.sortBy, SortDirection: f.sortDirection,
 		Filters: orgreports.TransactionExportFilters{
 			DateRange: optionalDateRange(f.from, f.to), WalletIDs: walletIDs,
-			AssetIDs: uniqueNonEmpty(f.assets), TransactionTypes: uniqueNonEmpty(f.types), Operations: uniqueNonEmpty(f.operations),
+			AssetIDs: uniqueNonEmpty(f.assets), MethodIDs: uniqueNonEmpty(f.methodIDs), TransactionTypes: uniqueNonEmpty(f.types), Operations: uniqueNonEmpty(f.operations),
 			States: uniqueNonEmpty(f.states), CategorizationStatuses: uniqueNonEmpty(f.categorization),
 			ReconciliationStatuses: uniqueNonEmpty(f.reconciliation), IgnoredStatuses: uniqueNonEmpty(f.ignored),
 			SearchTokens: uniqueNonEmpty(f.search), TransactionIDs: uniqueNonEmpty(f.transactionIDs),
@@ -129,6 +130,8 @@ type compactTransaction struct {
 	ID                   string                   `json:"id"`
 	Timestamp            string                   `json:"timestamp,omitempty"`
 	TransactionType      string                   `json:"transactionType,omitempty"`
+	MethodID             string                   `json:"methodId,omitempty"`
+	Metadata             map[string]any           `json:"metadata,omitempty"`
 	State                string                   `json:"state,omitempty"`
 	CategorizationStatus string                   `json:"categorizationStatus,omitempty"`
 	ReconciliationStatus string                   `json:"reconciliationStatus,omitempty"`
@@ -157,6 +160,8 @@ func compactTransactions(items []json.RawMessage) []compactTransaction {
 			ID                   string                   `json:"id"`
 			Timestamp            string                   `json:"timestamp"`
 			TransactionType      string                   `json:"transactionType"`
+			MethodID             string                   `json:"methodId"`
+			Metadata             map[string]any           `json:"metadata"`
 			State                string                   `json:"state"`
 			CategorizationStatus string                   `json:"categorizationStatus"`
 			ReconciliationStatus string                   `json:"reconciliationStatus"`
@@ -173,6 +178,7 @@ func compactTransactions(items []json.RawMessage) []compactTransaction {
 		}
 		result = append(result, compactTransaction{
 			ID: transaction.ID, Timestamp: transaction.Timestamp, TransactionType: transaction.TransactionType,
+			MethodID: transaction.MethodID, Metadata: transaction.Metadata,
 			State: transaction.State, CategorizationStatus: transaction.CategorizationStatus,
 			ReconciliationStatus: transaction.ReconciliationStatus, Ignored: transaction.Ignored,
 			IsEditable: transaction.IsEditable, LineCount: len(transaction.Lines), Lines: lines,

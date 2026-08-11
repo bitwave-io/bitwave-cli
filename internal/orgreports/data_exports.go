@@ -59,6 +59,7 @@ type TransactionDateRange struct {
 type TransactionExportFilters struct {
 	DateRange                   *TransactionDateRange `json:"dateRange,omitempty"`
 	WalletIDs                   []string              `json:"walletIds,omitempty"`
+	MethodIDs                   []string              `json:"methodIds,omitempty"`
 	SubsidiaryIDs               []string              `json:"subsidiaryIds,omitempty"`
 	AssetIDs                    []string              `json:"assetIds,omitempty"`
 	TransactionTypes            []string              `json:"transactionTypes,omitempty"`

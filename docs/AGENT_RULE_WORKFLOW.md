@@ -9,6 +9,8 @@ Source: https://docs.bitwave.io/docs/set-up-categorization-rules
 
 Metadata source: https://docs.bitwave.io/docs/metadata-based-rule-categorization
 
+Method ID source: https://docs.bitwave.io/docs/how-to-use-rules
+
 Recipe schema: `1`
 
 Last verified: `2026-08-11`
@@ -34,11 +36,24 @@ Supported compact apply presets:
 only. Detailed extractor lines are transaction-specific, so the CLI will not
 guess them.
 
-## Metadata-based rules
+## Prefer metadata and method ID when transaction evidence supports them
 
-The CLI embeds Bitwave's documented Canton metadata vocabulary, both Standard
-and Standard Specific chart-of-accounts mappings, and the general fee/reward
-patterns:
+Metadata rules are not Canton-only. An LLM should inspect representative
+transaction data first and prefer stable, repeated metadata key/value pairs
+wherever they express the intended activity. For repeated smart-contract or
+DeFi interactions, it should also consider `methodId`. Wallet, address,
+direction, and coin are useful narrowing conditions when metadata or a method
+ID would otherwise match unrelated activity.
+
+Compact `transaction search`, `rule context`, and `rule plan` samples retain
+both `metadata` and `methodId`. `rule context` and `rule plan` also return
+`conditionCandidates` with counts, coverage, sample transaction IDs, and an
+assessment. Transaction-specific keys such as hashes, block numbers,
+timestamps, IDs, and nonces are explicitly marked as unsuitable for reusable
+rules.
+
+The metadata guide returns this general decision policy plus Bitwave's
+documented Canton vocabulary and chart mappings as examples:
 
 ```bash
 bitwave --quiet rule metadata-guide --json
@@ -47,14 +62,17 @@ bitwave --quiet rule metadata-guide \
   --key RewardType --value input_app_reward_amount --json
 ```
 
-Documented keys include `FeeType`, `RewardFeeType`, `RewardType`, and
-`TransactionType`. Metadata conditions can be added to any supported recipe:
+The Canton examples include `FeeType`, `RewardFeeType`, `RewardType`, and
+`TransactionType`, but custom keys observed in any client's transactions can
+be used. Metadata and method ID conditions can be added to any supported
+recipe:
 
 ```bash
 bitwave --quiet rule apply \
   --preset metadata-categorization \
-  --name "Canton receiver locking fees" \
-  --metadata FeeType=receiver_lock_holding_fee \
+  --name "Protocol deposits" \
+  --metadata protocol=Aave \
+  --method-id 0xe8e33700 \
   --metadata-operator AND \
   --accounting-connection-id CONNECTION_ID \
   --category-id CATEGORY_ID \
@@ -68,10 +86,11 @@ Repeat `--metadata` to combine multiple pairs. Valid operators are `AND`, `OR`,
 ```json
 {
   "metadata": [
-    {"key": "FeeType", "value": "receiver_transfer_fee"}
+    {"key": "protocol", "value": "Aave"}
   ],
   "metadataOperator": "AND",
-  "metadataTransactionRecord": false
+  "metadataTransactionRecord": false,
+  "methodId": "0xe8e33700"
 }
 ```
 
@@ -82,7 +101,8 @@ represents revenue share or a subscription fee. The official page marks its
 metadata-based internal-transfer section as under construction, so the CLI
 does not invent those mappings.
 
-The current transaction-search endpoint has no metadata filter. Samples from
+The transaction-search endpoint accepts `methodId` but has no metadata filter.
+Samples from
 `rule context` and `rule plan` are therefore approximate when metadata is
 present, and the JSON response says so explicitly. Use Bitwave's exact rule
 validation after a rule ID is available.
@@ -98,13 +118,14 @@ bitwave --quiet rule context \
   --asset ETH \
   --from-address 0x1234 \
   --query revenue \
-  --sample-limit 5 \
+	--sample-limit 5 \
   --org ORG_ID
 ```
 
 The command loads organization resources concurrently and returns bounded
 wallet, category, contact, connection, and transaction samples in one JSON
-document.
+document. The LLM should inspect `conditionCandidates` before proposing a
+broader address-only or asset-only rule.
 
 ## Resolve a plan without writing
 

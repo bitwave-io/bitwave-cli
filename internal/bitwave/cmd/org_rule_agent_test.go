@@ -70,7 +70,7 @@ func TestMetadataRuleApplyDryRun(t *testing.T) {
 		"--org", "org-1", "--preset", "metadata-categorization", "--name", "Canton fee",
 		"--accounting-connection-id", "ac-1", "--category-id", "ac-1.expense",
 		"--contact-id", "ac-1.vendor", "--metadata", "FeeType=receiver_lock_holding_fee",
-		"--metadata-operator", "AND", "--dry-run",
+		"--metadata-operator", "AND", "--method-id", "0xe8e33700", "--dry-run",
 	})
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
@@ -79,6 +79,7 @@ func TestMetadataRuleApplyDryRun(t *testing.T) {
 		Plans []struct {
 			Payload struct {
 				Transfer struct {
+					MethodID     string `json:"methodId"`
 					MetadataRule struct {
 						Operator string `json:"operator"`
 						Metadata []struct {
@@ -94,8 +95,41 @@ func TestMetadataRuleApplyDryRun(t *testing.T) {
 		t.Fatalf("output = %s err=%v", output.String(), err)
 	}
 	condition := result.Plans[0].Payload.Transfer.MetadataRule
-	if condition.Operator != "AND" || len(condition.Metadata) != 1 || condition.Metadata[0].Value != "receiver_lock_holding_fee" {
+	if condition.Operator != "AND" || len(condition.Metadata) != 1 || condition.Metadata[0].Value != "receiver_lock_holding_fee" || result.Plans[0].Payload.Transfer.MethodID != "0xe8e33700" {
 		t.Fatalf("metadata condition = %#v", condition)
+	}
+}
+
+func TestRuleConditionCandidatesPreferRepeatedMetadataAndMethodID(t *testing.T) {
+	items := []compactTransaction{
+		{ID: "txn-1", MethodID: "0x12345678", Metadata: map[string]any{"protocol": "Aave", "txHash": "one"}},
+		{ID: "txn-2", MethodID: "0x12345678", Metadata: map[string]any{"protocol": "Aave", "txHash": "two"}},
+		{ID: "txn-3", MethodID: "0x99999999", Metadata: map[string]any{"protocol": "Other"}},
+	}
+	candidates := ruleConditionCandidates(items, 20)
+	if len(candidates) < 4 {
+		t.Fatalf("candidates = %#v", candidates)
+	}
+	if candidates[0].Assessment != "preferred-reusable-condition" || candidates[0].MatchCount != 2 {
+		t.Fatalf("first candidate = %#v", candidates[0])
+	}
+	foundVolatile := false
+	for _, candidate := range candidates {
+		if candidate.Key == "txHash" && candidate.Assessment == "avoid-transaction-specific" {
+			foundVolatile = true
+		}
+	}
+	if !foundVolatile {
+		t.Fatalf("transaction-specific metadata was not flagged: %#v", candidates)
+	}
+}
+
+func TestCompactTransactionsPreservesRuleEvidence(t *testing.T) {
+	items := compactTransactions([]json.RawMessage{json.RawMessage(`{
+		"id":"txn-1","methodId":"0xa9059cbb","metadata":{"protocol":"Example"},"lines":[]
+	}`)})
+	if len(items) != 1 || items[0].MethodID != "0xa9059cbb" || items[0].Metadata["protocol"] != "Example" {
+		t.Fatalf("items = %#v", items)
 	}
 }
 

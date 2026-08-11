@@ -20,6 +20,7 @@ type ruleSummary struct {
 	Type                   string          `json:"type,omitempty"`
 	Priority               int             `json:"priority,omitempty"`
 	Coin                   string          `json:"coin,omitempty"`
+	MethodID               string          `json:"methodId,omitempty"`
 	WalletID               string          `json:"walletId,omitempty"`
 	Direction              string          `json:"direction,omitempty"`
 	FromAddress            string          `json:"fromAddress,omitempty"`
@@ -28,6 +29,7 @@ type ruleSummary struct {
 	AfterDateSEC           json.RawMessage `json:"afterDateSEC,omitempty"`
 	BeforeDateSEC          json.RawMessage `json:"beforeDateSEC,omitempty"`
 	Action                 json.RawMessage `json:"action,omitempty"`
+	MetadataRule           json.RawMessage `json:"metadataRule,omitempty"`
 }
 
 func newOrgRulesCmd() *cobra.Command {
@@ -192,7 +194,7 @@ func newListRulesCmd() *cobra.Command {
 				if !includeDisabled && summary.Disabled {
 					continue
 				}
-				haystack := strings.ToLower(strings.Join([]string{summary.ID, summary.Name, summary.Type, summary.Coin, summary.WalletID, summary.Direction, summary.FromAddress, summary.ToAddress, summary.AccountingConnectionID, string(summary.Action)}, " "))
+				haystack := strings.ToLower(strings.Join([]string{summary.ID, summary.Name, summary.Type, summary.Coin, summary.MethodID, summary.WalletID, summary.Direction, summary.FromAddress, summary.ToAddress, summary.AccountingConnectionID, string(summary.Action), string(summary.MetadataRule)}, " "))
 				if query != "" && !strings.Contains(haystack, query) {
 					continue
 				}
@@ -218,7 +220,7 @@ func newListRulesCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
-	cmd.Flags().StringVar(&query, "query", "", "Case-insensitive rule name, ID, asset, wallet, address, direction, or action substring")
+	cmd.Flags().StringVar(&query, "query", "", "Case-insensitive rule name, ID, asset, method ID, metadata, wallet, address, direction, or action substring")
 	cmd.Flags().IntVar(&limit, "limit", 25, "Maximum rules to return (1-500)")
 	cmd.Flags().BoolVar(&includeDisabled, "include-disabled", false, "Include disabled rules")
 	cmd.Flags().BoolVar(&full, "full", false, "Return complete rule objects")
