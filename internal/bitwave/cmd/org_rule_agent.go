@@ -165,12 +165,13 @@ func newRuleContextCmd() *cobra.Command {
 				warnings = append(warnings, "Transaction samples unavailable: "+sampleErr.Error())
 			}
 			recipe, _ := rulerecipes.Find(f.spec.Preset)
+			accounting := buildAccountingReadiness(resources.Connections, resources.Categories)
 			return writeJSON(cmd.OutOrStdout(), map[string]any{
 				"schemaVersion": "1", "organization": orgID, "recipe": recipe,
 				"accountingConnections": resources.Connections, "wallets": matchingWallets(resources.Wallets, f.spec.Wallet, f.limit),
 				"categories": categories, "contacts": contacts, "samples": samples, "nextToken": next,
 				"conditionCandidates": ruleConditionCandidates(samples, 25),
-				"filters":             f.spec, "warnings": warnings,
+				"accountingReadiness": accounting, "filters": f.spec, "warnings": warnings,
 			})
 		},
 	}
@@ -778,6 +779,9 @@ func inferConnectionID(explicit string, category *orgreports.Category, contact *
 	}
 	if len(enabled) == 1 {
 		return enabled[0].ID, nil
+	}
+	if len(enabled) == 0 {
+		return "", errors.New("no active accounting connection exists; run `bitwave org accounting status --json` and ask the user to connect their accounting system or create a manual Bitwave chart")
 	}
 	return "", errors.New("accounting connection could not be inferred; pass --accounting-connection")
 }

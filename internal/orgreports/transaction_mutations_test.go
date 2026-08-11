@@ -89,11 +89,27 @@ func TestTransactionMutationContracts(t *testing.T) {
 			}
 			_, _ = w.Write([]byte(`{"data":{"createInternalTransfer":{"id":"txn-transfer"}}}`))
 		case "/org/org-1/categories":
+			if r.Method == http.MethodPost {
+				var body CreateChartAccountInput
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				if body.ConnectionID != "ac-1" || body.Type != "revenue" || body.Source != "manual" {
+					t.Fatalf("chart account body = %#v", body)
+				}
+				_, _ = w.Write([]byte(`{"id":"cat-created"}`))
+				return
+			}
 			_, _ = w.Write([]byte(`{"items":[{"id":"cat-1","name":"Revenue","enabled":true,"accountingConnectionId":"ac-1"}]}`))
 		case "/contacts/org-1":
 			_, _ = w.Write([]byte(`{"items":[{"id":"contact-1","name":"Customer","enabled":true,"accountingConnectionId":"ac-1"}]}`))
 		case "/orgs/org-1/accounting-connections":
 			_, _ = w.Write([]byte(`{"connections":[{"id":"ac-1","name":"Manual","type":"manual","disabled":false}]}`))
+		case "/orgs/org-1/connections/manual":
+			if r.Method != http.MethodPost {
+				t.Fatalf("method = %s", r.Method)
+			}
+			_, _ = w.Write([]byte(`{"connectionId":"ac-created"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -128,6 +144,14 @@ func TestTransactionMutationContracts(t *testing.T) {
 	connections, err := c.AccountingConnections(ctx, "org-1")
 	if err != nil || len(connections) != 1 || connections[0].ID != "ac-1" {
 		t.Fatalf("connections = %#v err=%v", connections, err)
+	}
+	manual, err := c.CreateManualAccountingConnection(ctx, "org-1")
+	if err != nil || manual.ConnectionID != "ac-created" {
+		t.Fatalf("manual = %#v err=%v", manual, err)
+	}
+	account, err := c.CreateChartAccount(ctx, "org-1", CreateChartAccountInput{ConnectionID: "ac-1", Source: "manual", ID: "4000", Name: "Revenue", Type: "revenue", Code: "4000"})
+	if err != nil || account.ID != "cat-created" {
+		t.Fatalf("account = %#v err=%v", account, err)
 	}
 	search, err := c.SearchTransactions(ctx, "org-1", TransactionSearchRequest{Limit: 25, Filters: TransactionExportFilters{FromAddresses: []string{"0xabc"}}})
 	if err != nil || len(search.Transactions) != 1 || search.NextToken != "next-1" {

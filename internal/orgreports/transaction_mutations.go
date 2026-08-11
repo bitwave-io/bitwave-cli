@@ -72,6 +72,27 @@ type AccountingConnection struct {
 	Disabled bool   `json:"disabled"`
 }
 
+type CreateManualAccountingConnectionResponse struct {
+	ConnectionID string `json:"connectionId"`
+}
+
+// CreateChartAccountInput is Bitwave's category creation contract. In a manual
+// accounting connection these categories are the organization chart of
+// accounts used by categorization and rules.
+type CreateChartAccountInput struct {
+	ConnectionID string `json:"connectionId"`
+	Source       string `json:"source"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	Code         string `json:"code"`
+	Description  string `json:"description"`
+}
+
+type CreateChartAccountResponse struct {
+	ID string `json:"id"`
+}
+
 type TransactionSearchRequest struct {
 	Timezone      string                   `json:"timezone,omitempty"`
 	Limit         int                      `json:"limit"`
@@ -285,4 +306,22 @@ func (c *Client) AccountingConnections(ctx context.Context, orgID string) ([]Acc
 		return nil, err
 	}
 	return response.Connections, nil
+}
+
+func (c *Client) CreateManualAccountingConnection(ctx context.Context, orgID string) (*CreateManualAccountingConnectionResponse, error) {
+	var response CreateManualAccountingConnectionResponse
+	path := "/orgs/" + url.PathEscape(orgID) + "/connections/manual"
+	if err := c.doJSON(ctx, http.MethodPost, path, nil, &response); err != nil {
+		return nil, err
+	}
+	return &response, nil
+}
+
+func (c *Client) CreateChartAccount(ctx context.Context, orgID string, input CreateChartAccountInput) (*CreateChartAccountResponse, error) {
+	var response CreateChartAccountResponse
+	path := "/org/" + url.PathEscape(orgID) + "/categories"
+	if err := c.doJSON(ctx, http.MethodPost, path, input, &response); err != nil {
+		return nil, err
+	}
+	return &response, nil
 }

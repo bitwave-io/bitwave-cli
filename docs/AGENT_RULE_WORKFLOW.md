@@ -15,6 +15,21 @@ Recipe schema: `1`
 
 Last verified: `2026-08-11`
 
+## Confirm accounting readiness first
+
+Before analyzing categories or creating rules, run:
+
+```bash
+bitwave --quiet org accounting status --json
+```
+
+If `interactionRequired` is true, ask the single prompt returned by the CLI:
+connect the client's external accounting system in Bitwave, or create a manual
+Bitwave chart of accounts. When `readyForRules` is true, continue immediately
+without asking again. `rule context` also embeds this readiness object.
+
+See `docs/ORGANIZATION_ACCOUNTING.md` for manual connection and chart import.
+
 ## Let the LLM learn the supported patterns
 
 ```bash

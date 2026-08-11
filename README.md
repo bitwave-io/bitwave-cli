@@ -308,6 +308,22 @@ Batch onboarding, subsidiary validation, duplicate detection, HD wallets, and
 network-specific fields are documented in
 [`docs/ORGANIZATION_WALLETS.md`](docs/ORGANIZATION_WALLETS.md).
 
+### Accounting setup before rules
+
+After wallet data begins syncing, check that the organization has an accounting
+connection and chart of accounts:
+
+```sh
+$ bitwave org accounting status --json
+```
+
+If none exists, the response gives an LLM one concise choice: connect the
+client's external accounting system in the Bitwave web app, or create a manual
+Bitwave chart with `bitwave org accounting manual create --yes --json`.
+Chart accounts can then be imported with `bitwave org accounting accounts
+import --input accounts.json --yes --json`. See
+[`docs/ORGANIZATION_ACCOUNTING.md`](docs/ORGANIZATION_ACCOUNTING.md).
+
 ---
 
 ## Reports

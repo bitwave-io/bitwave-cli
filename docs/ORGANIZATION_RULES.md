@@ -6,6 +6,10 @@ Bitwave rules categorize recurring transaction patterns. Unlike a one-time
 bulk categorization, an enabled rule continues to affect future organization
 data, so rule creation uses the CLI mutation safety contract.
 
+First run `bitwave org accounting status --json`. Rules require an accounting
+connection and chart account destinations; if either is missing, the returned
+prompt guides the LLM through external connection or manual Bitwave setup.
+
 ## Commands
 
 ```bash
