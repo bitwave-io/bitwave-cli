@@ -162,7 +162,11 @@ func newOrgWalletsAddCmd() *cobra.Command {
 		Short: "Add one wallet, or a JSON batch, to the active organization",
 		Long: `Add one organization wallet using flags, or supply --input with a JSON
 array (or {"wallets": [...]}) for a batch. Address type defaults to address;
-use --address-type hd for a BTC or DASH xpub/derivation key.`,
+use --address-type hd for a BTC or DASH xpub/derivation key.
+
+Creating a wallet starts asynchronous ingestion. Data typically appears within
+15 minutes but can take up to 24 hours depending on transaction history volume
+and network load.`,
 		RunE: func(cmd *cobra.Command, _ []string) error { return runOrgWalletsAdd(cmd, f) },
 	}
 	addMutationFlags(cmd, &f.transactionMutationFlags)

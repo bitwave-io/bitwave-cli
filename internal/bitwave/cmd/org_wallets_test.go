@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -68,5 +69,12 @@ func TestOrganizationWalletSyncGuidance(t *testing.T) {
 	}
 	if guidance["checkCommand"] != "bitwave transaction search --wallet WALLET_NAME --limit 1 --json" {
 		t.Fatalf("checkCommand = %v", guidance["checkCommand"])
+	}
+}
+
+func TestOrganizationWalletAddHelpIncludesSyncWindow(t *testing.T) {
+	cmd := newOrgWalletsAddCmd()
+	if !strings.Contains(cmd.Long, "15 minutes") || !strings.Contains(cmd.Long, "24 hours") {
+		t.Fatalf("add help does not explain sync timing: %q", cmd.Long)
 	}
 }
