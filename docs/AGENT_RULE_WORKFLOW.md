@@ -53,14 +53,14 @@ Supported compact apply presets:
 - `trade`
 - `internal-transfer`
 - `gas-fee-only`
+- `ignore-blank`
+- `metadata-categorization`
 
 `gas-fee-only` has a specific Bitwave representation: Standard transaction type,
 Outbound direction, and Advanced Categorize > Detailed Categorize with one line
 using the `fee` value extractor and `COIN` asset extractor. The line posts to the
 chosen gas category and contact. Do not model this preset as an internal transfer,
 and do not use the disabled Fee Only transaction-type tab.
-- `ignore-blank`
-- `metadata-categorization`
 
 ## Plan rules in hierarchy order
 
