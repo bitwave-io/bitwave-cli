@@ -400,6 +400,7 @@ choices, and apply one or many rules in a single authenticated process:
 ```sh
 bitwave rule recipes
 bitwave rule metadata-guide
+bitwave rule metadata analyze --org ORG_ID
 bitwave rule flows analyze --org ORG_ID
 bitwave transaction search --method-id 0xe8e33700 --limit 10
 bitwave rule context --preset simple-inflow --asset ETH --query revenue
@@ -419,6 +420,11 @@ dashboard, considers 100 matching uncategorized transactions enough
 recurring-pattern evidence, and preserves every counterparty address as a
 complete exact value. Including categorized activity requires the explicit
 `--include-categorized` flag.
+Use `rule metadata analyze` to scan a bounded set of uncategorized transactions
+across all networks and transaction types. It ranks repeated metadata and
+method IDs, rejects transaction-specific/high-cardinality fields, and reports
+the observed wallet, transaction-type, network, and asset scope for each
+candidate so an LLM can narrow a proposed rule without loading full history.
 Because background rule processing runs only intermittently (roughly twice per
 day), use `bitwave rule run --org ORG_ID --yes` after creation to trigger
 processing sooner.

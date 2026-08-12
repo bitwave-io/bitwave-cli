@@ -48,7 +48,7 @@ before an enabled rule is run across historical data.`,
 		newListRulesCmd(), newGetRuleCmd(), newCreateRawRuleCmd(), newValidateRuleCmd(),
 		newToggleRuleCmd("enable", false), newToggleRuleCmd("disable", true), newDeleteRuleCmd(),
 		newRunRulesCmd(), newBulkRunRulesCmd(),
-		newRuleRecipesCmd(), newRuleMetadataGuideCmd(), newRuleContextCmd(), newRulePlanCmd(), newRuleApplyCmd(), newRuleFlowsCmd(),
+		newRuleRecipesCmd(), newRuleMetadataGuideCmd(), newRuleMetadataCmd(), newRuleContextCmd(), newRulePlanCmd(), newRuleApplyCmd(), newRuleFlowsCmd(),
 	)
 	return cmd
 }

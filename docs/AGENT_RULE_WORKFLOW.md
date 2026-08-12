@@ -235,6 +235,23 @@ DeFi interactions, it should also consider `methodId`. Wallet, address,
 direction, and coin are useful narrowing conditions when metadata or a method
 ID would otherwise match unrelated activity.
 
+Start with the bounded analyzer rather than exporting full transaction
+history:
+
+```bash
+bitwave --quiet rule metadata analyze --org ORG_ID --json
+bitwave --quiet rule metadata analyze --org ORG_ID \
+  --wallet WALLET_ID --from YYYY-MM-DD --to YYYY-MM-DD --json
+```
+
+It scans every transaction type and network, while defaulting to unignored,
+uncategorized evidence. Each candidate includes count, coverage, exact
+key/value, and its observed wallets, transaction types, networks, and assets.
+Repeated stable conditions rank first. Known transaction-specific keys and
+high-cardinality fields rank as unsafe. The LLM should use those scope fields
+to decide whether wallet, address, asset, direction, or method ID is needed;
+it must not assume that metadata alone determines the accounting treatment.
+
 Compact `transaction search`, `rule context`, and `rule plan` samples retain
 both `metadata` and `methodId`. `rule context` and `rule plan` also return
 `conditionCandidates` with counts, coverage, sample transaction IDs, and an

@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -191,6 +192,47 @@ func TestRuleConditionCandidatesPreferRepeatedMetadataAndMethodID(t *testing.T) 
 	}
 	if !foundVolatile {
 		t.Fatalf("transaction-specific metadata was not flagged: %#v", candidates)
+	}
+}
+
+func TestRuleConditionCandidatesPreserveExactMetadataAndExposeScope(t *testing.T) {
+	items := []compactTransaction{
+		{ID: "txn-1", TransactionType: "receive", Metadata: map[string]any{"Event-Type": "Reward_Fee"}, Lines: []compactTransactionLine{{WalletID: "wallet-a", NetworkID: "network-a", AmountCurrencyName: "TOKEN"}}},
+		{ID: "txn-2", TransactionType: "receive", Metadata: map[string]any{"Event-Type": "Reward_Fee"}, Lines: []compactTransactionLine{{WalletID: "wallet-a", NetworkID: "network-a", AmountCurrencyName: "TOKEN"}}},
+		{ID: "txn-3", TransactionType: "send", Metadata: map[string]any{"event-type": "reward_fee"}, Lines: []compactTransactionLine{{WalletID: "wallet-b", NetworkID: "network-b", AmountCurrencyName: "OTHER"}}},
+	}
+	candidates := ruleConditionCandidates(items, 20)
+	var exact *ruleConditionCandidate
+	for index := range candidates {
+		if candidates[index].Key == "Event-Type" && candidates[index].Value == "Reward_Fee" {
+			exact = &candidates[index]
+			break
+		}
+	}
+	if exact == nil {
+		t.Fatalf("exact metadata candidate missing: %#v", candidates)
+	}
+	if exact.MatchCount != 2 || exact.DistinctValues != 1 || exact.KeyOccurrences != 2 {
+		t.Fatalf("candidate counts = %#v", exact)
+	}
+	if strings.Join(exact.WalletIDs, ",") != "wallet-a" || strings.Join(exact.TransactionTypes, ",") != "receive" || strings.Join(exact.NetworkIDs, ",") != "network-a" || strings.Join(exact.Assets, ",") != "TOKEN" {
+		t.Fatalf("candidate scope = %#v", exact)
+	}
+}
+
+func TestRuleConditionCandidatesRejectHighCardinalityMetadata(t *testing.T) {
+	items := make([]compactTransaction, 5)
+	for index := range items {
+		items[index] = compactTransaction{ID: fmt.Sprintf("txn-%d", index), Metadata: map[string]any{"eventReference": fmt.Sprintf("unique-%d", index)}}
+	}
+	candidates := ruleConditionCandidates(items, 20)
+	if len(candidates) != 5 {
+		t.Fatalf("candidates = %#v", candidates)
+	}
+	for _, candidate := range candidates {
+		if candidate.Assessment != "avoid-high-cardinality" {
+			t.Fatalf("candidate was not rejected: %#v", candidate)
+		}
 	}
 }
 

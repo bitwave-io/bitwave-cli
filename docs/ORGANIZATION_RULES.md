@@ -20,6 +20,7 @@ bitwave rule get RULE_ID
 bitwave rule create
 bitwave rule recipes
 bitwave rule metadata-guide
+bitwave rule metadata analyze
 bitwave rule context
 bitwave rule plan
 bitwave rule apply
@@ -32,8 +33,11 @@ bitwave rule delete RULE_ID
 `rules` is accepted as an alias for `rule`.
 
 The agent workflow prefers stable metadata or `methodId` conditions found in
-representative transaction samples. `rule context` and `rule plan` preserve
-those fields and return bounded `conditionCandidates`; Canton mappings in
+representative transaction samples. `rule metadata analyze` performs that
+bounded discovery across all transaction types and networks, using
+uncategorized and non-ignored transactions by default. `rule context` and
+`rule plan` preserve those fields and return bounded `conditionCandidates`;
+Canton mappings in
 `metadata-guide` are examples rather than the scope of metadata rules. The
 guide's Canton playbook combines `TransactionType` with `FeeType`,
 `RewardFeeType`, or `RewardType`, preserves exact observed metadata spelling,
