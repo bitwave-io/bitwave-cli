@@ -1,6 +1,6 @@
 # Organization Transaction Mutations
 
-Status: implemented locally for testing; not pushed to GitHub or Bitwave upstream
+Status: implemented in the fork
 
 ## Safety contract
 
@@ -186,6 +186,34 @@ Multivalue additionally requires:
 --receive-contact
 --receive-category
 ```
+
+For large LLM-driven cleanup, typed mode can discover IDs itself. The selection
+is always date-bounded, wallet-scoped, limited to uncategorized and non-ignored
+transactions, and further narrowed by `--asset` or `--ticker`:
+
+```bash
+bitwave --quiet transaction bulk-categorize \
+  --type multivalue \
+  --from 2026-01-01 --to 2026-07-31 \
+  --wallet WALLET_ID --ticker SOL-USDC \
+  --transaction-type Receive --operation DEPOSIT \
+  --accounting-connection CONNECTION_ID \
+  --fee-contact FEE_CONTACT_ID --fee-category FEE_CATEGORY_ID \
+  --receive-contact CONTACT_ID --receive-category CATEGORY_ID \
+  --send-contact CONTACT_ID --send-category CATEGORY_ID \
+  --dry-run --json
+```
+
+The CLI paginates with up to 1,000 transactions per search request, applies
+transaction type and operation checks locally and case-insensitively because
+the server filters are not reliable for those labels, then submits bounded
+batches. Its JSON result includes selection, mutation, verification, and total
+durations plus selected, succeeded, failed, verified, and remaining counts.
+
+Bitwave's multivalue bulk contract structurally requires both send and receive
+fields. Even for a locally verified inflow-only population, an agent must
+explain that the unused send fields remain present in the request and obtain
+approval. Never imply that the API has a receive-only bulk contract.
 
 Use `--overwrite` only when existing categorization should be replaced.
 

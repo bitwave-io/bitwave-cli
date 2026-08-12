@@ -8,7 +8,9 @@ data, so rule creation uses the CLI mutation safety contract.
 
 First run `bitwave org accounting status --json`. Rules require an accounting
 connection and chart account destinations; if either is missing, the returned
-prompt guides the LLM through external connection or manual Bitwave setup.
+prompt guides the LLM through external connection or verification of the
+automatically provisioned manual setup. The CLI must not create a second manual
+connection.
 
 ## Commands
 
@@ -77,6 +79,11 @@ range defaults to `2000-01-01` through the current date in that timezone.
 
 The response means the run was requested, not that every transaction has
 already finished processing.
+
+`rule run` is organization-wide and has no date-bound parameter. Do not use it
+for a request limited to a historical cutoff unless the user explicitly
+approves processing later transactions too. Bulk Run is date-bounded but may
+return HTTP 403 when parallel rule processing is not enabled for the org.
 
 If the trigger repeatedly returns a server-side error, use the **Run Rules**
 action on Bitwave's Rules page. The CLI should clearly distinguish this trigger

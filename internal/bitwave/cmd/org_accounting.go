@@ -19,19 +19,31 @@ import (
 
 var chartAccountTypes = []string{"asset", "bank", "equity", "expense", "liability", "other", "revenue"}
 
+const implicitManualConnectionID = "Manual"
+
+func withImplicitManualConnection(connections []orgreports.AccountingConnection) []orgreports.AccountingConnection {
+	for _, connection := range connections {
+		if strings.EqualFold(strings.TrimSpace(connection.ID), implicitManualConnectionID) {
+			return connections
+		}
+	}
+	result := append([]orgreports.AccountingConnection(nil), connections...)
+	return append(result, orgreports.AccountingConnection{ID: implicitManualConnectionID, Name: "Bitwave", Type: "manual"})
+}
+
 type accountingReadiness struct {
-	AccountingConnectionReady bool                              `json:"accountingConnectionReady"`
-	BuiltInDigitalAssets      bool                              `json:"builtInDigitalAssets"`
-	ReadyForRules             bool                              `json:"readyForRules"`
-	Decision                  string                            `json:"decision"`
-	InteractionRequired       bool                              `json:"interactionRequired"`
-	Connections               []orgreports.AccountingConnection `json:"connections"`
-	ConnectionCount           int                               `json:"connectionCount"`
-	AdditionalCategoryCount   int                               `json:"additionalCategoryCount"`
-	ContactCount              int                               `json:"contactCount"`
-	Starter                   accountingStarterPolicy           `json:"starter"`
-	Prompt                    map[string]any                    `json:"prompt,omitempty"`
-	NextCommands              []string                          `json:"nextCommands"`
+	AccountingConnectionReady   bool                              `json:"accountingConnectionReady"`
+	DigitalAssetsAccountPresent bool                              `json:"digitalAssetsAccountPresent"`
+	ReadyForRules               bool                              `json:"readyForRules"`
+	Decision                    string                            `json:"decision"`
+	InteractionRequired         bool                              `json:"interactionRequired"`
+	Connections                 []orgreports.AccountingConnection `json:"connections"`
+	ConnectionCount             int                               `json:"connectionCount"`
+	AdditionalCategoryCount     int                               `json:"additionalCategoryCount"`
+	ContactCount                int                               `json:"contactCount"`
+	Starter                     accountingStarterPolicy           `json:"starter"`
+	Prompt                      map[string]any                    `json:"prompt,omitempty"`
+	NextCommands                []string                          `json:"nextCommands"`
 }
 
 type chartAccountInput struct {
@@ -57,20 +69,24 @@ func newOrgAccountingCmd() *cobra.Command {
 		Short: "Prepare an accounting connection and client-specific accounts before categorization",
 		Long: `Inspect accounting readiness before creating categorization rules.
 
-If no connection exists, an LLM should ask one concise question: connect the
-organization's external accounting system in Bitwave, or create a manual
-Bitwave accounting connection. Bitwave supplies the Digital Assets account
-automatically. External provider authorization remains in the Bitwave web app;
-manual setup and imports of additional client-specific accounts are available
-here.`,
+The CLI should use Bitwave's implicit Manual connection (stable ID: Manual),
+which supplies Digital Assets and Crypto Fees, or an existing external
+accounting connection. It must not create a generated manual connection during
+normal onboarding. Other connection IDs do not inherit Manual's built-ins.
+External provider authorization
+remains in the Bitwave web app; manual setup and imports are available here.`,
 	}
 	cmd.AddCommand(newOrgAccountingStatusCmd(), newOrgAccountingConnectionsCmd(), newOrgAccountingManualCmd(), newOrgAccountingAccountsCmd(), newOrgAccountingStarterCmd())
 	return cmd
 }
 
 func starterPolicy(connectionID string) accountingStarterPolicy {
+	automaticAccounts := []string{}
+	if strings.EqualFold(strings.TrimSpace(connectionID), implicitManualConnectionID) {
+		automaticAccounts = []string{"Digital Assets", "Crypto Fees"}
+	}
 	return accountingStarterPolicy{
-		AutomaticAccounts: []string{"Digital Assets"},
+		AutomaticAccounts: automaticAccounts,
 		AdvisoryOnly:      true,
 		Categories: []chartAccountInput{
 			{ConnectionID: connectionID, ID: "bitwave-starter-general-revenue", Code: "BW-4000", Name: "General Revenue", Type: "revenue", Description: "Starter fallback; replace with the client's revenue accounts when supplied"},
@@ -83,7 +99,8 @@ func starterPolicy(connectionID string) accountingStarterPolicy {
 			{ConnectionID: connectionID, RemoteID: "bitwave-starter-gas-fees", Name: "Gas Fees", Type: "Vendor"},
 		},
 		Guardrails: []string{
-			"Warn before creating another Digital Assets account or token/network/protocol-specific asset accounts; proceed if the user requests it.",
+			"Use Digital Assets and Crypto Fees from the implicit Manual connection only; other generated or external connection IDs do not inherit them.",
+			"Warn before creating token/network/protocol-specific asset accounts; proceed if the user requests it.",
 			"Treat starter revenue and expense resources as fallbacks, not inferred accounting policy.",
 			"Trade rules use the Gas Fees contact with no fee category and autoCategorizeFee=false.",
 			"Recommend that the user specify or approve every additional category and contact; guidance never blocks execution.",
@@ -125,6 +142,7 @@ func newOrgAccountingStatusCmd() *cobra.Command {
 }
 
 func buildAccountingReadiness(connections []orgreports.AccountingConnection, categories []orgreports.Category, contacts []orgreports.Contact) accountingReadiness {
+	connections = withImplicitManualConnection(connections)
 	active := make([]orgreports.AccountingConnection, 0, len(connections))
 	activeIDs := map[string]bool{}
 	for _, connection := range connections {
@@ -134,9 +152,13 @@ func buildAccountingReadiness(connections []orgreports.AccountingConnection, cat
 		}
 	}
 	availableAccounts := 0
+	digitalAssetsPresent := activeIDs[implicitManualConnectionID]
 	for _, category := range categories {
 		if category.Enabled && activeIDs[category.AccountingConnectionID] {
 			availableAccounts++
+			if strings.EqualFold(strings.TrimSpace(category.Name), "Digital Assets") {
+				digitalAssetsPresent = true
+			}
 		}
 	}
 	availableContacts := 0
@@ -146,7 +168,7 @@ func buildAccountingReadiness(connections []orgreports.AccountingConnection, cat
 		}
 	}
 	readiness := accountingReadiness{
-		AccountingConnectionReady: len(active) > 0, BuiltInDigitalAssets: len(active) > 0,
+		AccountingConnectionReady: len(active) > 0, DigitalAssetsAccountPresent: digitalAssetsPresent,
 		Connections: active, ConnectionCount: len(active), AdditionalCategoryCount: availableAccounts, ContactCount: availableContacts,
 		NextCommands: []string{"bitwave org accounting status --json"},
 	}
@@ -157,21 +179,21 @@ func buildAccountingReadiness(connections []orgreports.AccountingConnection, cat
 	}
 	switch {
 	case len(active) == 0:
-		readiness.Decision = "choose_accounting_setup"
+		readiness.Decision = "accounting_connection_missing"
 		readiness.InteractionRequired = true
 		readiness.Prompt = map[string]any{
-			"question": "Would you like to connect your accounting system in Bitwave, or create a manual chart of accounts in Bitwave?",
+			"question": "No active accounting connection was found. The automatically provisioned manual setup may be missing; verify organization provisioning or connect the client's external accounting system.",
 			"choices": []map[string]string{
 				{"id": "connect_external", "label": "Connect accounting system", "next": "Open Accounting Connections in the Bitwave web app to authorize the provider, then rerun status."},
-				{"id": "manual_chart", "label": "Create chart in Bitwave", "next": "bitwave org accounting manual create --yes --json"},
+				{"id": "verify_manual", "label": "Verify manual setup", "next": "Run `bitwave org accounting connections list --json`; if absent, contact Bitwave rather than creating a duplicate connection."},
 			},
 		}
-		readiness.NextCommands = []string{"bitwave org accounting manual create --yes --json", "bitwave org accounting status --json"}
+		readiness.NextCommands = []string{"bitwave org accounting connections list --json", "bitwave org accounting status --json"}
 	case availableAccounts == 0 && availableContacts == 0:
 		readiness.Decision = "client_categories_and_contacts_needed"
 		readiness.InteractionRequired = true
 		readiness.Prompt = map[string]any{
-			"question": "Bitwave already provides the Digital Assets account. Which additional client-specific categorization accounts and contacts should be added?",
+			"question": "This accounting connection has no categories or contacts. Which Digital Assets mapping and client-specific categorization accounts and contacts should be added?",
 			"choices": []map[string]string{
 				{"id": "apply_starter", "label": "Create conservative starter set", "next": "bitwave org accounting starter apply --yes --json"},
 				{"id": "provide_lists", "label": "Provide accounts and contacts", "next": "Use the client's chart and counterparty list; do not invent specialized digital-asset accounts."},
@@ -187,7 +209,7 @@ func buildAccountingReadiness(connections []orgreports.AccountingConnection, cat
 	case availableAccounts == 0:
 		readiness.Decision = "client_categories_needed"
 		readiness.InteractionRequired = true
-		readiness.Prompt = map[string]any{"question": "Which client-specific revenue, expense, liability, or equity categories should be added? Digital Assets already exists automatically."}
+		readiness.Prompt = map[string]any{"question": "Which client-specific categories should be added, and does this connection need a Digital Assets account mapping?"}
 		readiness.NextCommands = []string{"bitwave org accounting accounts import --input accounts.json --dry-run --json", "bitwave org accounting status --json"}
 	default:
 		readiness.ReadyForRules = true
@@ -216,6 +238,7 @@ func newOrgAccountingConnectionsListCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("list accounting connections: %w", err)
 			}
+			connections = withImplicitManualConnection(connections)
 			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "connections": connections})
 		},
 	}
@@ -225,7 +248,7 @@ func newOrgAccountingConnectionsListCmd() *cobra.Command {
 }
 
 func newOrgAccountingManualCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "manual", Short: "Create a Bitwave-managed manual accounting connection"}
+	cmd := &cobra.Command{Use: "manual", Short: "Discover the automatically provisioned manual accounting connection"}
 	cmd.AddCommand(newOrgAccountingManualCreateCmd())
 	return cmd
 }
@@ -233,19 +256,12 @@ func newOrgAccountingManualCmd() *cobra.Command {
 func newOrgAccountingManualCreateCmd() *cobra.Command {
 	var f transactionMutationFlags
 	cmd := &cobra.Command{
-		Use: "create", Short: "Create a manual connection and conservative starter categories and contacts",
+		Use: "use", Aliases: []string{"create"}, Short: "Select the existing manual connection without creating another",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			operation := "create-manual-accounting-connection"
+			operation := "use-manual-accounting-connection"
 			orgID, err := resolveReportOrg(f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
-			}
-			preview := map[string]any{"method": "POST", "path": "/orgs/" + orgID + "/connections/manual", "starter": starterPolicy("")}
-			if f.dryRun {
-				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
-			}
-			if !f.yes {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
 			}
 			_, client, err := accountingClient(orgID)
 			if err != nil {
@@ -255,26 +271,18 @@ func newOrgAccountingManualCreateCmd() *cobra.Command {
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("check accounting connections: %w", err))
 			}
+			connections = withImplicitManualConnection(connections)
 			for _, connection := range connections {
 				if !connection.Disabled && (strings.Contains(strings.ToLower(connection.Type), "manual") || strings.EqualFold(connection.Name, "manual")) {
-					starter, err := applyStarter(cmd, client, orgID, starterPolicy(connection.ID))
-					if err != nil {
-						return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("apply starter to existing manual connection: %w", err))
+					status := "success"
+					if f.dryRun {
+						status = "preview"
 					}
-					envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "skipped_existing", "connectionId": connection.ID, "starter": starter, "nextCommand": "bitwave org accounting status --json"}}
-					return outputMutation(cmd, f.jsonOutput, envelope, "manual accounting connection already exists: "+connection.ID+"\n")
+					envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, DryRun: f.dryRun, Result: map[string]any{"status": "existing_manual_selected", "connectionId": connection.ID, "connection": connection, "nextCommand": "bitwave org accounting status --json"}}
+					return outputMutation(cmd, f.jsonOutput, envelope, "using existing manual accounting connection: "+connection.ID+"\n")
 				}
 			}
-			response, err := client.CreateManualAccountingConnection(cmd.Context(), orgID)
-			if err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("create manual accounting connection: %w", err))
-			}
-			starter, err := applyStarter(cmd, client, orgID, starterPolicy(response.ConnectionID))
-			if err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("manual connection %s was created but starter setup failed: %w", response.ConnectionID, err))
-			}
-			envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"connectionId": response.ConnectionID, "starter": starter, "nextCommand": "bitwave org accounting status --json"}}
-			return outputMutation(cmd, f.jsonOutput, envelope, "created manual accounting connection "+response.ConnectionID+"\n")
+			return mutationError(cmd, operation, f.jsonOutput, errors.New("the automatically provisioned manual accounting connection was not found; do not create a second connection via the CLI—verify organization provisioning or contact Bitwave"))
 		},
 	}
 	addMutationFlags(cmd, &f)
@@ -398,6 +406,7 @@ func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f 
 		return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("validate accounting connection: %w", err))
 	}
 	connectionTypes := map[string]string{}
+	connections = withImplicitManualConnection(connections)
 	for _, connection := range connections {
 		if !connection.Disabled {
 			connectionTypes[connection.ID] = connection.Type
@@ -509,7 +518,7 @@ func validateChartAccount(input chartAccountInput) error {
 
 func chartAccountAdvisories(input chartAccountInput) []string {
 	if strings.EqualFold(strings.TrimSpace(input.Name), "Digital Assets") {
-		return []string{"Digital Assets is already provided automatically by Bitwave; this request may create a duplicate. The CLI will still submit it."}
+		return []string{"Confirm whether this accounting connection already contains or maps a Digital Assets account; creating another may duplicate the client's chart. The CLI will still submit it."}
 	}
 	return nil
 }

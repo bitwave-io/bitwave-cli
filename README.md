@@ -318,12 +318,13 @@ that the organization has an accounting connection and chart of accounts:
 $ bitwave org accounting status --json
 ```
 
-If none exists, the response gives an LLM one concise choice: connect the
-client's external accounting system in the Bitwave web app, or create a manual
-Bitwave connection with `bitwave org accounting manual create --yes --json`.
-Bitwave provides Digital Assets automatically; the CLI warns about a duplicate
-but does not block the request. Manual creation adds only the conservative General Revenue, General
-Expense, and Gas Fees categories and their matching contacts. Additional
+The CLI discovers and reuses the normally provisioned manual connection; it
+must not create a second manual connection during onboarding. If none exists,
+verify organization provisioning or connect the client's external system.
+The connection does not itself guarantee a Digital Assets account, so the CLI
+inspects its categories and asks for the mapping when absent. The conservative
+starter adds only General Revenue, General Expense, and Gas Fees categories and
+their matching contacts. Additional
 client-specific accounts can be imported with `bitwave
 org accounting accounts import --input accounts.json --yes --json`. See
 [`docs/ORGANIZATION_ACCOUNTING.md`](docs/ORGANIZATION_ACCOUNTING.md).

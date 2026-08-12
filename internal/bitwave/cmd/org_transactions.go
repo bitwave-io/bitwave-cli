@@ -244,6 +244,16 @@ type bulkCategorizeFlags struct {
 	receiveContactID       string
 	receiveCategoryID      string
 	overwrite              bool
+	selectFrom             string
+	selectTo               string
+	selectWallets          []string
+	selectAssets           []string
+	selectTickers          []string
+	selectOperations       []string
+	selectTransactionTypes []string
+	batchSize              int
+	maxTransactions        int
+	selectionPageSize      int
 }
 
 func newBulkCategorizeTransactionsCmd() *cobra.Command {
@@ -255,7 +265,12 @@ func newBulkCategorizeTransactionsCmd() *cobra.Command {
 		Long: `Categorize multiple transactions as multivalue, trade, or transfer.
 
 Use --input for the complete Bitwave bulk JSON contract, or use the typed flags.
-The two input styles cannot be combined.`,
+The two input styles cannot be combined.
+
+Instead of making an LLM collect thousands of transaction IDs, typed mode can
+select uncategorized, non-ignored transactions with --from, --to, --wallet,
+and asset/operation filters. Filtered writes paginate and batch automatically
+and return timing and count metrics.`,
 		RunE: func(cmd *cobra.Command, _ []string) error { return runBulkCategorizeTransactions(cmd, f) },
 	}
 	addMutationFlags(cmd, &f.transactionMutationFlags)
@@ -270,16 +285,29 @@ The two input styles cannot be combined.`,
 	cmd.Flags().StringVar(&f.receiveContactID, "receive-contact", "", "Multivalue receive contact ID")
 	cmd.Flags().StringVar(&f.receiveCategoryID, "receive-category", "", "Multivalue receive category ID")
 	cmd.Flags().BoolVar(&f.overwrite, "overwrite", false, "Overwrite existing categorization")
+	cmd.Flags().StringVar(&f.selectFrom, "from", "", "Inclusive selection start date (YYYY-MM-DD; requires --to and --wallet)")
+	cmd.Flags().StringVar(&f.selectTo, "to", "", "Inclusive selection end date (YYYY-MM-DD; requires --from and --wallet)")
+	cmd.Flags().StringSliceVar(&f.selectWallets, "wallet", nil, "Select exact wallet ID or name (repeatable)")
+	cmd.Flags().StringSliceVar(&f.selectAssets, "asset", nil, "Select asset ID (repeatable)")
+	cmd.Flags().StringSliceVar(&f.selectTickers, "ticker", nil, "Select UI ticker (repeatable)")
+	cmd.Flags().StringSliceVar(&f.selectOperations, "operation", nil, "Select transaction operation, such as DEPOSIT (repeatable)")
+	cmd.Flags().StringSliceVar(&f.selectTransactionTypes, "transaction-type", nil, "Select transaction type, such as Receive (repeatable)")
+	cmd.Flags().IntVar(&f.batchSize, "batch-size", 500, "Transactions per bulk API request (1-2000)")
+	cmd.Flags().IntVar(&f.maxTransactions, "max-transactions", 10000, "Safety limit for filter-selected transactions (1-100000)")
+	cmd.Flags().IntVar(&f.selectionPageSize, "selection-page-size", 1000, "Transactions requested per search page (1-1000)")
 	return cmd
 }
 
 func runBulkCategorizeTransactions(cmd *cobra.Command, f bulkCategorizeFlags) error {
 	operation := "bulk-categorize"
-	body, err := bulkCategorizationBody(f, cmd.InOrStdin())
+	orgID, err := resolveReportOrg(f.orgID)
 	if err != nil {
 		return mutationError(cmd, operation, f.jsonOutput, err)
 	}
-	orgID, err := resolveReportOrg(f.orgID)
+	if hasBulkSelection(f) {
+		return runFilteredBulkCategorization(cmd, f, orgID)
+	}
+	body, err := bulkCategorizationBody(f, cmd.InOrStdin())
 	if err != nil {
 		return mutationError(cmd, operation, f.jsonOutput, err)
 	}
@@ -310,8 +338,227 @@ func runBulkCategorizeTransactions(cmd *cobra.Command, f bulkCategorizeFlags) er
 	return outputMutation(cmd, f.jsonOutput, envelope, fmt.Sprintf("bulk categorized %d transaction(s)\n", len(result)))
 }
 
+func hasBulkSelection(f bulkCategorizeFlags) bool {
+	return f.selectFrom != "" || f.selectTo != "" || len(f.selectWallets) > 0 || len(f.selectAssets) > 0 || len(f.selectTickers) > 0 || len(f.selectOperations) > 0 || len(f.selectTransactionTypes) > 0
+}
+
+func validateBulkSelection(f bulkCategorizeFlags) error {
+	if f.input != "" || len(uniqueNonEmpty(f.transactionIDs)) > 0 {
+		return errors.New("filter selection cannot be combined with --input or --transaction")
+	}
+	if f.selectFrom == "" || f.selectTo == "" {
+		return errors.New("filter selection requires --from and --to")
+	}
+	if err := validateExportDateRange(f.selectFrom, f.selectTo, false); err != nil {
+		return err
+	}
+	if len(uniqueNonEmpty(f.selectWallets)) == 0 {
+		return errors.New("filter selection requires at least one --wallet")
+	}
+	if len(uniqueNonEmpty(f.selectAssets)) == 0 && len(uniqueNonEmpty(f.selectTickers)) == 0 {
+		return errors.New("filter selection requires at least one --asset or --ticker")
+	}
+	if f.batchSize < 1 || f.batchSize > 2000 {
+		return errors.New("--batch-size must be between 1 and 2000")
+	}
+	if f.maxTransactions < 1 || f.maxTransactions > 100000 {
+		return errors.New("--max-transactions must be between 1 and 100000")
+	}
+	if f.selectionPageSize < 1 || f.selectionPageSize > 1000 {
+		return errors.New("--selection-page-size must be between 1 and 1000")
+	}
+	return nil
+}
+
+func runFilteredBulkCategorization(cmd *cobra.Command, f bulkCategorizeFlags, orgID string) error {
+	const operation = "bulk-categorize"
+	if err := validateBulkSelection(f); err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
+	}
+	if !f.dryRun && !f.yes {
+		return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
+	}
+	started := time.Now()
+	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+	org, err := client.Org(cmd.Context(), orgID)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("load organization settings: %w", err))
+	}
+	wallets, err := client.Wallets(cmd.Context(), orgID)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("discover wallets: %w", err))
+	}
+	walletIDs, err := resolveWalletRefs(f.selectWallets, wallets)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
+	}
+	request := orgreports.TransactionSearchRequest{
+		Timezone: org.Timezone, Limit: f.selectionPageSize, SortBy: "timestamp", SortDirection: "asc",
+		Filters: orgreports.TransactionExportFilters{
+			DateRange: optionalDateRange(f.selectFrom, f.selectTo), WalletIDs: walletIDs,
+			AssetIDs: uniqueNonEmpty(f.selectAssets), AmountCurrencyNames: uniqueNonEmpty(f.selectTickers),
+			CategorizationStatuses: []string{"Uncategorized"}, IgnoredStatuses: []string{"Unignored"},
+		},
+	}
+	ids := make([]string, 0)
+	pages := 0
+	for {
+		response, searchErr := client.SearchTransactions(cmd.Context(), orgID, request)
+		if searchErr != nil {
+			return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("select transactions page %d: %w", pages+1, searchErr))
+		}
+		pages++
+		for _, raw := range response.Transactions {
+			if !matchesLocalTransactionFilters(raw, f.selectTransactionTypes, f.selectOperations) {
+				continue
+			}
+			var item struct {
+				ID string `json:"id"`
+			}
+			if json.Unmarshal(raw, &item) == nil && strings.TrimSpace(item.ID) != "" {
+				ids = append(ids, item.ID)
+			}
+		}
+		if len(ids) > f.maxTransactions {
+			return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("selection exceeded --max-transactions=%d; narrow the filters or increase the explicit limit", f.maxTransactions))
+		}
+		if response.NextToken == "" {
+			break
+		}
+		request.NextToken = response.NextToken
+	}
+	selectionDuration := time.Since(started)
+	selection := map[string]any{
+		"from": f.selectFrom, "to": f.selectTo, "walletIds": walletIDs,
+		"assetIds": request.Filters.AssetIDs, "tickers": request.Filters.AmountCurrencyNames,
+		"operations": uniqueNonEmpty(f.selectOperations), "transactionTypes": uniqueNonEmpty(f.selectTransactionTypes),
+		"categorization": "Uncategorized", "ignored": false,
+	}
+	if len(ids) == 0 || f.dryRun {
+		status := "success"
+		if f.dryRun {
+			status = "preview"
+		}
+		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, DryRun: f.dryRun, Result: map[string]any{
+			"selection": selection, "selected": len(ids), "pages": pages, "selectionDurationMs": selectionDuration.Milliseconds(), "sampleTransactionIds": firstStrings(ids, 10),
+		}})
+	}
+	results := make([]orgreports.BulkCategorizeResult, 0, len(ids))
+	batchStarted := time.Now()
+	for offset := 0; offset < len(ids); offset += f.batchSize {
+		end := offset + f.batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		batchFlags := f
+		batchFlags.transactionIDs = ids[offset:end]
+		body, bodyErr := bulkCategorizationBody(batchFlags, cmd.InOrStdin())
+		if bodyErr != nil {
+			return mutationError(cmd, operation, f.jsonOutput, bodyErr)
+		}
+		batchResult, categorizeErr := client.BulkCategorizeTransactions(cmd.Context(), orgID, body)
+		if categorizeErr != nil {
+			return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("bulk categorize batch %d: %w", offset/f.batchSize+1, categorizeErr))
+		}
+		results = append(results, batchResult...)
+	}
+	failed := 0
+	for _, item := range results {
+		if !item.Success {
+			failed++
+		}
+	}
+	verificationStarted := time.Now()
+	request.NextToken = ""
+	remaining := 0
+	verificationPages := 0
+	for {
+		response, verifyErr := client.SearchTransactions(cmd.Context(), orgID, request)
+		if verifyErr != nil {
+			return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("verify categorization page %d: %w", verificationPages+1, verifyErr))
+		}
+		verificationPages++
+		remaining += len(response.Transactions)
+		if response.NextToken == "" {
+			break
+		}
+		request.NextToken = response.NextToken
+	}
+	verifiedCategorized := len(ids) - remaining
+	if verifiedCategorized < 0 {
+		verifiedCategorized = 0
+	}
+	accuracy := float64(0)
+	if len(ids) > 0 {
+		accuracy = float64(verifiedCategorized) / float64(len(ids))
+	}
+	envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{
+		"selection": selection, "selected": len(ids), "pages": pages, "batches": (len(ids) + f.batchSize - 1) / f.batchSize,
+		"succeeded": len(results) - failed, "failed": failed, "selectionDurationMs": selectionDuration.Milliseconds(),
+		"mutationDurationMs": verificationStarted.Sub(batchStarted).Milliseconds(), "verificationDurationMs": time.Since(verificationStarted).Milliseconds(),
+		"verificationPages": verificationPages, "verifiedCategorized": verifiedCategorized, "verifiedRemaining": remaining,
+		"verifiedAccuracy": accuracy, "totalDurationMs": time.Since(started).Milliseconds(),
+	}}
+	if failed > 0 {
+		envelope.Status = "partial_failure"
+	}
+	if err := writeJSON(cmd.OutOrStdout(), envelope); err != nil {
+		return err
+	}
+	if failed > 0 {
+		return fmt.Errorf("bulk categorization returned %d failed result(s)", failed)
+	}
+	return nil
+}
+
+func matchesLocalTransactionFilters(raw json.RawMessage, transactionTypes, operations []string) bool {
+	var item struct {
+		TransactionType string `json:"transactionType"`
+		Lines           []struct {
+			Operation string `json:"operation"`
+		} `json:"lines"`
+	}
+	if json.Unmarshal(raw, &item) != nil {
+		return false
+	}
+	if wanted := uniqueNonEmpty(transactionTypes); len(wanted) > 0 {
+		matched := false
+		for _, value := range wanted {
+			if strings.EqualFold(value, item.TransactionType) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	if wanted := uniqueNonEmpty(operations); len(wanted) > 0 {
+		matched := false
+		for _, line := range item.Lines {
+			for _, value := range wanted {
+				if strings.EqualFold(value, line.Operation) {
+					matched = true
+					break
+				}
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+func firstStrings(values []string, limit int) []string {
+	if len(values) <= limit {
+		return values
+	}
+	return values[:limit]
+}
+
 func bulkCategorizationBody(f bulkCategorizeFlags, stdin io.Reader) (json.RawMessage, error) {
-	usingFlags := f.kind != "" || len(f.transactionIDs) > 0 || f.accountingConnectionID != "" || f.feeContactID != "" || f.feeCategoryID != "" || f.sendContactID != "" || f.sendCategoryID != "" || f.receiveContactID != "" || f.receiveCategoryID != "" || f.overwrite
+	usingFlags := f.kind != "" || len(f.transactionIDs) > 0 || f.accountingConnectionID != "" || f.feeContactID != "" || f.feeCategoryID != "" || f.sendContactID != "" || f.sendCategoryID != "" || f.receiveContactID != "" || f.receiveCategoryID != "" || f.overwrite || hasBulkSelection(f)
 	if f.input != "" {
 		if usingFlags {
 			return nil, errors.New("--input cannot be combined with typed categorization flags")
@@ -502,6 +749,8 @@ func newCategorizationOptionsCmd() *cobra.Command {
 			warnings := []string{}
 			if connectionErr != nil {
 				warnings = append(warnings, "Accounting connections unavailable: "+connectionErr.Error())
+			} else {
+				connections = withImplicitManualConnection(connections)
 			}
 			categoryTotal, contactTotal := len(categories), len(contacts)
 			if query == "" && accountingConnectionID == "" {

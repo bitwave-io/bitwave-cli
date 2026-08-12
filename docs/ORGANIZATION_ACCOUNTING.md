@@ -1,13 +1,21 @@
 # Accounting setup before categorization
 
 An organization needs an accounting connection before an LLM can create
-meaningful categorization rules. Bitwave automatically supplies the Digital
-Assets account for that connection; it is not a category the user or LLM should
-create by default. The CLI warns but does not prevent an explicit request to
-create another one. Additional category IDs and contacts are scoped to the accounting
+meaningful categorization rules. Bitwave's implicit `Manual` connection is
+always addressed by the stable ID `Manual` and supplies `manual.assets`
+(Digital Assets) and `manual.fee` (Crypto Fees). The connection-list endpoint
+may omit it, so the CLI materializes it explicitly. A generated manual or
+external connection does not inherit those defaults. Additional category IDs
+and contacts are scoped to the accounting
 connection. Prompt for client-specific accounts and contacts either immediately
 before wallet onboarding or immediately after wallet creation; do not wait
 until the user asks to create their first rule.
+
+An accounting connection ID is a namespace and must not be described as an
+account. For example, `RolAwp0ATwlSLTw1jKeZ` identifies one connection, while
+an ID such as `RolAwp0ATwlSLTw1jKeZ.1000` identifies a category within that
+connection. Agents must resolve and display the category name instead of
+guessing from the connection ID.
 
 ## One fast readiness check
 
@@ -17,11 +25,12 @@ bitwave org accounting status --json
 
 The response is deliberately compact:
 
-- `choose_accounting_setup`: ask one question—connect the client's external
-  accounting system, or create a manual Bitwave chart.
-- `client_categories_and_contacts_needed`: the connection and automatic Digital
-  Assets account are ready; ask for the client's additional accounts and
-  contacts, or offer a transaction-based minimal proposal.
+- `accounting_connection_missing`: the normally provisioned manual connection
+  is absent; verify provisioning or connect the client's external system. Do
+  not create a second manual connection from the CLI.
+- `client_categories_and_contacts_needed`: the connection exists but categories
+  and contacts are absent; ask for the Digital Assets mapping and the client's
+  additional accounts and contacts, or offer a transaction-based minimal proposal.
 - `client_categories_needed` / `contacts_required`: collect only the missing
   client-specific resource.
 - `ready_for_categorization_and_rules`: continue without another prompt.
@@ -43,23 +52,18 @@ The provider's chart should be created and maintained in that accounting
 system, then synced into Bitwave. The CLI will not write manual accounts into an
 external connection.
 
-## Manual Bitwave accounting connection
+## Automatically provisioned manual setup
 
-Create the manual connection:
+Discover and reuse the existing manual connection:
 
 ```bash
-bitwave org accounting manual create --yes --json
+bitwave org accounting manual use --json
 ```
 
-This operation is retry-safe. It creates the conservative starter categories
-and contacts immediately after the connection. If the manual connection or any
-starter resource already exists, the CLI reuses it and creates only what is
-missing.
-
-Creating the connection also makes Bitwave's built-in Digital Assets account
-available. A zero-length categories response therefore means "no additional
-client-specific categories yet," not "no chart of accounts." The CLI recommends
-against a second Digital Assets category but will submit one if requested.
+Normal organization setup already contains this implicit connection. The
+command never creates another one. It uses the stable `Manual` namespace and
+its built-in Digital Assets and Crypto Fees accounts. Never substitute a
+generated manual connection ID for this setup.
 
 Inspect the conservative starter set without writing, or reapply it later:
 
@@ -132,8 +136,8 @@ After setup, rerun status. When `readyForRules` is true, continue to transaction
 analysis and rule planning.
 
 Do not auto-seed staking, DeFi, wrapped-token, bridge, exchange, network, or
-token-specific asset accounts. Those conflict with Bitwave's automatic Digital
-Assets treatment unless the client's accounting policy explicitly calls for
+token-specific asset accounts. Those can conflict with the client's selected
+Digital Assets mapping unless the client's accounting policy explicitly calls for
 them. Prefer the client's supplied chart. If none is supplied, transaction
 analysis may suggest a small set of evidence-backed revenue, expense,
 liability, or equity categories and counterparties; the LLM should present the

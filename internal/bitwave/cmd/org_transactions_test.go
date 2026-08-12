@@ -56,6 +56,38 @@ func TestBulkCategorizationTypedBody(t *testing.T) {
 	}
 }
 
+func TestBulkCategorizationFilterSelectionRequiresSafeBounds(t *testing.T) {
+	base := bulkCategorizeFlags{selectFrom: "2026-01-01", selectTo: "2026-07-31", selectWallets: []string{"wallet-1"}, selectTickers: []string{"SOL-USDC"}, batchSize: 500, maxTransactions: 10000, selectionPageSize: 1000}
+	if err := validateBulkSelection(base); err != nil {
+		t.Fatal(err)
+	}
+	withoutWallet := base
+	withoutWallet.selectWallets = nil
+	if err := validateBulkSelection(withoutWallet); err == nil {
+		t.Fatal("expected wallet requirement")
+	}
+	withoutAsset := base
+	withoutAsset.selectTickers = nil
+	if err := validateBulkSelection(withoutAsset); err == nil {
+		t.Fatal("expected asset or ticker requirement")
+	}
+	withIDs := base
+	withIDs.transactionIDs = []string{"txn-1"}
+	if err := validateBulkSelection(withIDs); err == nil {
+		t.Fatal("expected explicit IDs and filter selection to conflict")
+	}
+}
+
+func TestMatchesLocalTransactionFiltersCaseInsensitively(t *testing.T) {
+	raw := json.RawMessage(`{"transactionType":"Receive","lines":[{"operation":"DEPOSIT"}]}`)
+	if !matchesLocalTransactionFilters(raw, []string{"receive"}, []string{"deposit"}) {
+		t.Fatal("expected local transaction filters to match")
+	}
+	if matchesLocalTransactionFilters(raw, []string{"Send"}, nil) {
+		t.Fatal("unexpected transaction type match")
+	}
+}
+
 func TestSingleCategorizationValidation(t *testing.T) {
 	if err := validateSingleCategorization(json.RawMessage(`{"type":"trade","categorizationMethod":1,"accountingConnectionId":"ac-1","exchangeRates":[],"exchangeRateVersion":0}`)); err != nil {
 		t.Fatal(err)

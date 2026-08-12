@@ -847,7 +847,7 @@ func inferConnectionID(explicit string, category *orgreports.Category, contact *
 		return enabled[0].ID, nil
 	}
 	if len(enabled) == 0 {
-		return "", errors.New("no active accounting connection exists; run `bitwave org accounting status --json` and ask the user to connect their accounting system or create a manual Bitwave chart")
+		return "", errors.New("no active accounting connection exists; run `bitwave org accounting status --json`, verify the normally provisioned manual setup, or connect the client's external system—do not create a duplicate manual connection")
 	}
 	return "", errors.New("accounting connection could not be inferred; pass --accounting-connection")
 }

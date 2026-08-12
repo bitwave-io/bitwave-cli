@@ -9,24 +9,26 @@ import (
 
 func TestAccountingReadinessPromptsForSetup(t *testing.T) {
 	readiness := buildAccountingReadiness(nil, nil, nil)
-	if readiness.ReadyForRules || !readiness.InteractionRequired || readiness.Decision != "choose_accounting_setup" {
+	if readiness.ReadyForRules || !readiness.InteractionRequired || readiness.Decision != "client_categories_and_contacts_needed" || !readiness.DigitalAssetsAccountPresent {
 		t.Fatalf("readiness = %#v", readiness)
 	}
-	choices, ok := readiness.Prompt["choices"].([]map[string]string)
-	if !ok || len(choices) != 2 || choices[1]["id"] != "manual_chart" {
+	if readiness.ConnectionCount != 1 || readiness.Connections[0].ID != implicitManualConnectionID {
 		t.Fatalf("prompt = %#v", readiness.Prompt)
 	}
 }
 
-func TestAccountingReadinessRecognizesBuiltInAssetsThenBecomesReady(t *testing.T) {
+func TestAccountingReadinessIncludesImplicitDigitalAssetsThenBecomesReady(t *testing.T) {
 	connections := []orgreports.AccountingConnection{{ID: "ac-1", Type: "manual"}}
 	readiness := buildAccountingReadiness(connections, nil, nil)
-	if readiness.Decision != "client_categories_and_contacts_needed" || !readiness.InteractionRequired || !readiness.BuiltInDigitalAssets {
+	if readiness.Decision != "client_categories_and_contacts_needed" || !readiness.InteractionRequired || !readiness.DigitalAssetsAccountPresent {
 		t.Fatalf("readiness = %#v", readiness)
 	}
-	readiness = buildAccountingReadiness(connections, []orgreports.Category{{ID: "cat-1", Enabled: true, AccountingConnectionID: "ac-1"}}, []orgreports.Contact{{ID: "contact-1", Enabled: true, AccountingConnectionID: "ac-1"}})
+	readiness = buildAccountingReadiness(connections, []orgreports.Category{{ID: "cat-1", Name: "Digital Assets", Enabled: true, AccountingConnectionID: "ac-1"}}, []orgreports.Contact{{ID: "contact-1", Enabled: true, AccountingConnectionID: "ac-1"}})
 	if !readiness.ReadyForRules || readiness.InteractionRequired || readiness.Decision != "ready_for_categorization_and_rules" {
 		t.Fatalf("readiness = %#v", readiness)
+	}
+	if !readiness.DigitalAssetsAccountPresent {
+		t.Fatalf("readiness should report the inspected Digital Assets category: %#v", readiness)
 	}
 }
 
@@ -49,7 +51,7 @@ func TestChartAccountValidationAndImportShape(t *testing.T) {
 	}
 }
 
-func TestChartAccountValidationWarnsButAllowsAutomaticDigitalAssets(t *testing.T) {
+func TestChartAccountValidationWarnsButAllowsPossibleDuplicateDigitalAssets(t *testing.T) {
 	account := chartAccountInput{
 		ConnectionID: "ac-1",
 		ID:           "1000",
@@ -67,7 +69,7 @@ func TestChartAccountValidationWarnsButAllowsAutomaticDigitalAssets(t *testing.T
 
 func TestStarterPolicyIsMinimalAndEncodesBitwaveGuardrails(t *testing.T) {
 	policy := starterPolicy("ac-1")
-	if len(policy.AutomaticAccounts) != 1 || policy.AutomaticAccounts[0] != "Digital Assets" {
+	if len(policy.AutomaticAccounts) != 0 {
 		t.Fatalf("automatic accounts = %#v", policy.AutomaticAccounts)
 	}
 	if len(policy.Categories) != 3 || len(policy.Contacts) != 3 {
@@ -87,9 +89,20 @@ func TestStarterPolicyIsMinimalAndEncodesBitwaveGuardrails(t *testing.T) {
 	}
 }
 
-func TestOrgAccountingHelpExplainsExternalAndManualChoice(t *testing.T) {
+func TestImplicitManualConnectionCarriesBuiltInAccounts(t *testing.T) {
+	connections := withImplicitManualConnection([]orgreports.AccountingConnection{{ID: "generated", Type: "manual"}})
+	if len(connections) != 2 || connections[1].ID != implicitManualConnectionID {
+		t.Fatalf("connections = %#v", connections)
+	}
+	policy := starterPolicy(implicitManualConnectionID)
+	if len(policy.AutomaticAccounts) != 2 || policy.AutomaticAccounts[0] != "Digital Assets" || policy.AutomaticAccounts[1] != "Crypto Fees" {
+		t.Fatalf("automatic accounts = %#v", policy.AutomaticAccounts)
+	}
+}
+
+func TestOrgAccountingHelpExplainsExistingManualAndExternalChoice(t *testing.T) {
 	cmd := newOrgAccountingCmd()
-	if !strings.Contains(cmd.Long, "external accounting system") || !strings.Contains(cmd.Long, "manual") {
+	if !strings.Contains(cmd.Long, "existing external") || !strings.Contains(cmd.Long, "must not create a generated") {
 		t.Fatalf("help = %q", cmd.Long)
 	}
 }

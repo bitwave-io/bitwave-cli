@@ -15,8 +15,9 @@ func newOrgAccountingStarterCmd() *cobra.Command {
 		Use:   "starter",
 		Short: "Inspect or apply the conservative Bitwave starter categories and contacts",
 		Long: `The starter set contains only general revenue, general expense, and gas-fee
-fallbacks. Digital Assets is automatic. Every more-specific account or contact
-must be supplied or approved by the user.`,
+fallbacks. On the implicit Manual connection it reuses the built-in Digital
+Assets and Crypto Fees accounts and never creates a generated manual connection.
+Every more-specific account or contact must be supplied or approved by the user.`,
 	}
 	cmd.AddCommand(newOrgAccountingStarterShowCmd(), newOrgAccountingStarterApplyCmd())
 	return cmd
@@ -86,10 +87,16 @@ func resolveStarterConnection(cmd *cobra.Command, client *orgreports.Client, org
 	if err != nil {
 		return "", fmt.Errorf("list accounting connections: %w", err)
 	}
+	connections = withImplicitManualConnection(connections)
 	active := make([]string, 0, len(connections))
 	for _, connection := range connections {
 		if !connection.Disabled {
 			active = append(active, connection.ID)
+		}
+	}
+	for _, id := range active {
+		if strings.EqualFold(id, implicitManualConnectionID) {
+			return implicitManualConnectionID, nil
 		}
 	}
 	if len(active) != 1 {
@@ -109,13 +116,13 @@ func applyStarter(cmd *cobra.Command, client *orgreports.Client, orgID string, p
 	}
 	existingCategories := map[string]bool{}
 	for _, item := range categories {
-		if item.Enabled {
+		if item.Enabled && strings.EqualFold(strings.TrimSpace(item.AccountingConnectionID), strings.TrimSpace(policy.Categories[0].ConnectionID)) {
 			existingCategories[strings.ToLower(strings.TrimSpace(item.Name))] = true
 		}
 	}
 	existingContacts := map[string]bool{}
 	for _, item := range contacts {
-		if item.Enabled {
+		if item.Enabled && strings.EqualFold(strings.TrimSpace(item.AccountingConnectionID), strings.TrimSpace(policy.Contacts[0].ConnectionID)) {
 			existingContacts[strings.ToLower(strings.TrimSpace(item.Name))] = true
 		}
 	}

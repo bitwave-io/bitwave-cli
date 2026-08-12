@@ -27,9 +27,10 @@ Before adding wallets—or immediately after the wallet batch is accepted—run:
 bitwave org accounting status --json
 ```
 
-If `interactionRequired` is true, ask the single returned question: connect the
-client's external accounting system in Bitwave, or create a manual Bitwave chart
-of accounts. Wallet sync can continue in parallel with this setup. Do not delay
+If `interactionRequired` is true, ask the single returned question. Reuse the
+automatically provisioned manual connection or connect the client's external
+accounting system; do not create a second manual connection. Wallet sync can
+continue in parallel with this setup. Do not delay
 the prompt until rule creation, because categories and contacts are scoped to an
 accounting connection and are prerequisites for most categorization.
 

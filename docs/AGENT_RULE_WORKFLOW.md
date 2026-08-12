@@ -24,11 +24,12 @@ bitwave --quiet org accounting status --json
 ```
 
 If `interactionRequired` is true, ask the single prompt returned by the CLI.
-With no connection, ask whether to connect the client's external accounting
-system or create a manual Bitwave connection. Once connected, recognize that
-Bitwave supplies Digital Assets automatically and ask only for missing
-client-specific categories or contacts. Warn about a duplicate Digital Assets
-account, but do not block an explicit request. When `readyForRules` is true, continue immediately without
+With no connection, explain that the normally provisioned manual setup is
+missing and ask the user to verify provisioning or connect their external
+accounting system. Do not create another manual connection. Once connected, inspect that
+connection's categories; do not assume a Digital Assets account exists. Ask
+for the client's mapping when absent and warn before creating a possible
+duplicate, but do not block an explicit request. When `readyForRules` is true, continue immediately without
 asking again. `rule context` also embeds this readiness object.
 
 If the user has not supplied a chart or contact list, use `bitwave org
