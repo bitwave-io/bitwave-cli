@@ -134,6 +134,7 @@ func runRuleMetadataAnalyze(cmd *cobra.Command, f metadataAnalysisFlags) error {
 		"scanned": scanned, "eligible": len(items), "ignoredSkipped": ignoredSkipped, "metadataTransactions": metadataTransactions,
 		"methodIdTransactions": methodTransactions, "candidateCount": len(candidates), "conditionCandidates": candidates,
 		"truncated": lastToken != "", "nextToken": lastToken,
+		"accountingGuidanceCommand": "bitwave rule metadata-guide --json",
 		"policy": []string{
 			"Use repeated stable metadata or methodId conditions across any network or transaction type.",
 			"Preserve exact metadata key/value spelling; do not normalize punctuation, case, underscores, or hyphens.",

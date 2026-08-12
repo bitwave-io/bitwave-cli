@@ -261,12 +261,20 @@ func TestMetadataGuideFiltersKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	var result struct {
-		Patterns []rulerecipes.MetadataPattern `json:"patterns"`
+		Patterns            []rulerecipes.MetadataPattern    `json:"patterns"`
+		NetworkTerminology  []rulerecipes.NetworkTerm        `json:"networkTerminology"`
+		AccountingDecisions []rulerecipes.AccountingDecision `json:"accountingDecisions"`
 	}
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
 	if len(result.Patterns) != 4 {
 		t.Fatalf("patterns = %#v", result.Patterns)
+	}
+	if len(result.NetworkTerminology) < 2 || result.NetworkTerminology[0].Term != "partyId" {
+		t.Fatalf("network terminology = %#v", result.NetworkTerminology)
+	}
+	if len(result.AccountingDecisions) < 7 || result.AccountingDecisions[0].SuggestedAction != "InternalTransferCategorization" {
+		t.Fatalf("accounting decisions = %#v", result.AccountingDecisions)
 	}
 }

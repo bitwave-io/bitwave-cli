@@ -121,6 +121,7 @@ func newRuleRecipesCmd() *cobra.Command {
 				"conditionStrategy": guide.Recommendation, "candidateConditions": guide.CandidateConditions,
 				"networkPlaybooks": map[string]any{"canton": map[string]any{
 					"ruleArchetypes": guide.RuleArchetypes, "accountGuidance": guide.AccountGuidance,
+					"networkTerminology": guide.NetworkTerminology, "accountingDecisions": guide.AccountingDecisions,
 					"dataQualityChecks": guide.DataQualityChecks, "internalTransferStatus": guide.InternalTransferStatus,
 				}},
 			})

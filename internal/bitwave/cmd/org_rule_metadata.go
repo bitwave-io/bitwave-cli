@@ -52,6 +52,7 @@ func newRuleMetadataGuideCmd() *cobra.Command {
 				"schemaVersion": rulerecipes.SchemaVersion, "lastVerified": rulerecipes.LastVerified,
 				"source": guide.Source, "methodIdSource": guide.MethodIDSource, "applicability": guide.Applicability, "recommendation": guide.Recommendation,
 				"candidateConditions": guide.CandidateConditions, "methodIdGuidance": guide.MethodIDGuidance,
+				"networkTerminology": guide.NetworkTerminology, "accountingDecisions": guide.AccountingDecisions,
 				"operators": guide.Operators, "filters": map[string]any{"key": key, "value": value, "chart": chart, "limit": limit},
 			}
 			if chart == "none" && key == "" && value == "" {

@@ -16,6 +16,29 @@ type MetadataPattern struct {
 	Meaning            string `json:"meaning"`
 }
 
+// NetworkTerm translates network-specific vocabulary into the generic
+// transaction evidence and CLI flags an agent can use.
+type NetworkTerm struct {
+	Term      string   `json:"term"`
+	Meaning   string   `json:"meaning"`
+	CLIFields []string `json:"cliFields"`
+	Guidance  []string `json:"guidance"`
+}
+
+// AccountingDecision is decision support for an agent. It suggests an
+// economic account class but never embeds an organization's account IDs.
+type AccountingDecision struct {
+	Name                  string   `json:"name"`
+	Ownership             string   `json:"ownership"`
+	Direction             string   `json:"direction"`
+	CounterpartyPattern   string   `json:"counterpartyPattern,omitempty"`
+	MetadataKeys          []string `json:"metadataKeys,omitempty"`
+	SuggestedAccountClass string   `json:"suggestedAccountClass"`
+	SuggestedAction       string   `json:"suggestedAction"`
+	CategoryContactNeeded bool     `json:"categoryContactNeeded"`
+	Guidance              []string `json:"guidance"`
+}
+
 // RuleArchetype describes a reusable decision pattern, not a client rule.
 // Category and contact IDs must always be resolved from the active org.
 type RuleArchetype struct {
@@ -32,23 +55,25 @@ type RuleArchetype struct {
 }
 
 type MetadataKnowledge struct {
-	Source                 Source            `json:"source"`
-	MethodIDSource         Source            `json:"methodIdSource"`
-	Applicability          string            `json:"applicability"`
-	Recommendation         []string          `json:"recommendation"`
-	CandidateConditions    []string          `json:"candidateConditions"`
-	MethodIDGuidance       []string          `json:"methodIdGuidance"`
-	ExampleNetwork         string            `json:"exampleNetwork"`
-	Operators              []string          `json:"operators"`
-	DocumentedKeys         []string          `json:"documentedKeys"`
-	StandardChart          []AccountMapping  `json:"standardChart"`
-	StandardSpecificChart  []AccountMapping  `json:"standardSpecificChart"`
-	GeneralPatterns        []MetadataPattern `json:"generalPatterns"`
-	RuleArchetypes         []RuleArchetype   `json:"ruleArchetypes"`
-	AccountGuidance        []string          `json:"accountGuidance"`
-	DataQualityChecks      []string          `json:"dataQualityChecks"`
-	VendorSpecificGuidance []string          `json:"vendorSpecificGuidance"`
-	InternalTransferStatus string            `json:"internalTransferStatus"`
+	Source                 Source               `json:"source"`
+	MethodIDSource         Source               `json:"methodIdSource"`
+	Applicability          string               `json:"applicability"`
+	Recommendation         []string             `json:"recommendation"`
+	CandidateConditions    []string             `json:"candidateConditions"`
+	MethodIDGuidance       []string             `json:"methodIdGuidance"`
+	ExampleNetwork         string               `json:"exampleNetwork"`
+	Operators              []string             `json:"operators"`
+	DocumentedKeys         []string             `json:"documentedKeys"`
+	NetworkTerminology     []NetworkTerm        `json:"networkTerminology"`
+	AccountingDecisions    []AccountingDecision `json:"accountingDecisions"`
+	StandardChart          []AccountMapping     `json:"standardChart"`
+	StandardSpecificChart  []AccountMapping     `json:"standardSpecificChart"`
+	GeneralPatterns        []MetadataPattern    `json:"generalPatterns"`
+	RuleArchetypes         []RuleArchetype      `json:"ruleArchetypes"`
+	AccountGuidance        []string             `json:"accountGuidance"`
+	DataQualityChecks      []string             `json:"dataQualityChecks"`
+	VendorSpecificGuidance []string             `json:"vendorSpecificGuidance"`
+	InternalTransferStatus string               `json:"internalTransferStatus"`
 }
 
 func MetadataGuide() MetadataKnowledge {
@@ -72,6 +97,48 @@ func MetadataGuide() MetadataKnowledge {
 		ExampleNetwork: "Canton",
 		Operators:      []string{"AND", "OR", "NAND", "NOR", "XOR"},
 		DocumentedKeys: []string{"FeeType", "RewardFeeType", "RewardType", "TransactionType"},
+		NetworkTerminology: []NetworkTerm{
+			{
+				Term: "partyId", Meaning: "Canton counterparty identifier shown on transaction lines; it serves the same rule-scoping role as a full blockchain address.",
+				CLIFields: []string{"fromAddress", "toAddress"},
+				Guidance:  []string{"Copy the complete exact party ID from transaction evidence.", "Use --from-address for inbound counterparty matching and --to-address for outbound counterparty matching.", "Never abbreviate, lowercase, or otherwise normalize a party ID."},
+			},
+			{
+				Term: "0x0", Meaning: "Canton system-side party pattern used in the documented reward and network-fee flows.",
+				CLIFields: []string{"fromAddress", "toAddress", "direction"},
+				Guidance:  []string{"Inbound from 0x0 is reward evidence; inspect RewardType before selecting the revenue account.", "Outbound to 0x0 is fee evidence; inspect FeeType and RewardFeeType before selecting the expense account."},
+			},
+		},
+		AccountingDecisions: []AccountingDecision{
+			{
+				Name: "owned-party-sweep", Ownership: "both-sides-owned", Direction: "All", SuggestedAccountClass: "internal transfer", SuggestedAction: "InternalTransferCategorization", CategoryContactNeeded: false,
+				Guidance: []string{"Movement between party IDs or wallets owned by the same entity is not revenue or expense.", "Confirm ownership rather than inferring it from direction or wallet name."},
+			},
+			{
+				Name: "canton-reward", Ownership: "inbound-external-or-system", Direction: "Inbound", CounterpartyPattern: "from partyId 0x0", MetadataKeys: []string{"RewardType", "TransactionType"}, SuggestedAccountClass: "reward or revenue", SuggestedAction: "Categorize", CategoryContactNeeded: true,
+				Guidance: []string{"Use RewardType to distinguish application, validator, super-validator, and other reward activity.", "Recommend the closest approved reward/revenue account in the active organization and explain the metadata evidence."},
+			},
+			{
+				Name: "canton-network-fee", Ownership: "outbound-system", Direction: "Outbound", CounterpartyPattern: "to partyId 0x0", MetadataKeys: []string{"FeeType", "TransactionType"}, SuggestedAccountClass: "network fee expense", SuggestedAction: "Categorize", CategoryContactNeeded: true,
+				Guidance: []string{"Use FeeType for a more specific fee account when the approved chart supports it.", "Otherwise recommend the organization's general Canton or network-fee expense account."},
+			},
+			{
+				Name: "canton-reward-claim-fee", Ownership: "outbound-system", Direction: "Outbound", MetadataKeys: []string{"RewardFeeType", "TransactionType"}, SuggestedAccountClass: "minting or reward-claim fee expense", SuggestedAction: "Categorize", CategoryContactNeeded: true,
+				Guidance: []string{"RewardFeeType=sender_change_fee is separate from an ordinary network fee in the documented Canton model.", "Recommend a distinct approved reward-claim or minting-fee account when one exists."},
+			},
+			{
+				Name: "application-subscription", Ownership: "outbound-external", Direction: "Outbound", CounterpartyPattern: "to known application partyId", SuggestedAccountClass: "subscription or application fee expense", SuggestedAction: "Categorize", CategoryContactNeeded: true,
+				Guidance: []string{"Use the complete known party ID and wallet scope.", "Confirm the business relationship before selecting the account and contact."},
+			},
+			{
+				Name: "application-rebate-or-revenue-share", Ownership: "inbound-external", Direction: "Inbound", CounterpartyPattern: "from known application partyId", SuggestedAccountClass: "rebate or revenue-share income", SuggestedAction: "Categorize", CategoryContactNeeded: true,
+				Guidance: []string{"Use the complete known party ID and wallet scope.", "Direction alone does not distinguish rebate from revenue share; use business context and the approved chart."},
+			},
+			{
+				Name: "unclear-canton-activity", Ownership: "unknown", Direction: "All", SuggestedAccountClass: "needs review", SuggestedAction: "NeedsReview", CategoryContactNeeded: false,
+				Guidance: []string{"Do not force a category when party ownership, metadata, or business purpose is unclear.", "Inspect the transaction UI evidence or ask the user for the missing business context."},
+			},
+		},
 		StandardChart: []AccountMapping{
 			{"400", "Application Rewards", "Revenue"},
 			{"401", "Super Validator Rewards", "Revenue"},
@@ -151,6 +218,8 @@ func MetadataGuide() MetadataKnowledge {
 		},
 		AccountGuidance: []string{
 			"Treat example account names and numbers as mappings, not universal defaults. Resolve categories from the active organization's approved chart of accounts.",
+			"Use transaction metadata to recommend the closest economic account class and explain why; do not merely return raw metadata for the user to interpret.",
+			"Resolve real party IDs only from the active organization's transaction evidence. Never embed client or vendor party IDs in reusable CLI knowledge.",
 			"A generic Canton fee expense account is acceptable when the client has not approved separate accounts for holding, transfer, locking, traffic, or reward-claim fees.",
 			"Reward, rebate, subscription revenue, subscription expense, and minting-fee treatments are client accounting choices; never infer them from a wallet name alone.",
 			"Simple categorization requires both a category and contact. Internal transfers do not require either, but their fee mapping still requires the applicable fee category/contact.",

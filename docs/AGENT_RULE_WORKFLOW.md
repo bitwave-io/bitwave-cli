@@ -274,6 +274,19 @@ The Canton examples include `FeeType`, `RewardFeeType`, `RewardType`, and
 be used. Metadata and method ID conditions can be added to any supported
 recipe:
 
+Canton uses a `partyId` where other networks use a counterparty address. The
+CLI maps the complete exact party ID observed at runtime to `fromAddress` or
+`toAddress`; it never abbreviates or normalizes it. No real client or vendor
+party IDs belong in reusable CLI knowledge. The guide includes only the
+generic terminology and documented system-side `0x0` pattern.
+
+The guide also provides accounting decision support. Ownership, direction,
+party ID, transaction type, and metadata help the LLM recommend an economic
+account class: internal transfer, reward/revenue, network-fee expense,
+reward-claim fee, application subscription expense, rebate/revenue-share
+income, or needs review. The LLM should explain the evidence and resolve the
+actual category/contact from the active organization's approved chart.
+
 For Canton, treat `TransactionType` as a disambiguator rather than a complete
 rule. The same metadata value can have different meanings: for example,
 `FeeType=holding_fees` on `AmuletRules_Transfer` represents an idle-coin

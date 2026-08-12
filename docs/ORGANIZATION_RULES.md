@@ -41,8 +41,12 @@ Canton mappings in
 `metadata-guide` are examples rather than the scope of metadata rules. The
 guide's Canton playbook combines `TransactionType` with `FeeType`,
 `RewardFeeType`, or `RewardType`, preserves exact observed metadata spelling,
-and exposes wallet-scoped fee/reward archetypes plus internal-transfer sweep
-guidance. COA names and numbers are never treated as universal defaults.
+maps Canton `partyId` values observed at runtime to full `fromAddress` or
+`toAddress` conditions, and exposes wallet-scoped fee/reward archetypes plus
+internal-transfer sweep guidance. It also recommends an economic account class
+from the evidence before resolving the actual category/contact in the active
+organization. Real client/vendor party IDs and COA IDs are never embedded in
+the reusable playbook.
 
 ## Trade fees
 
