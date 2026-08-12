@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +19,9 @@ type Credentials struct {
 	IDToken      string `json:"id_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresAt    int64  `json:"expires_at"`
+	// OrgID identifies an org-scoped access token. Older credential files omit
+	// this field and are upgraded after their next org token exchange.
+	OrgID string `json:"org_id,omitempty"`
 }
 
 // tokenResponse is the JSON body returned by POST /oauth/token.
@@ -33,6 +37,11 @@ type tokenResponse struct {
 
 // refreshBuffer is the number of seconds before expiry to trigger a refresh.
 const refreshBuffer = 60
+
+const (
+	credentialsLockWait  = 10 * time.Second
+	credentialsLockStale = 30 * time.Second
+)
 
 // credentialsDir returns the path to ~/.bitwave/.
 func credentialsDir() (string, error) {
@@ -50,6 +59,50 @@ func credentialsPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "credentials.json"), nil
+}
+
+func credentialsLockPath() (string, error) {
+	dir, err := credentialsDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "credentials.lock"), nil
+}
+
+// withCredentialsLock serializes refresh-token rotation across CLI processes.
+// OAuth refresh tokens are single-use, so two commands refreshing concurrently
+// can otherwise invalidate the credentials that the other command just saved.
+func withCredentialsLock(fn func() (string, error)) (string, error) {
+	dir, err := credentialsDir()
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return "", fmt.Errorf("failed to create config directory: %w", err)
+	}
+	lockPath, err := credentialsLockPath()
+	if err != nil {
+		return "", err
+	}
+	deadline := time.Now().Add(credentialsLockWait)
+	for {
+		err = os.Mkdir(lockPath, 0700)
+		if err == nil {
+			defer func() { _ = os.Remove(lockPath) }()
+			return fn()
+		}
+		if !os.IsExist(err) {
+			return "", fmt.Errorf("acquire credentials lock: %w", err)
+		}
+		if info, statErr := os.Stat(lockPath); statErr == nil && time.Since(info.ModTime()) > credentialsLockStale {
+			_ = os.Remove(lockPath)
+			continue
+		}
+		if time.Now().After(deadline) {
+			return "", errors.New("timed out waiting for another Bitwave command to finish refreshing credentials")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // SaveCredentials writes tokens to ~/.bitwave/credentials.json with 0600 permissions.
@@ -150,7 +203,7 @@ func ExchangeCode(authBaseURL, code, redirectURI, codeVerifier string) (*Credent
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token exchange returned HTTP %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("token exchange returned HTTP %d", resp.StatusCode)
 	}
 
 	return &Credentials{
@@ -166,7 +219,9 @@ func RefreshTokens(authBaseURL string, creds *Credentials) (*Credentials, error)
 	body := url.Values{
 		"grant_type":    {"refresh_token"},
 		"refresh_token": {creds.RefreshToken},
-		"client_id":     {"bw-cli"},
+	}
+	if creds.OrgID != "" {
+		body.Set("scope", "openid orgId:"+creds.OrgID)
 	}
 
 	resp, err := http.Post(
@@ -190,21 +245,33 @@ func RefreshTokens(authBaseURL string, creds *Credentials) (*Credentials, error)
 	}
 
 	if tok.Error != "" {
-		// Clear credentials on refresh failure — user must re-login.
-		_ = DeleteCredentials()
-		return nil, fmt.Errorf("refresh failed: %s — %s\nPlease run: bw auth login", tok.Error, tok.ErrorDesc)
+		// Only explicit credential rejection invalidates the local session.
+		// Transient server failures must not turn into a forced browser login.
+		if tok.Error == "invalid_grant" || tok.Error == "invalid_client" {
+			_ = DeleteCredentials()
+			return nil, fmt.Errorf("refresh failed: %s — %s\nPlease run: bitwave auth login", tok.Error, tok.ErrorDesc)
+		}
+		return nil, fmt.Errorf("refresh failed temporarily: %s — %s; credentials were preserved, retry the command", tok.Error, tok.ErrorDesc)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		_ = DeleteCredentials()
-		return nil, fmt.Errorf("refresh returned HTTP %d: %s\nPlease run: bw auth login", resp.StatusCode, string(respBody))
+		if resp.StatusCode == http.StatusUnauthorized {
+			_ = DeleteCredentials()
+			return nil, fmt.Errorf("refresh returned HTTP %d\nPlease run: bitwave auth login", resp.StatusCode)
+		}
+		return nil, fmt.Errorf("refresh returned HTTP %d; credentials were preserved, retry the command", resp.StatusCode)
+	}
+	refreshToken := tok.RefreshToken
+	if refreshToken == "" {
+		refreshToken = creds.RefreshToken
 	}
 
 	newCreds := &Credentials{
 		AccessToken:  tok.AccessToken,
 		IDToken:      tok.IDToken,
-		RefreshToken: tok.RefreshToken,
+		RefreshToken: refreshToken,
 		ExpiresAt:    time.Now().Unix() + tok.ExpiresIn,
+		OrgID:        creds.OrgID,
 	}
 
 	if err := SaveCredentials(newCreds); err != nil {
@@ -249,7 +316,7 @@ func ClientCredentialsLogin(authBaseURL, clientID, clientSecret string) (*Creden
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("client credentials returned HTTP %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("client credentials returned HTTP %d", resp.StatusCode)
 	}
 
 	return &Credentials{
@@ -263,80 +330,103 @@ func ClientCredentialsLogin(authBaseURL, clientID, clientSecret string) (*Creden
 // LoadAndRefresh loads stored credentials and refreshes them if expired.
 // Returns the valid access token, or an error if not logged in or refresh fails.
 func LoadAndRefresh(authBaseURL string) (string, error) {
-	creds, err := LoadCredentials()
-	if err != nil {
-		return "", err
-	}
-	if creds == nil {
-		return "", fmt.Errorf("not logged in — run: bw auth login")
-	}
-
-	if creds.IsExpired() {
-		creds, err = RefreshTokens(authBaseURL, creds)
+	return withCredentialsLock(func() (string, error) {
+		creds, err := LoadCredentials()
 		if err != nil {
 			return "", err
 		}
-	}
+		if creds == nil {
+			return "", fmt.Errorf("not logged in — run: bitwave auth login")
+		}
 
-	return creds.AccessToken, nil
+		if creds.IsExpired() {
+			creds, err = RefreshTokens(authBaseURL, creds)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		return creds.AccessToken, nil
+	})
 }
 
 // LoadAndRefreshWithOrg loads stored credentials and exchanges them for an
 // org-scoped enriched token (with orgId, scopes, userId claims). This is
 // required for services that validate org-level permissions.
 func LoadAndRefreshWithOrg(authBaseURL, orgId string) (string, error) {
-	creds, err := LoadCredentials()
-	if err != nil {
-		return "", err
-	}
-	if creds == nil {
-		return "", fmt.Errorf("not logged in — run: bw auth login")
-	}
+	return withCredentialsLock(func() (string, error) {
+		creds, err := LoadCredentials()
+		if err != nil {
+			return "", err
+		}
+		if creds == nil {
+			return "", fmt.Errorf("not logged in — run: bitwave auth login")
+		}
 
-	body := url.Values{
-		"grant_type":    {"refresh_token"},
-		"refresh_token": {creds.RefreshToken},
-		"scope":         {"openid orgId:" + orgId},
-	}
+		// Reuse an unexpired token already scoped to this org. Previously this
+		// function rotated the refresh token on every command invocation.
+		if creds.OrgID == orgId && !creds.IsExpired() {
+			return creds.AccessToken, nil
+		}
 
-	resp, err := http.Post(
-		authBaseURL+"/api/oauth/token",
-		"application/x-www-form-urlencoded",
-		strings.NewReader(body.Encode()),
-	)
-	if err != nil {
-		return "", fmt.Errorf("org token exchange failed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+		body := url.Values{
+			"grant_type":    {"refresh_token"},
+			"refresh_token": {creds.RefreshToken},
+			"scope":         {"openid orgId:" + orgId},
+		}
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read org token response: %w", err)
-	}
+		resp, err := http.Post(
+			authBaseURL+"/api/oauth/token",
+			"application/x-www-form-urlencoded",
+			strings.NewReader(body.Encode()),
+		)
+		if err != nil {
+			return "", fmt.Errorf("org token exchange failed: %w", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
 
-	var tok tokenResponse
-	if err := json.Unmarshal(respBody, &tok); err != nil {
-		return "", fmt.Errorf("failed to parse org token response: %w", err)
-	}
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("failed to read org token response: %w", err)
+		}
 
-	if tok.Error != "" {
-		return "", fmt.Errorf("org token exchange failed: %s — %s", tok.Error, tok.ErrorDesc)
-	}
+		var tok tokenResponse
+		if err := json.Unmarshal(respBody, &tok); err != nil {
+			return "", fmt.Errorf("failed to parse org token response: %w", err)
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("org token exchange returned HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
+		if tok.Error != "" {
+			if tok.Error == "invalid_grant" || tok.Error == "invalid_client" {
+				_ = DeleteCredentials()
+				return "", fmt.Errorf("org token exchange failed: %s — %s\nPlease run: bitwave auth login", tok.Error, tok.ErrorDesc)
+			}
+			return "", fmt.Errorf("org token exchange failed temporarily: %s — %s; credentials were preserved, retry the command", tok.Error, tok.ErrorDesc)
+		}
 
-	newCreds := &Credentials{
-		AccessToken:  tok.AccessToken,
-		IDToken:      tok.IDToken,
-		RefreshToken: tok.RefreshToken,
-		ExpiresAt:    time.Now().Unix() + tok.ExpiresIn,
-	}
+		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusUnauthorized {
+				_ = DeleteCredentials()
+				return "", fmt.Errorf("org token exchange returned HTTP %d\nPlease run: bitwave auth login", resp.StatusCode)
+			}
+			return "", fmt.Errorf("org token exchange returned HTTP %d; credentials were preserved, retry the command", resp.StatusCode)
+		}
+		refreshToken := tok.RefreshToken
+		if refreshToken == "" {
+			refreshToken = creds.RefreshToken
+		}
 
-	if err := SaveCredentials(newCreds); err != nil {
-		return "", fmt.Errorf("org token obtained but failed to save: %w", err)
-	}
+		newCreds := &Credentials{
+			AccessToken:  tok.AccessToken,
+			IDToken:      tok.IDToken,
+			RefreshToken: refreshToken,
+			ExpiresAt:    time.Now().Unix() + tok.ExpiresIn,
+			OrgID:        orgId,
+		}
 
-	return newCreds.AccessToken, nil
+		if err := SaveCredentials(newCreds); err != nil {
+			return "", fmt.Errorf("org token obtained but failed to save: %w", err)
+		}
+
+		return newCreds.AccessToken, nil
+	})
 }

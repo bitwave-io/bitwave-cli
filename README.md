@@ -6,6 +6,8 @@ non-interactive, every output is parseable, and every action is
 balance-checked — so an agent can drive the books end-to-end and a human
 can audit every step.
 
+The CLI is designed for both interactive use and automated agent workflows.
+
 It runs locally against plain-text journal files in the same format as
 [ledger-cli](https://ledger-cli.org), [hledger](https://hledger.org), and
 (with a syntax shim) [beancount](https://beancount.github.io) — your books
@@ -277,11 +279,61 @@ appended pending entry:
 lets agents validate the transaction shape and the resulting journal entry
 *before* spending real gas.
 
+### Bitwave organization wallets
+
+The top-level wallet commands above operate on the CLI ledger. To add or list
+wallets in the selected Bitwave product organization, use the org-scoped
+surface:
+
+```sh
+$ bitwave org use ORG_ID
+$ bitwave org accounting status --json
+$ bitwave org wallets networks
+$ bitwave org wallets assess --input wallets.json --json
+$ bitwave org wallets add --input wallets.json --dry-run --json
+$ bitwave org wallets add --input wallets.json --yes --json
+$ bitwave org wallets list --json
+```
+
+Wallet volume preflight is advisory and does not slow or block creation.
+Unknown volume and high-volume wallets without Babel rules produce structured
+warnings that an LLM can surface briefly. Solana validator transactions are
+rolled up automatically. If volume or rule design is unclear, speak with
+Bitwave; an explicit volume-risk override and reason can be recorded for audit.
+
+New wallet data typically appears within 15 minutes but can take up to 24 hours
+depending on transaction history volume and network load. Check progress with
+`bitwave transaction search --wallet "WALLET_NAME" --limit 1 --json`.
+
+Batch onboarding, subsidiary validation, duplicate detection, HD wallets, and
+network-specific fields are documented in
+[`docs/ORGANIZATION_WALLETS.md`](docs/ORGANIZATION_WALLETS.md).
+
+### Accounting setup before rules
+
+Immediately before wallet onboarding or while wallet data begins syncing, check
+that the organization has an accounting connection and chart of accounts:
+
+```sh
+$ bitwave org accounting status --json
+```
+
+The CLI discovers and reuses the normally provisioned manual connection; it
+must not create a second manual connection during onboarding. If none exists,
+verify organization provisioning or connect the client's external system.
+The connection does not itself guarantee a Digital Assets account, so the CLI
+inspects its categories and asks for the mapping when absent. The conservative
+starter adds only General Revenue, General Expense, and Gas Fees categories and
+their matching contacts. Additional
+client-specific accounts can be imported with `bitwave
+org accounting accounts import --input accounts.json --yes --json`. See
+[`docs/ORGANIZATION_ACCOUNTING.md`](docs/ORGANIZATION_ACCOUNTING.md).
+
 ---
 
 ## Reports
 
-All reports run against the cwd's workspace (local or cloud), accept
+Ledger reports run against the cwd's workspace (local or cloud), accept
 `--from`, `--to`, `--account` filters, and `--cleared` to restrict to
 cleared entries.
 
@@ -301,6 +353,93 @@ cleared entries.
 Want richer reports? Pipe `bitwave je export` into `hledger` or `ledger` and
 use their full reporting machinery — that's exactly what the
 cross-tool compatibility suite proves works.
+
+Organization product reports are a separate command family. They use the
+active Bitwave organization and its product wallets/transactions; no CLI
+ledger workspace is required:
+
+```sh
+bitwave auth login
+bitwave org use <org-id>
+bitwave report balance \
+  --as-of 2026-06-30 \
+  --group-by wallet \
+  --out 2026-06-30-balance-by-wallet.csv
+```
+
+`bitwave report balance` starts the server-side Balance Report, waits for it,
+and downloads CSV. It is deliberately different from `bitwave bal`, which
+calculates account balances from a CLI ledger workspace.
+
+The same organization-report family exposes Transaction Export and the
+inventory-view Actions report:
+
+```sh
+# Inclusive dates in the organization's timezone. Use --all-dates explicitly
+# for an unbounded export.
+bitwave report transaction-export \
+  --from 2026-01-01 --to 2026-06-30 \
+  --out transactions.csv
+
+# Actions always requires an explicit inventory view because the selected
+# view's active run determines the report's accounting method and results.
+bitwave report inventory-views
+bitwave report actions \
+  --inventory-view "Primary FIFO" \
+  --from 2026-01-01 --to 2026-06-30 \
+  --out actions.csv
+```
+
+`transaction-export` also accepts the aliases `transactions-export` and
+`txn-export`.
+
+Organization categorization rules have an agent-native workflow. An LLM can
+load compact Bitwave rule knowledge, discover only relevant organization
+choices, and apply one or many rules in a single authenticated process:
+
+```sh
+bitwave rule recipes
+bitwave rule metadata-guide
+bitwave rule flows analyze --org ORG_ID
+bitwave transaction search --method-id 0xe8e33700 --limit 10
+bitwave rule context --preset simple-inflow --asset ETH --query revenue
+bitwave rule apply --preset simple-inflow --asset ETH \
+	--metadata protocol=Aave --method-id 0xe8e33700 \
+  --accounting-connection-id CONNECTION_ID \
+  --category-id CATEGORY_ID --contact-id CONTACT_ID \
+  --enabled --yes
+```
+
+The recommended first rule setup is one organization-wide, enabled rule for
+each of trade, internal transfer, and gas-fee only. Check for existing
+equivalents, then create all missing defaults in one batch without a full
+transaction scan. Granular deposit and withdrawal analysis comes afterward.
+For that analysis, `rule flows analyze` prefers the Transaction Summary
+dashboard, considers 100 matching uncategorized transactions enough
+recurring-pattern evidence, and preserves every counterparty address as a
+complete exact value. Including categorized activity requires the explicit
+`--include-categorized` flag.
+Because background rule processing runs only intermittently (roughly twice per
+day), use `bitwave rule run --org ORG_ID --yes` after creation to trigger
+processing sooner.
+
+After rule setup, an LLM can triage and bulk-ignore token spam without loading
+the full ledger:
+
+```sh
+bitwave transaction spam check TUSD ETH SOL-USDC
+bitwave transaction spam analyze --org ORG_ID
+bitwave transaction spam bulk-ignore --org ORG_ID --yes
+```
+
+Organization analysis checks unignored, uncategorized assets by default,
+performs concurrent ticker lookups through Bitwave's address service, validates
+coin IDs, and excludes every transaction containing a second token. See
+[Spam-token triage](docs/SPAM_TOKEN_TRIAGE.md).
+
+See [Agent-Native Categorization Rules](docs/AGENT_RULE_WORKFLOW.md) for the
+presets, name-to-ID discovery path, client-side batch format, and lifecycle
+commands.
 
 ---
 

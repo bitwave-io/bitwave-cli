@@ -61,12 +61,18 @@ func extractDetail(body []byte) string {
 			Error   string `json:"error"`
 			Message string `json:"message"`
 			Detail  string `json:"detail"`
+			Errors  []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
 		}
 		if json.Unmarshal(body, &env) == nil {
 			for _, m := range []string{env.Message, env.Error, env.Detail} {
 				if m != "" {
 					return truncate(m)
 				}
+			}
+			if len(env.Errors) > 0 && env.Errors[0].Message != "" {
+				return truncate(env.Errors[0].Message)
 			}
 		}
 		return "" // JSON with no recognizable message: omit rather than dump
