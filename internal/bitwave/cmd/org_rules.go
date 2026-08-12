@@ -56,6 +56,9 @@ before an enabled rule is run across historical data.`,
 func newBulkRunRulesCmd() *cobra.Command {
 	var f transactionMutationFlags
 	var fromDate, toDate string
+	var timeout time.Duration
+	var chunkMonths int
+	var chunkDelay time.Duration
 	cmd := &cobra.Command{
 		Use:   "bulk-run",
 		Short: "Run enabled organization rules over a bounded date range using Bitwave Bulk Run",
@@ -67,11 +70,21 @@ This uses the legacy POST /org/{orgId}/rules/execute endpoint with updates
 enabled and returns when asynchronous processing has been accepted.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			operation := "bulk-run-rules"
+			if timeout <= 0 {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("--timeout must be greater than zero"))
+			}
+			if chunkMonths < 0 || chunkMonths > 12 {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("--chunk-months must be between 0 and 12"))
+			}
+			if chunkDelay < 0 {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("--chunk-delay cannot be negative"))
+			}
 			orgID, err := resolveReportOrg(f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
 			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			client.HTTPClient.Timeout = timeout
 			org, err := client.Org(cmd.Context(), orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("load organization timezone: %w", err))
@@ -97,13 +110,52 @@ enabled and returns when asynchronous processing has been accepted.`,
 			preview := map[string]any{
 				"method": "POST", "path": "/org/" + orgID + "/rules/execute",
 				"body":     map[string]any{"executeUpdates": "true", "after": after, "before": before},
-				"timezone": timezone, "fromDate": fromDate, "toDate": toDate,
+				"timezone": timezone, "fromDate": fromDate, "toDate": toDate, "timeout": timeout.String(),
 			}
 			if f.dryRun {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 			}
 			if !f.yes {
 				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to trigger Bulk Run without --yes (use --dry-run to preview)"))
+			}
+			if chunkMonths > 0 {
+				windows, splitErr := splitRuleDateWindows(fromDate, toDate, timezone, chunkMonths)
+				if splitErr != nil {
+					return mutationError(cmd, operation, f.jsonOutput, splitErr)
+				}
+				results := make([]map[string]any, 0, len(windows))
+				started := time.Now()
+				for i, window := range windows {
+					windowAfter, windowBefore, dateErr := resolveRuleDates(window.From, window.To, timezone)
+					if dateErr != nil {
+						return mutationError(cmd, operation, f.jsonOutput, dateErr)
+					}
+					windowStarted := time.Now()
+					runErr := client.ExecuteBulkRules(cmd.Context(), orgID, windowAfter, windowBefore)
+					item := map[string]any{"fromDate": window.From, "toDate": window.To, "durationMs": time.Since(windowStarted).Milliseconds(), "accepted": runErr == nil}
+					if runErr != nil {
+						item["error"] = runErr.Error()
+						results = append(results, item)
+						_ = writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "partial_failure", Operation: operation, Organization: orgID, Result: map[string]any{
+							"chunkMonths": chunkMonths, "acceptedChunks": i, "totalChunks": len(windows), "results": results, "totalDurationMs": time.Since(started).Milliseconds(),
+						}})
+						return fmt.Errorf("bulk rules chunk %s through %s: %w", window.From, window.To, runErr)
+					}
+					results = append(results, item)
+					if i+1 < len(windows) && chunkDelay > 0 {
+						timer := time.NewTimer(chunkDelay)
+						select {
+						case <-cmd.Context().Done():
+							timer.Stop()
+							return cmd.Context().Err()
+						case <-timer.C:
+						}
+					}
+				}
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{
+					"triggered": true, "asynchronous": true, "executeUpdates": true, "fromDate": fromDate, "toDate": toDate, "timezone": timezone,
+					"chunkMonths": chunkMonths, "acceptedChunks": len(windows), "totalChunks": len(windows), "results": results, "totalDurationMs": time.Since(started).Milliseconds(),
+				}})
 			}
 			if err := client.ExecuteBulkRules(cmd.Context(), orgID, after, before); err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
@@ -117,7 +169,46 @@ enabled and returns when asynchronous processing has been accepted.`,
 	addMutationFlags(cmd, &f)
 	cmd.Flags().StringVar(&fromDate, "from-date", "", "Inclusive start date in the organization timezone (default 2000-01-01)")
 	cmd.Flags().StringVar(&toDate, "to-date", "", "Inclusive end date in the organization timezone (default current date)")
+	cmd.Flags().DurationVar(&timeout, "timeout", 10*time.Minute, "Maximum time to wait for Bulk Run acceptance")
+	cmd.Flags().IntVar(&chunkMonths, "chunk-months", 0, "Split the date range into sequential month windows (1-12; 0 disables)")
+	cmd.Flags().DurationVar(&chunkDelay, "chunk-delay", 2*time.Second, "Delay between accepted chunk requests")
 	return cmd
+}
+
+type ruleDateWindow struct {
+	From string
+	To   string
+}
+
+func splitRuleDateWindows(fromDate, toDate, timezone string, months int) ([]ruleDateWindow, error) {
+	if months < 1 || months > 12 {
+		return nil, errors.New("chunk months must be between 1 and 12")
+	}
+	location, err := time.LoadLocation(timezone)
+	if err != nil {
+		return nil, err
+	}
+	from, err := time.ParseInLocation("2006-01-02", fromDate, location)
+	if err != nil {
+		return nil, fmt.Errorf("invalid from date %q", fromDate)
+	}
+	to, err := time.ParseInLocation("2006-01-02", toDate, location)
+	if err != nil {
+		return nil, fmt.Errorf("invalid to date %q", toDate)
+	}
+	if from.After(to) {
+		return nil, errors.New("from date must not be after to date")
+	}
+	windows := make([]ruleDateWindow, 0)
+	for start := from; !start.After(to); {
+		end := start.AddDate(0, months, 0).AddDate(0, 0, -1)
+		if end.After(to) {
+			end = to
+		}
+		windows = append(windows, ruleDateWindow{From: start.Format("2006-01-02"), To: end.Format("2006-01-02")})
+		start = end.AddDate(0, 0, 1)
+	}
+	return windows, nil
 }
 
 func newRunRulesCmd() *cobra.Command {

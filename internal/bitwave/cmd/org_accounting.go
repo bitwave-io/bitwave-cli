@@ -76,7 +76,106 @@ normal onboarding. Other connection IDs do not inherit Manual's built-ins.
 External provider authorization
 remains in the Bitwave web app; manual setup and imports are available here.`,
 	}
-	cmd.AddCommand(newOrgAccountingStatusCmd(), newOrgAccountingConnectionsCmd(), newOrgAccountingManualCmd(), newOrgAccountingAccountsCmd(), newOrgAccountingStarterCmd())
+	cmd.AddCommand(newOrgAccountingStatusCmd(), newOrgAccountingConnectionsCmd(), newOrgAccountingManualCmd(), newOrgAccountingAccountsCmd(), newOrgAccountingContactsCmd(), newOrgAccountingStarterCmd())
+	return cmd
+}
+
+func newOrgAccountingContactsCmd() *cobra.Command {
+	cmd := &cobra.Command{Use: "contacts", Short: "List or create Bitwave categorization contacts"}
+	cmd.AddCommand(newOrgAccountingContactsListCmd(), newOrgAccountingContactCreateCmd())
+	return cmd
+}
+
+func newOrgAccountingContactsListCmd() *cobra.Command {
+	var orgID, connectionID, query string
+	var limit int
+	cmd := &cobra.Command{
+		Use: "list", Short: "List a bounded set of contacts",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if limit < 1 || limit > 500 {
+				return errors.New("--limit must be between 1 and 500")
+			}
+			resolvedOrg, client, err := accountingClient(orgID)
+			if err != nil {
+				return err
+			}
+			contacts, err := client.Contacts(cmd.Context(), resolvedOrg)
+			if err != nil {
+				return fmt.Errorf("list contacts: %w", err)
+			}
+			contacts = filterContacts(contacts, query, connectionID, false)
+			total := len(contacts)
+			if len(contacts) > limit {
+				contacts = contacts[:limit]
+			}
+			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "contacts": contacts, "total": total, "truncated": total > len(contacts)})
+		},
+	}
+	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
+	cmd.Flags().StringVar(&connectionID, "accounting-connection", "", "Only contacts belonging to this connection ID")
+	cmd.Flags().StringVar(&query, "query", "", "Case-insensitive name or ID substring")
+	cmd.Flags().IntVar(&limit, "limit", 100, "Maximum contacts to return")
+	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
+	return cmd
+}
+
+func newOrgAccountingContactCreateCmd() *cobra.Command {
+	var f transactionMutationFlags
+	var input orgreports.CreateContactInput
+	cmd := &cobra.Command{
+		Use: "create", Short: "Create one categorization contact",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			operation := "create-contact"
+			input.ConnectionID = strings.TrimSpace(input.ConnectionID)
+			input.RemoteID = strings.TrimSpace(input.RemoteID)
+			input.Name = strings.TrimSpace(input.Name)
+			input.Type = strings.TrimSpace(input.Type)
+			if input.ConnectionID == "" || input.RemoteID == "" || input.Name == "" {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("--accounting-connection, --id, and --name are required"))
+			}
+			if !strings.EqualFold(input.Type, "Customer") && !strings.EqualFold(input.Type, "Vendor") {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("--type must be Customer or Vendor"))
+			}
+			if strings.EqualFold(input.Type, "customer") {
+				input.Type = "Customer"
+			} else {
+				input.Type = "Vendor"
+			}
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: input})
+			}
+			if !f.yes {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
+			}
+			_, client, err := accountingClient(orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			contacts, err := client.Contacts(cmd.Context(), orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("check existing contacts: %w", err))
+			}
+			for _, contact := range contacts {
+				if strings.EqualFold(contact.AccountingConnectionID, input.ConnectionID) && (strings.EqualFold(contact.RemoteID, input.RemoteID) || strings.EqualFold(contact.Name, input.Name)) {
+					return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "skipped_existing", "contact": contact}})
+				}
+			}
+			id, err := client.CreateContact(cmd.Context(), orgID, input)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "created", "id": id, "contact": input}})
+		},
+	}
+	addMutationFlags(cmd, &f)
+	cmd.Flags().StringVar(&input.ConnectionID, "accounting-connection", "", "Accounting connection ID")
+	cmd.Flags().StringVar(&input.RemoteID, "id", "", "Stable remote/contact ID")
+	cmd.Flags().StringVar(&input.Name, "name", "", "Contact name")
+	cmd.Flags().StringVar(&input.Type, "type", "", "Contact type: Customer or Vendor")
 	return cmd
 }
 

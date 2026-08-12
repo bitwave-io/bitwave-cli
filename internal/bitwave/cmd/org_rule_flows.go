@@ -29,10 +29,12 @@ type flowCluster struct {
 	AssetID              string                   `json:"assetId,omitempty"`
 	Asset                string                   `json:"asset,omitempty"`
 	CounterpartyAddress  string                   `json:"counterpartyAddress,omitempty"`
+	ExactAddressRequired bool                     `json:"exactAddressRequired,omitempty"`
 	FromAddresses        []string                 `json:"fromAddresses,omitempty"`
 	ToAddresses          []string                 `json:"toAddresses,omitempty"`
 	WalletIDs            []string                 `json:"walletIds,omitempty"`
 	Count                int                      `json:"count"`
+	EstimatedFMV         float64                  `json:"estimatedFmv,omitempty"`
 	EvidenceCount        int                      `json:"evidenceCount"`
 	EvidenceLimit        int                      `json:"evidenceLimit"`
 	EvidenceSufficient   bool                     `json:"evidenceSufficient"`
@@ -40,6 +42,7 @@ type flowCluster struct {
 	FirstSeen            string                   `json:"firstSeen,omitempty"`
 	LastSeen             string                   `json:"lastSeen,omitempty"`
 	SampleTransactionIDs []string                 `json:"sampleTransactionIds,omitempty"`
+	SampleExplorerLinks  []string                 `json:"sampleExplorerLinks,omitempty"`
 	ConditionCandidates  []ruleConditionCandidate `json:"conditionCandidates,omitempty"`
 	SuggestedRule        agentRuleSpec            `json:"suggestedRule"`
 	Question             string                   `json:"question"`
@@ -62,6 +65,7 @@ type flowTransaction struct {
 	Metadata             map[string]any           `json:"metadata"`
 	CategorizationStatus string                   `json:"categorizationStatus"`
 	Ignored              bool                     `json:"ignored"`
+	TxViewLink           string                   `json:"txViewLink"`
 	Lines                []compactTransactionLine `json:"lines"`
 }
 
@@ -73,7 +77,70 @@ func newRuleFlowsCmd() *cobra.Command {
 to an LLM. Addresses are always emitted as complete exact values and are never
 shortened with ellipses. Direction alone does not select an accounting action.`,
 	}
-	cmd.AddCommand(newRuleFlowsAnalyzeCmd())
+	cmd.AddCommand(newRuleFlowsAnalyzeCmd(), newRuleFlowsPrioritizeCmd())
+	return cmd
+}
+
+func newRuleFlowsPrioritizeCmd() *cobra.Command {
+	var orgID, from, to string
+	var limit int
+	cmd := &cobra.Command{
+		Use:   "prioritize",
+		Short: "Rank wallets using Bitwave's Transaction Summary dashboard",
+		Long: `Read the wallet-level Transaction Summary aggregate before inspecting raw
+transactions. The result is compact, date-bounded, and intended to help an LLM
+choose which wallets to analyze first without spending context on transaction rows.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if (from == "") != (to == "") {
+				return errors.New("--from and --to must be supplied together")
+			}
+			if limit < 1 || limit > 500 {
+				return errors.New("--limit must be between 1 and 500")
+			}
+			resolvedOrgID, err := resolveReportOrg(orgID)
+			if err != nil {
+				return err
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrgID))
+			records, err := client.TransactionSummaryWallets(cmd.Context(), resolvedOrgID, from, to, 1, limit)
+			if err != nil {
+				return fmt.Errorf("load Bitwave Transaction Summary wallets: %w", err)
+			}
+			warnings := []string{}
+			orgWallets, walletErr := client.OrgWallets(cmd.Context(), resolvedOrgID)
+			if walletErr != nil {
+				warnings = append(warnings, "Wallet names could not be resolved: "+walletErr.Error())
+			} else {
+				names := make(map[string]string, len(orgWallets))
+				for _, wallet := range orgWallets {
+					names[wallet.ID] = wallet.Name
+				}
+				for index := range records {
+					if records[index].Wallet == "" {
+						records[index].Wallet = names[records[index].WalletID]
+					}
+				}
+			}
+			sort.SliceStable(records, func(i, j int) bool {
+				return records[i].TotalUncategorized > records[j].TotalUncategorized
+			})
+			return writeJSON(cmd.OutOrStdout(), map[string]any{
+				"schemaVersion": "1", "source": "transaction-summary", "organization": resolvedOrgID,
+				"from": from, "to": to, "walletCount": len(records), "wallets": records, "warnings": warnings,
+				"workflow": []string{
+					"Start with wallets having the largest totalUncategorized count.",
+					"Use inflow/outflow mix and interactingAddressesCount to choose grouping strategy.",
+					"Inspect compact recurring flows only for the selected wallet; do not load its full history into the LLM.",
+				},
+			})
+		},
+	}
+	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
+	cmd.Flags().StringVar(&from, "from", "", "Inclusive start date (YYYY-MM-DD; requires --to)")
+	cmd.Flags().StringVar(&to, "to", "", "Inclusive end date (YYYY-MM-DD; requires --from)")
+	cmd.Flags().IntVar(&limit, "limit", 100, "Maximum wallets to return (1-500)")
+	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
+	_ = cmd.Flags().MarkHidden("json")
 	return cmd
 }
 
@@ -136,13 +203,46 @@ func runRuleFlowsAnalyze(cmd *cobra.Command, f flowAnalysisFlags) error {
 		return err
 	}
 	client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
-	summaryEligible := f.from == "" && len(f.wallets) == 0 && f.nextToken == "" && !f.includeIgnored
+	summaryEligible := f.nextToken == "" && !f.includeIgnored
 	if source == "summary" && !summaryEligible {
-		return errors.New("--source summary does not support date, wallet, next-token, or include-ignored filters; use --source transactions")
+		return errors.New("--source summary does not support next-token or include-ignored filters; use --source transactions")
 	}
 	warnings := []string{}
 	if source != "transactions" && summaryEligible {
-		records, summaryErr := client.TransactionSummaryAddresses(cmd.Context(), orgID, 1, 100)
+		wallets, walletErr := client.Wallets(cmd.Context(), orgID)
+		if walletErr != nil {
+			return fmt.Errorf("discover wallets: %w", walletErr)
+		}
+		walletIDs, walletErr := resolveWalletRefs(f.wallets, wallets)
+		if walletErr != nil {
+			return walletErr
+		}
+		summaryScopes := walletIDs
+		if len(summaryScopes) == 0 {
+			summaryScopes = []string{""}
+		}
+		records := []orgreports.TransactionSummaryAddressRecord{}
+		var summaryErr error
+		for _, walletID := range summaryScopes {
+			byAddress := map[string]orgreports.TransactionSummaryAddressRecord{}
+			for _, sortField := range []string{"depositsUncategorized", "withdrawalsUncategorized"} {
+				var scoped []orgreports.TransactionSummaryAddressRecord
+				scoped, summaryErr = client.TransactionSummaryAddressesFilteredSorted(cmd.Context(), orgID, walletID, f.from, f.to, sortField, 1, min(max(f.limit*2, 100), 500))
+				if summaryErr != nil {
+					break
+				}
+				for _, record := range scoped {
+					key := record.WalletID + "\x00" + normalizeRuleAddress(record.InteractingAddress)
+					byAddress[key] = record
+				}
+			}
+			if summaryErr != nil {
+				break
+			}
+			for _, record := range byAddress {
+				records = append(records, record)
+			}
+		}
 		if summaryErr == nil {
 			clusters := clusterSummaryAddresses(records, direction, f.includeCategorized, f.minCount, f.limit)
 			return writeFlowAnalysis(cmd, orgID, "transaction-summary", len(records), 0, clusters, "", f.includeCategorized, warnings)
@@ -227,6 +327,7 @@ func clusterSummaryAddresses(records []orgreports.TransactionSummaryAddressRecor
 			"inflow":  record.DepositsUncategorized,
 			"outflow": record.WithdrawalsUncategorized,
 		}
+		fmvs := map[string]float64{"inflow": record.DepositsFMV, "outflow": record.WithdrawalsFMV}
 		if includeCategorized {
 			counts["inflow"] = record.DepositsTransactionCount
 			counts["outflow"] = record.WithdrawalsTransactionCount
@@ -260,6 +361,7 @@ func clusterSummaryAddresses(records []orgreports.TransactionSummaryAddressRecor
 				observed[identity] = acc
 			}
 			acc.cluster.Count += counts[flow]
+			acc.cluster.EstimatedFMV += fmvs[flow]
 			if record.WalletID != "" {
 				acc.wallets[record.WalletID] = true
 			}
@@ -276,6 +378,14 @@ func clusterSummaryAddresses(records []orgreports.TransactionSummaryAddressRecor
 			"This cluster comes from Bitwave Transaction Summary. Inspect representative transactions only if the counterparty's accounting meaning is unclear.",
 			"Direction is evidence, not an accounting conclusion. The user selects the treatment; CLI guidance remains advisory.",
 		)
+		if addressRequiresExactLookup(acc.cluster.CounterpartyAddress) {
+			acc.cluster.ExactAddressRequired = true
+			acc.cluster.SuggestedRule.FromAddress = ""
+			acc.cluster.SuggestedRule.ToAddress = ""
+			acc.cluster.Advisories = append(acc.cluster.Advisories,
+				"This non-EVM address came from Transaction Summary, which may normalize case-sensitive addresses. Load a representative raw transaction and copy its exact full address before creating a rule.",
+			)
+		}
 		result = append(result, acc.cluster)
 	}
 	sortFlowClusters(result)
@@ -283,6 +393,11 @@ func clusterSummaryAddresses(records []orgreports.TransactionSummaryAddressRecor
 		result = result[:limit]
 	}
 	return result
+}
+
+func addressRequiresExactLookup(address string) bool {
+	address = strings.TrimSpace(address)
+	return address != "" && address != "0" && !strings.HasPrefix(strings.ToLower(address), "0x")
 }
 
 func clusterFlowTransactions(items []json.RawMessage, includeIgnored bool, minCount, limit int) ([]flowCluster, int) {
@@ -344,6 +459,9 @@ func clusterFlowTransactions(items []json.RawMessage, includeIgnored bool, minCo
 		acc.wallets[line.WalletID] = line.WalletID != ""
 		if len(acc.cluster.SampleTransactionIDs) < 5 {
 			acc.cluster.SampleTransactionIDs = append(acc.cluster.SampleTransactionIDs, transaction.ID)
+			if link := strings.TrimSpace(transaction.TxViewLink); link != "" {
+				acc.cluster.SampleExplorerLinks = append(acc.cluster.SampleExplorerLinks, link)
+			}
 		}
 		if len(acc.transactions) < 100 {
 			acc.transactions = append(acc.transactions, compactTransaction{

@@ -53,3 +53,19 @@ func TestPrepareRuleObjectForcesDisabled(t *testing.T) {
 		t.Fatal("expected enabled rule to require explicit permission")
 	}
 }
+
+func TestSplitRuleDateWindows(t *testing.T) {
+	windows, err := splitRuleDateWindows("2026-01-15", "2026-04-02", "UTC", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []ruleDateWindow{{From: "2026-01-15", To: "2026-02-14"}, {From: "2026-02-15", To: "2026-03-14"}, {From: "2026-03-15", To: "2026-04-02"}}
+	if len(windows) != len(want) {
+		t.Fatalf("windows = %#v", windows)
+	}
+	for i := range want {
+		if windows[i] != want[i] {
+			t.Fatalf("window %d = %#v, want %#v", i, windows[i], want[i])
+		}
+	}
+}

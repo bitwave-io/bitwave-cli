@@ -70,7 +70,7 @@ range:
 
 ```bash
 bitwave rule bulk-run --org ORG_ID \
-  --from-date YYYY-MM-DD --to-date YYYY-MM-DD --yes
+  --from-date YYYY-MM-DD --to-date YYYY-MM-DD --timeout 10m --yes
 ```
 
 Bulk Run interprets dates in the organization timezone and sends
@@ -84,6 +84,47 @@ already finished processing.
 for a request limited to a historical cutoff unless the user explicitly
 approves processing later transactions too. Bulk Run is date-bounded but may
 return HTTP 403 when parallel rule processing is not enabled for the org.
+The CLI waits up to ten minutes for acceptance by default. A timeout has
+unknown acceptance state, so verify representative transactions or workflow
+state before retrying rather than submitting duplicates blindly.
+
+Large ranges can also fail with server `DEADLINE_EXCEEDED` or
+`RESOURCE_EXHAUSTED`. Use `--chunk-months 1 --chunk-delay 2s` to submit
+non-overlapping monthly windows sequentially. The result reports every window,
+its acceptance latency, and stops at the first failure so gaps are explicit.
+
+## Inflow and outflow discovery
+
+Start with Bitwave's Transaction Summary aggregates instead of exporting an
+entire transaction history to the LLM:
+
+```bash
+bitwave rule flows prioritize --org ORG_ID --from YYYY-MM-DD --to YYYY-MM-DD
+bitwave rule flows analyze --org ORG_ID --source summary --wallet WALLET_ID \
+  --from YYYY-MM-DD --to YYYY-MM-DD
+```
+
+Rank wallets by uncategorized volume, then inspect only recurring wallet-level
+clusters. Direction is evidence, not an accounting conclusion: exchange,
+bridge, DeFi, and internal movements must not be forced into revenue or expense.
+When raw transaction search is required, the compact cluster includes up to
+five `sampleExplorerLinks` from Bitwave's `txViewLink` field for targeted public
+block-explorer inspection.
+
+Transaction Summary may normalize non-EVM addresses. Because Solana and other
+networks can be case-sensitive, the CLI marks such clusters with
+`exactAddressRequired`, omits the address from `suggestedRule`, and requires the
+exact full address from a representative raw transaction before rule creation.
+
+Create approved chart accounts and contacts without returning the client's
+entire resource list:
+
+```bash
+bitwave org accounting accounts create --org ORG_ID --accounting-connection Manual \
+  --id ID --name NAME --type revenue --yes
+bitwave org accounting contacts create --org ORG_ID --accounting-connection Manual \
+  --id ID --name NAME --type Customer --yes
+```
 
 If the trigger repeatedly returns a server-side error, use the **Run Rules**
 action on Bitwave's Rules page. The CLI should clearly distinguish this trigger

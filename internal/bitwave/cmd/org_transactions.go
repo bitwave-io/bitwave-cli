@@ -698,6 +698,10 @@ func mutationError(cmd *cobra.Command, operation string, jsonOutput bool, err er
 				detail.Code = "rules_run_trigger_failed"
 				detail.Retryable = true
 			}
+		} else if operation == "bulk-run-rules" && strings.Contains(strings.ToLower(err.Error()), "deadline exceeded") {
+			detail.Code = "rules_bulk_run_acceptance_unknown"
+			detail.Retryable = false
+			detail.Suggestion = "The client timed out before receiving acceptance. Check representative transactions or server workflow state before retrying; then increase --timeout if no run started."
 		}
 		var apiError *apierr.Error
 		if errors.As(err, &apiError) {

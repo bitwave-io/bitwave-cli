@@ -57,6 +57,23 @@ func TestClusterSummaryAddressesSeparatesWallets(t *testing.T) {
 	}
 }
 
+func TestClusterSummaryAddressesRequiresExactNonEVMAddressLookup(t *testing.T) {
+	records := []orgreports.TransactionSummaryAddressRecord{{
+		WalletID: "wallet-sol", InteractingAddress: "4acfpUFOASD9BFpdeu6dbT89gb6entehbxCAI87nhdee", DepositsUncategorized: 100,
+	}}
+	clusters := clusterSummaryAddresses(records, "inflow", false, 2, 10)
+	if len(clusters) != 1 {
+		t.Fatalf("clusters = %#v", clusters)
+	}
+	cluster := clusters[0]
+	if !cluster.ExactAddressRequired {
+		t.Fatalf("case-sensitive address was not flagged: %#v", cluster)
+	}
+	if cluster.SuggestedRule.FromAddress != "" || cluster.SuggestedRule.ToAddress != "" {
+		t.Fatalf("unsafe normalized address was suggested as a rule condition: %#v", cluster.SuggestedRule)
+	}
+}
+
 func TestClusterFlowTransactionsCapsStoredEvidence(t *testing.T) {
 	const address = "dtc-tokenizationpilot-1::12200b406828e4e0ba69fcbf5d60b9652a4a2a153ef28c6569c0fbfa7ac899675d67"
 	items := make([]json.RawMessage, 105)
@@ -65,6 +82,7 @@ func TestClusterFlowTransactionsCapsStoredEvidence(t *testing.T) {
 			ID:              fmt.Sprintf("transaction-%03d", i),
 			Timestamp:       "2026-07-01T00:00:00Z",
 			TransactionType: "send",
+			TxViewLink:      fmt.Sprintf("https://explorer.example/tx/%03d", i),
 			Lines: []compactTransactionLine{{
 				AmountCurrencyID: "ETH", AmountCurrencyName: "ETH", To: address,
 				WalletID: "wallet-1", Operation: "withdraw",
@@ -89,6 +107,9 @@ func TestClusterFlowTransactionsCapsStoredEvidence(t *testing.T) {
 	}
 	if len(cluster.SampleTransactionIDs) != 5 {
 		t.Fatalf("sample IDs = %d", len(cluster.SampleTransactionIDs))
+	}
+	if len(cluster.SampleExplorerLinks) != 5 || cluster.SampleExplorerLinks[0] != "https://explorer.example/tx/000" {
+		t.Fatalf("sample explorer links = %#v", cluster.SampleExplorerLinks)
 	}
 	if cluster.SuggestedRule.WalletID != "wallet-1" {
 		t.Fatalf("suggested wallet = %q", cluster.SuggestedRule.WalletID)
