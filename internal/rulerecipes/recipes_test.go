@@ -69,6 +69,37 @@ func TestTradeRecipeForcesDocumentedDefaults(t *testing.T) {
 	}
 }
 
+func TestDustInflowRequiresBoundedWalletAssetAndBuildsQuantityRule(t *testing.T) {
+	payload, err := Build(Plan{
+		Preset: "dust-inflow", Name: "Small ETH receipts", Priority: 1, Enabled: true,
+		AccountingConnectionID: "Manual", CategoryID: "Manual.dust-income", ContactID: "Manual.dust-sender",
+		FeeCategoryID: "Manual.gas", FeeContactID: "Manual.gas", WalletID: "wallet-1", Asset: "ETH", MaxAssetQty: "0.0001",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Transfer struct {
+			ValueRules []struct{ Comparison, Value string } `json:"valueRules"`
+			MultiToken bool                                 `json:"multiToken"`
+			Coin       string                               `json:"coin"`
+			WalletID   string                               `json:"walletId"`
+		} `json:"transfer"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Transfer.ValueRules) != 1 || decoded.Transfer.ValueRules[0].Comparison != "LTE" || decoded.Transfer.ValueRules[0].Value != "0.0001" {
+		t.Fatalf("value rules = %#v", decoded.Transfer.ValueRules)
+	}
+	if decoded.Transfer.MultiToken || decoded.Transfer.Coin != "ETH" || decoded.Transfer.WalletID != "wallet-1" {
+		t.Fatalf("dust scope = %#v", decoded.Transfer)
+	}
+	if _, err := Build(Plan{Preset: "dust-inflow", Name: "unsafe", Priority: 1, AccountingConnectionID: "Manual", CategoryID: "cat", ContactID: "contact", Asset: "ETH", MaxAssetQty: "1"}); err == nil {
+		t.Fatal("expected wallet requirement")
+	}
+}
+
 func TestPlanningHierarchyStartsWithOrganizationWideTypes(t *testing.T) {
 	hierarchy := PlanningHierarchy()
 	if len(hierarchy) != 2 || hierarchy[0].Tier != 1 || hierarchy[1].Tier != 2 {

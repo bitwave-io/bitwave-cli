@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -74,7 +75,7 @@ func PlanningHierarchy() []PlanningTier {
 		},
 		{
 			Tier: 2, Name: "granular deposit and withdrawal behavior",
-			Presets: []string{"simple-inflow", "simple-outflow", "metadata-categorization", "detailed-categorization"},
+			Presets: []string{"simple-inflow", "simple-outflow", "dust-inflow", "metadata-categorization", "detailed-categorization"},
 			Guidance: []string{
 				"Direction alone is insufficient; inspect transaction evidence and narrow with stable metadata, method ID, address, asset, wallet, or another supported condition.",
 				"Simple inflow and outflow rules should be wallet-scoped by default. Organization-wide scope is supported, but it should be a deliberate exception.",
@@ -97,6 +98,18 @@ var catalog = []Recipe{
 		Fields:   []Field{{"category", true, "Category ID or exact name."}, {"contact", true, "Contact ID or exact name."}, {"asset", false, "Single asset required for the match."}},
 		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
 		Guidance: []string{"Set a wallet by default; the same asset and counterparty can require different treatment in another wallet. Use organization-wide scope only as a deliberate exception.", "Use multiToken=false when --asset identifies a single-token rule.", "Network fees are separate FEE lines. Supply a fee category and fee contact when autoCategorizeFee=true; never silently post fees to the outflow category."},
+	},
+	{
+		Name: "dust-inflow", Summary: "Categorize genuine low-quantity inbound receipts for one asset without treating verified spam as accounting activity.",
+		ActionType: "SimpleCategorization", PlanningTier: 2, DefaultScope: "wallet", DefaultDirection: "Inbound", ApplySupported: true,
+		Fields:   []Field{{"category", true, "Client-approved dust income category."}, {"contact", true, "Client-approved dust sender contact."}, {"asset", true, "One exact asset/ticker."}, {"maxAssetQty", true, "Inclusive maximum quantity for that asset."}},
+		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
+		Guidance: []string{
+			"Use only for priced, economically real, uncategorized, single-token inbound receipts after spam scoring; verified spam should follow the spam ignore workflow instead.",
+			"Require a wallet, exact asset, and client-approved maximum asset quantity. Bitwave rules compare asset units, not a universal USD FMV threshold.",
+			"Do not apply one dust threshold across tokens with different prices or decimals. Convert the client's materiality policy into a per-asset quantity and review it when prices materially change.",
+			"Do not use this preset for multi-token transactions, known counterparties, bridges, internal transfers, DeFi, or failed pricing.",
+		},
 	},
 	{
 		Name: "trade", Summary: "Categorize swap/trade transactions and their fee contact.",
@@ -170,6 +183,8 @@ type Plan struct {
 	FeeCategoryID             string
 	FeeContactID              string
 	Asset                     string
+	MinAssetQty               string
+	MaxAssetQty               string
 	MethodID                  string
 	Direction                 string
 	WalletID                  string
@@ -231,7 +246,7 @@ func Build(plan Plan) (json.RawMessage, error) {
 
 	action := map[string]any{"type": recipe.ActionType}
 	switch recipe.Name {
-	case "simple-inflow", "simple-outflow", "metadata-categorization":
+	case "simple-inflow", "simple-outflow", "dust-inflow", "metadata-categorization":
 		if plan.CategoryID == "" || plan.ContactID == "" {
 			return nil, fmt.Errorf("preset %q requires category and contact", recipe.Name)
 		}
@@ -272,6 +287,17 @@ func Build(plan Plan) (json.RawMessage, error) {
 	case "ignore-blank":
 		// Ignore has no accounting action fields.
 	}
+	if recipe.Name == "dust-inflow" {
+		if strings.TrimSpace(plan.WalletID) == "" {
+			return nil, fmt.Errorf("preset dust-inflow requires a wallet")
+		}
+		if strings.TrimSpace(plan.Asset) == "" {
+			return nil, fmt.Errorf("preset dust-inflow requires one asset")
+		}
+		if strings.TrimSpace(plan.MaxAssetQty) == "" {
+			return nil, fmt.Errorf("preset dust-inflow requires max asset quantity")
+		}
+	}
 	if recipe.Name == "metadata-categorization" && len(plan.Metadata) == 0 {
 		return nil, fmt.Errorf("preset metadata-categorization requires at least one metadata key/value pair")
 	}
@@ -287,6 +313,13 @@ func Build(plan Plan) (json.RawMessage, error) {
 	optionalString(transfer, "walletId", plan.WalletID)
 	optionalString(transfer, "fromAddress", strings.TrimSpace(plan.FromAddress))
 	optionalString(transfer, "toAddress", strings.TrimSpace(plan.ToAddress))
+	valueRules, err := assetQuantityRules(plan.MinAssetQty, plan.MaxAssetQty)
+	if err != nil {
+		return nil, err
+	}
+	if len(valueRules) > 0 {
+		transfer["valueRules"] = valueRules
+	}
 	if plan.AfterDateSEC > 0 {
 		transfer["afterDateSEC"] = plan.AfterDateSEC
 	}
@@ -316,6 +349,21 @@ func Build(plan Plan) (json.RawMessage, error) {
 	}
 	data, err := json.Marshal(map[string]any{"transfer": transfer})
 	return json.RawMessage(data), err
+}
+
+func assetQuantityRules(minimum, maximum string) ([]map[string]string, error) {
+	result := []map[string]string{}
+	for _, item := range []struct{ comparison, value string }{{"GTE", strings.TrimSpace(minimum)}, {"LTE", strings.TrimSpace(maximum)}} {
+		if item.value == "" {
+			continue
+		}
+		parsed, err := strconv.ParseFloat(item.value, 64)
+		if err != nil || parsed < 0 {
+			return nil, fmt.Errorf("asset quantity %q must be a non-negative number", item.value)
+		}
+		result = append(result, map[string]string{"comparison": item.comparison, "value": item.value})
+	}
+	return result, nil
 }
 
 func optionalString(dst map[string]any, key, value string) {

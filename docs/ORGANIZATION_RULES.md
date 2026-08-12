@@ -126,6 +126,25 @@ bitwave org accounting contacts create --org ORG_ID --accounting-connection Manu
   --id ID --name NAME --type Customer --yes
 ```
 
+### Dust is not spam
+
+Use `dust-inflow` only for priced, economically real, uncategorized,
+single-token receipts after spam scoring. The preset requires a wallet, one
+asset, and an inclusive maximum quantity because Bitwave rule comparisons use
+asset units rather than a universal USD FMV threshold:
+
+```bash
+bitwave rule plan --preset dust-inflow --wallet-id WALLET_ID --asset ASSET \
+  --max-asset-qty MAX_QUANTITY --accounting-connection-id Manual \
+  --category-id DUST_INCOME_CATEGORY_ID --contact-id DUST_SENDER_CONTACT_ID \
+  --fee-category-id GAS_CATEGORY_ID --fee-contact-id GAS_CONTACT_ID --enabled
+```
+
+Never apply one threshold across different tokens, and never use this preset
+for verified spam, multi-token transactions, bridges, internal transfers,
+DeFi, known counterparties, or failed pricing. Verified single-token spam
+belongs in the score-before-ignore workflow.
+
 If the trigger repeatedly returns a server-side error, use the **Run Rules**
 action on Bitwave's Rules page. The CLI should clearly distinguish this trigger
 failure from rule-creation failure.

@@ -34,6 +34,8 @@ type agentRuleSpec struct {
 	FeeContact                string                     `json:"feeContact,omitempty"`
 	FeeContactID              string                     `json:"feeContactId,omitempty"`
 	Asset                     string                     `json:"asset,omitempty"`
+	MinAssetQty               string                     `json:"minAssetQty,omitempty"`
+	MaxAssetQty               string                     `json:"maxAssetQty,omitempty"`
 	MethodID                  string                     `json:"methodId,omitempty"`
 	Direction                 string                     `json:"direction,omitempty"`
 	Wallet                    string                     `json:"wallet,omitempty"`
@@ -298,6 +300,8 @@ func addRuleAgentFlags(cmd *cobra.Command, f *ruleAgentFlags, includeMutation bo
 	cmd.Flags().StringVar(&f.spec.FeeContact, "fee-contact", "", "Fee contact ID or exact name")
 	cmd.Flags().StringVar(&f.spec.FeeContactID, "fee-contact-id", "", "Stable fee contact ID (skips contact discovery)")
 	cmd.Flags().StringVar(&f.spec.Asset, "asset", "", "Rule coin/ticker")
+	cmd.Flags().StringVar(&f.spec.MinAssetQty, "min-asset-qty", "", "Minimum matched asset quantity (inclusive)")
+	cmd.Flags().StringVar(&f.spec.MaxAssetQty, "max-asset-qty", "", "Maximum matched asset quantity (inclusive)")
 	cmd.Flags().StringVar(&f.spec.MethodID, "method-id", "", "Smart-contract method ID observed in transaction data")
 	cmd.Flags().StringVar(&f.spec.Direction, "direction", "", "Inbound, Outbound, All, Empty, or NA")
 	cmd.Flags().StringVar(&f.spec.Wallet, "wallet", "", "Wallet ID or exact name")
@@ -648,7 +652,7 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	}
 	plan := rulerecipes.Plan{
 		Preset: spec.Preset, ID: spec.ID, Name: spec.Name, Priority: spec.Priority,
-		AccountingConnectionID: connectionID, Asset: strings.ToUpper(strings.TrimSpace(spec.Asset)), MethodID: strings.TrimSpace(spec.MethodID), Direction: canonicalRuleDirection(spec.Direction),
+		AccountingConnectionID: connectionID, Asset: strings.ToUpper(strings.TrimSpace(spec.Asset)), MinAssetQty: strings.TrimSpace(spec.MinAssetQty), MaxAssetQty: strings.TrimSpace(spec.MaxAssetQty), MethodID: strings.TrimSpace(spec.MethodID), Direction: canonicalRuleDirection(spec.Direction),
 		WalletID: walletID, FromAddress: spec.FromAddress, ToAddress: spec.ToAddress,
 		AfterDateSEC: after, BeforeDateSEC: before, Enabled: spec.Enabled,
 		MultiToken: spec.MultiToken, AutoCategorizeFee: spec.AutoCategorizeFee, AllowMismatch: spec.AllowMismatch,
@@ -692,6 +696,9 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	}
 	if len(spec.Metadata) > 0 {
 		warnings = append(warnings, "Transaction samples are approximate because the search endpoint does not expose metadata filtering; validate against a known transaction after obtaining the rule ID.")
+	}
+	if spec.MinAssetQty != "" || spec.MaxAssetQty != "" {
+		warnings = append(warnings, "Transaction samples are approximate because compact search does not apply rule asset-quantity comparisons. Validate representative matches after rule execution.")
 	}
 	scope := ruleScopeAssessment{
 		DefaultScope: recipe.DefaultScope, ActualScope: "organization", Recommended: true, OverrideAllowed: true,
