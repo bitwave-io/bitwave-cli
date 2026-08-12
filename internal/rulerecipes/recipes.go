@@ -137,7 +137,13 @@ var catalog = []Recipe{
 		Name: "ignore-blank", Summary: "Ignore transactions that contain no transferred value.",
 		ActionType: "Ignore", PlanningTier: 2, DefaultScope: "transaction-specific", DefaultDirection: "Empty", ApplySupported: true,
 		Fields: []Field{}, Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": false, "allowMismatch": false},
-		Guidance: []string{"Use a bounded date window first because enabled rules also affect historical data.", "Do not use this preset for failed pricing or otherwise non-blank economic activity."},
+		Guidance: []string{
+			"Use this for records that render blank in the transaction UI and whose sampled transaction data has transactionType=Unknown with zero transaction lines and no asset, amount, address, or wallet evidence.",
+			"Zero-line records often add UI noise, but can also indicate incomplete or missing transaction data. Inspect a representative sample before creating the rule; do not make blank-ignore behavior a universal assumption.",
+			"Use a bounded date window first because enabled rules also affect historical data. Retain the ability to disable or remove the rule if data later appears.",
+			"Run this specific Empty/Ignore rule before any broad direction=All catch-all so the catch-all does not categorize blank records first.",
+			"Do not use this preset for failed pricing or otherwise non-blank economic activity. ignoreFailPricing belongs to a categorization action and is unrelated to ignoring blank transactions.",
+		},
 	},
 	{
 		Name: "metadata-categorization", Summary: "Categorize transactions matching one or more metadata key/value conditions.",

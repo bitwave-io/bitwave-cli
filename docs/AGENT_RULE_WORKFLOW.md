@@ -226,6 +226,30 @@ internal-transfer recipe, which has its own fee-category/contact contract.
 only. Detailed extractor lines are transaction-specific, so the CLI will not
 guess them.
 
+## Blank transaction cleanup
+
+Transactions that appear blank in the Bitwave UI commonly surface as
+`transactionType=Unknown` with zero transaction lines and no asset, amount,
+address, or wallet evidence. They can create substantial UI noise. Use the
+`ignore-blank` preset only after inspecting representative examples:
+
+```bash
+bitwave --quiet rule apply \
+  --preset ignore-blank \
+  --name "Cleanup - Ignore Blank Transactions" \
+  --priority 1 --direction Empty \
+  --from-date YYYY-MM-DD --to-date YYYY-MM-DD \
+  --accounting-connection-id CONNECTION_ID \
+  --enabled --yes --org ORG_ID
+```
+
+A zero-line record can also mean transaction data is incomplete or missing, so
+blank-ignore behavior is organization-specific and date-bounded rather than a
+universal default. Run this specific rule before a broad priority-3 `All`
+catch-all. `ignoreFailPricing=true` on a categorization rule is separate: it
+allows booking unpriced economic activity and must never be used as evidence
+that a transaction is blank.
+
 ## Prefer metadata and method ID when transaction evidence supports them
 
 Metadata rules are not Canton-only. An LLM should inspect representative
