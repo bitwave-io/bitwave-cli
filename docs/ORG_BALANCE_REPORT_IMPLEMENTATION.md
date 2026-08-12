@@ -4,7 +4,7 @@ Status: implemented and verified end to end on 2026-08-10
 
 Branch: `design/cloud-org-readiness`
 
-Test organization: `24371c55e25ae883fb58`
+Test organization: `ORG_ID`
 
 ## Outcome
 
@@ -90,7 +90,7 @@ An end-to-end report was run with:
 
 ```bash
 bitwave report balance \
-  --org 24371c55e25ae883fb58 \
+  --org ORG_ID \
   --as-of 2026-08-10 \
   --group-by wallet \
   --out 2026-08-10-bitwave-balance-by-wallet.csv

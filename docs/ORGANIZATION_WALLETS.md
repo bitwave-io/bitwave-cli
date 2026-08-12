@@ -119,8 +119,8 @@ wallet inputs, and incorrect Solana-validator configuration remain errors.
 
 ```bash
 bitwave org wallets add \
-  --name "Admin Wallet" \
-  --address 0x15918ff7f6c44592c81d999b442956b07d26cc44 \
+  --name "Primary Treasury Wallet" \
+  --address 0x1111111111111111111111111111111111111111 \
   --network polygon \
   --volume-reviewed \
   --estimated-transactions 42000 \
@@ -148,7 +148,7 @@ The batch format is designed for an LLM or onboarding script:
 [
   {
     "name": "Treasury",
-    "address": "GQSQuaHPGiwAeYpQZXEwwrF7Sqek8vUR3oca34e4ocq7",
+    "address": "11111111111111111111111111111111",
     "networkId": "sol",
     "volumeReview": {
       "reviewed": true,
@@ -158,8 +158,8 @@ The batch format is designed for an LLM or onboarding script:
     }
   },
   {
-    "name": "Art blocks",
-    "address": "0x6C093Fe8bc59e1e0cAe2Ec10F0B717D3D182056B",
+    "name": "NFT Operations",
+    "address": "0x2222222222222222222222222222222222222222",
     "networkId": "eth",
     "subsidiaryId": "SUBSIDIARY_ID",
     "volumeReview": {

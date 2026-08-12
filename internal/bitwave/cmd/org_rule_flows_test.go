@@ -10,7 +10,7 @@ import (
 )
 
 func TestClusterSummaryAddressesUsesBoundedEvidenceAndFullAddress(t *testing.T) {
-	const address = "0x15918ff7f6c44592c81d999b442956b07d26cc44"
+	const address = "0x1111111111111111111111111111111111111111"
 	records := []orgreports.TransactionSummaryAddressRecord{
 		{WalletID: "wallet-a", InteractingAddress: address, DepositsUncategorized: 70},
 		{WalletID: "wallet-a", InteractingAddress: strings.ToUpper(address), DepositsUncategorized: 60},
@@ -39,7 +39,7 @@ func TestClusterSummaryAddressesUsesBoundedEvidenceAndFullAddress(t *testing.T) 
 }
 
 func TestClusterSummaryAddressesSeparatesWallets(t *testing.T) {
-	const address = "0x15918ff7f6c44592c81d999b442956b07d26cc44"
+	const address = "0x1111111111111111111111111111111111111111"
 	records := []orgreports.TransactionSummaryAddressRecord{
 		{WalletID: "wallet-a", InteractingAddress: address, DepositsUncategorized: 4},
 		{WalletID: "wallet-b", InteractingAddress: address, DepositsUncategorized: 3},
@@ -75,7 +75,7 @@ func TestClusterSummaryAddressesRequiresExactNonEVMAddressLookup(t *testing.T) {
 }
 
 func TestClusterFlowTransactionsCapsStoredEvidence(t *testing.T) {
-	const address = "dtc-tokenizationpilot-1::12200b406828e4e0ba69fcbf5d60b9652a4a2a153ef28c6569c0fbfa7ac899675d67"
+	const address = "example-network::0000000000000000000000000000000000000000000000000000000000000001"
 	items := make([]json.RawMessage, 105)
 	for i := range items {
 		data, err := json.Marshal(flowTransaction{

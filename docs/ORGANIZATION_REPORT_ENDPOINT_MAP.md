@@ -216,7 +216,7 @@ with `Actions`, so the CLI must eventually give each its own explicit command:
 
 ## Production verification
 
-Organization: `24371c55e25ae883fb58`
+Organization: `ORG_ID`
 
 Transaction Export test:
 
