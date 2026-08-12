@@ -60,6 +60,9 @@ func newRuleMetadataGuideCmd() *cobra.Command {
 				result["exampleNetwork"] = guide.ExampleNetwork
 				result["documentedExampleKeys"] = guide.DocumentedKeys
 				result["patterns"] = patterns
+				result["ruleArchetypes"] = guide.RuleArchetypes
+				result["accountGuidance"] = guide.AccountGuidance
+				result["dataQualityChecks"] = guide.DataQualityChecks
 				result["vendorSpecificGuidance"] = guide.VendorSpecificGuidance
 				result["internalTransferStatus"] = guide.InternalTransferStatus
 				if standard != nil {

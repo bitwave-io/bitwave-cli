@@ -34,7 +34,11 @@ bitwave rule delete RULE_ID
 The agent workflow prefers stable metadata or `methodId` conditions found in
 representative transaction samples. `rule context` and `rule plan` preserve
 those fields and return bounded `conditionCandidates`; Canton mappings in
-`metadata-guide` are examples rather than the scope of metadata rules.
+`metadata-guide` are examples rather than the scope of metadata rules. The
+guide's Canton playbook combines `TransactionType` with `FeeType`,
+`RewardFeeType`, or `RewardType`, preserves exact observed metadata spelling,
+and exposes wallet-scoped fee/reward archetypes plus internal-transfer sweep
+guidance. COA names and numbers are never treated as universal defaults.
 
 ## Trade fees
 

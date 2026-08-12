@@ -9,10 +9,26 @@ type AccountMapping struct {
 type MetadataPattern struct {
 	Key                string `json:"key"`
 	Value              string `json:"value"`
+	TransactionType    string `json:"transactionType,omitempty"`
 	GenericCategory    string `json:"genericCategory"`
 	SpecificCategory   string `json:"specificCategory"`
 	InteractingAddress string `json:"interactingAddress"`
 	Meaning            string `json:"meaning"`
+}
+
+// RuleArchetype describes a reusable decision pattern, not a client rule.
+// Category and contact IDs must always be resolved from the active org.
+type RuleArchetype struct {
+	Name              string   `json:"name"`
+	TransactionType   string   `json:"transactionType"`
+	Direction         string   `json:"direction"`
+	DefaultScope      string   `json:"defaultScope"`
+	MetadataKeys      []string `json:"metadataKeys,omitempty"`
+	Action            string   `json:"action"`
+	CategoryClass     string   `json:"categoryClass,omitempty"`
+	ContactRequired   bool     `json:"contactRequired"`
+	AutoCategorizeFee bool     `json:"autoCategorizeFee"`
+	Guidance          []string `json:"guidance"`
 }
 
 type MetadataKnowledge struct {
@@ -28,6 +44,9 @@ type MetadataKnowledge struct {
 	StandardChart          []AccountMapping  `json:"standardChart"`
 	StandardSpecificChart  []AccountMapping  `json:"standardSpecificChart"`
 	GeneralPatterns        []MetadataPattern `json:"generalPatterns"`
+	RuleArchetypes         []RuleArchetype   `json:"ruleArchetypes"`
+	AccountGuidance        []string          `json:"accountGuidance"`
+	DataQualityChecks      []string          `json:"dataQualityChecks"`
 	VendorSpecificGuidance []string          `json:"vendorSpecificGuidance"`
 	InternalTransferStatus string            `json:"internalTransferStatus"`
 }
@@ -86,25 +105,68 @@ func MetadataGuide() MetadataKnowledge {
 			{"512", "Application Revenue Share Fee", "Expense"},
 		},
 		GeneralPatterns: []MetadataPattern{
-			{"FeeType", "receiver_lock_holding_fee", "Canton Coin Fees", "Coin Locking Fee", "0x0", "Receiver-side fee for holding a conditionally locked coin."},
-			{"FeeType", "receiver_base_transfer_fee", "Canton Coin Fees", "Contract Record Creation Fee", "0x0", "Receiver-side base fee for new coin contract records."},
-			{"FeeType", "receiver_transfer_fee", "Canton Coin Fees", "Tiered Transfer Fee", "0x0", "Tiered receiver transfer charge."},
-			{"FeeType", "sender_base_transfer_fee", "Canton Coin Fees", "Fixed Transfer Processing Fee", "0x0", "Fixed sender-side transfer processing charge."},
-			{"FeeType", "sender_lock_holding_fee", "Canton Coin Fees", "Locked Coin Transfer Fee", "0x0", "Sender-side cost of transferring locked coins."},
-			{"FeeType", "holding_fees", "Canton Coin Fees", "Idle Coin Transfer Fee", "0x0", "Holding fee consumed during network service usage."},
-			{"FeeType", "sender_fee", "Canton Coin Fees", "Network Service Purchase Fee", "0x0", "Sender cost for purchasing network traffic or services."},
-			{"FeeType", "sender_change_fee", "Canton Coin Fees", "Transfer Balance Adjustment Fee", "0x0", "Fee for recording sender change after a transfer."},
-			{"FeeType", "sender_transfer_fee", "Canton Coin Fees", "Variable Transfer Processing Fee", "0x0", "Variable sender-side transfer charge."},
-			{"RewardFeeType", "sender_change_fee", "Canton Coin Reward Fee", "Reward Claim Balance Adjustment Fee", "0x0", "Balance adjustment fee when claiming rewards."},
-			{"RewardType", "input_app_reward_amount", "Application Rewards", "Application Interaction Rewards", "0x0", "Reward for application interaction."},
-			{"RewardType", "input_sv_reward_amount", "Super Validator Rewards", "Super Validator Rewards", "0x0", "Super validator participation reward."},
-			{"RewardType", "input_validator_reward_amount", "Validator Rewards", "Validator Rewards", "0x0", "Validator network-service reward."},
+			{Key: "FeeType", Value: "receiver_lock_holding_fee", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Fees", SpecificCategory: "Coin Locking Fee", InteractingAddress: "0x0", Meaning: "Receiver-side fee for holding a conditionally locked coin."},
+			{Key: "FeeType", Value: "receiver_base_transfer_fee", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Fees", SpecificCategory: "Contract Record Creation Fee", InteractingAddress: "0x0", Meaning: "Receiver-side base fee for new coin contract records."},
+			{Key: "FeeType", Value: "receiver_transfer_fee", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Fees", SpecificCategory: "Tiered Transfer Fee", InteractingAddress: "0x0", Meaning: "Tiered receiver transfer charge."},
+			{Key: "FeeType", Value: "sender_base_transfer_fee", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Fees", SpecificCategory: "Fixed Transfer Processing Fee", InteractingAddress: "0x0", Meaning: "Fixed sender-side transfer processing charge."},
+			{Key: "FeeType", Value: "sender_lock_holding_fee", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Fees", SpecificCategory: "Locked Coin Transfer Fee", InteractingAddress: "0x0", Meaning: "Sender-side cost of transferring locked coins."},
+			{Key: "FeeType", Value: "holding_fees", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Fees", SpecificCategory: "Idle Coin Transfer Fee", InteractingAddress: "0x0", Meaning: "Holding fee consumed during a standard transfer."},
+			{Key: "FeeType", Value: "holding_fees", TransactionType: "AmuletRules_BuyMemberTraffic", GenericCategory: "Canton Coin Fees", SpecificCategory: "Idle Coin Usage Fee", InteractingAddress: "0x0", Meaning: "Holding fee consumed during network traffic or service usage."},
+			{Key: "FeeType", Value: "sender_fee", TransactionType: "AmuletRules_BuyMemberTraffic", GenericCategory: "Canton Coin Fees", SpecificCategory: "Network Service Purchase Fee", InteractingAddress: "0x0", Meaning: "Sender cost for purchasing network traffic or services."},
+			{Key: "FeeType", Value: "sender_change_fee", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Fees", SpecificCategory: "Transfer Balance Adjustment Fee", InteractingAddress: "0x0", Meaning: "Fee for recording sender change after a transfer."},
+			{Key: "FeeType", Value: "sender_transfer_fee", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Fees", SpecificCategory: "Variable Transfer Processing Fee", InteractingAddress: "0x0", Meaning: "Variable sender-side transfer charge."},
+			{Key: "RewardFeeType", Value: "sender_change_fee", TransactionType: "AmuletRules_Transfer", GenericCategory: "Canton Coin Reward Fee", SpecificCategory: "Reward Claim Balance Adjustment Fee", InteractingAddress: "0x0", Meaning: "Balance adjustment fee when claiming a reward during a transfer."},
+			{Key: "RewardFeeType", Value: "sender_change_fee", TransactionType: "AmuletRules_BuyMemberTraffic", GenericCategory: "Canton Coin Reward Fee", SpecificCategory: "Transfer Balance Adjustment Fee", InteractingAddress: "0x0", Meaning: "Balance adjustment fee when claiming a reward during network-service usage."},
+			{Key: "RewardType", Value: "input_app_reward_amount", TransactionType: "AmuletRules_Transfer", GenericCategory: "Application Rewards", SpecificCategory: "Application Interaction Rewards", InteractingAddress: "0x0", Meaning: "Reward for application interaction."},
+			{Key: "RewardType", Value: "input_sv_reward_amount", TransactionType: "AmuletRules_Transfer", GenericCategory: "Super Validator Rewards", SpecificCategory: "Super Validator Rewards", InteractingAddress: "0x0", Meaning: "Super validator participation reward."},
+			{Key: "RewardType", Value: "input_validator_reward_amount", TransactionType: "AmuletRules_Transfer", GenericCategory: "Validator Rewards", SpecificCategory: "Transaction Validation Rewards", InteractingAddress: "0x0", Meaning: "Validator reward associated with a transfer."},
+			{Key: "RewardType", Value: "input_validator_reward_amount", TransactionType: "AmuletRules_BuyMemberTraffic", GenericCategory: "Validator Rewards", SpecificCategory: "Validator Rewards", InteractingAddress: "0x0", Meaning: "Validator reward associated with network traffic or service usage."},
+		},
+		RuleArchetypes: []RuleArchetype{
+			{
+				Name: "canton-network-fee", TransactionType: "Standard", Direction: "Outbound", DefaultScope: "wallet",
+				MetadataKeys: []string{"TransactionType", "FeeType"}, Action: "SimpleCategorization", CategoryClass: "expense", ContactRequired: true, AutoCategorizeFee: false,
+				Guidance: []string{"Match the exact observed FeeType and, when needed, TransactionType.", "Use a general network-fee account or a more specific fee account only after the user approves the COA treatment."},
+			},
+			{
+				Name: "canton-reward-claim-fee", TransactionType: "Standard", Direction: "Outbound", DefaultScope: "wallet",
+				MetadataKeys: []string{"TransactionType", "RewardFeeType"}, Action: "SimpleCategorization", CategoryClass: "expense", ContactRequired: true, AutoCategorizeFee: false,
+				Guidance: []string{"RewardFeeType is distinct from FeeType; do not merge the two metadata fields.", "Resolve the client-approved reward or minting fee account and contact from the active org."},
+			},
+			{
+				Name: "canton-reward", TransactionType: "Standard", Direction: "Inbound", DefaultScope: "wallet",
+				MetadataKeys: []string{"TransactionType", "RewardType"}, Action: "SimpleCategorization", CategoryClass: "revenue", ContactRequired: true, AutoCategorizeFee: true,
+				Guidance: []string{"Separate application, validator, and super-validator reward types when the observed metadata supports that distinction.", "Wallet purpose can change the accounting treatment, so do not generalize across wallets without evidence."},
+			},
+			{
+				Name: "canton-wallet-program-activity", TransactionType: "Standard", Direction: "All", DefaultScope: "wallet",
+				Action: "SimpleCategorization", CategoryClass: "client-specific", ContactRequired: true, AutoCategorizeFee: true,
+				Guidance: []string{"Rebates, subscriptions, and other program activity require transaction evidence beyond a wallet name before creating a broad rule.", "Prefer stable metadata or counterparty evidence; a wallet-only rule is an explicit, validated exception."},
+			},
+			{
+				Name: "canton-sweep", TransactionType: "InternalTransfer", Direction: "All", DefaultScope: "organization",
+				Action: "InternalTransferCategorization", ContactRequired: false, AutoCategorizeFee: true,
+				Guidance: []string{"Treat confirmed sweeps between owned wallets as internal transfers, not revenue or expense.", "Use one organization-wide internal-transfer rule by default; add wallet scope only when the observed sweep behavior requires an explicit exception."},
+			},
+		},
+		AccountGuidance: []string{
+			"Treat example account names and numbers as mappings, not universal defaults. Resolve categories from the active organization's approved chart of accounts.",
+			"A generic Canton fee expense account is acceptable when the client has not approved separate accounts for holding, transfer, locking, traffic, or reward-claim fees.",
+			"Reward, rebate, subscription revenue, subscription expense, and minting-fee treatments are client accounting choices; never infer them from a wallet name alone.",
+			"Simple categorization requires both a category and contact. Internal transfers do not require either, but their fee mapping still requires the applicable fee category/contact.",
+		},
+		DataQualityChecks: []string{
+			"Read metadata from representative uncategorized transactions and preserve exact case, punctuation, underscores, and hyphens.",
+			"Treat sender_change_fee and sender-change_fee as different values until live transaction evidence proves normalization is safe.",
+			"Do not use EventId, RootTxn, transaction hashes, timestamps, block numbers, or other unique values as recurring rule conditions.",
+			"Validate each proposed rule against at least one expected match and one expected non-match in the same wallet before enabling it.",
+			"Detect overlap between wallet-wide standard rules and metadata-specific rules; the more specific rule must run first.",
 		},
 		VendorSpecificGuidance: []string{
-			"TransactionType=Amulet_Rules Transfer is vendor-specific and is not sufficient by itself to choose an accounting category.",
+			"TransactionType values such as AmuletRules_Transfer and AmuletRules_BuyMemberTraffic are network-specific and are not sufficient by themselves to choose an accounting category.",
 			"Combine TransactionType with the interacting vendor address using --from-address or --to-address.",
 			"The documented treatments include application revenue share rewards and application subscription fees; the user must select the treatment appropriate to that vendor relationship.",
 		},
-		InternalTransferStatus: "The official metadata-rule guide marks its Internal Transfer Rules section as under construction; do not invent metadata mappings for it.",
+		InternalTransferStatus: "Do not invent a metadata mapping for internal transfers. Confirmed Canton sweeps use the InternalTransferCategorization action; keep the default organization-wide rule unless transaction evidence requires a wallet-scoped exception.",
 	}
 }

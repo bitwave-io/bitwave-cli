@@ -224,7 +224,7 @@ func TestMetadataGuideFiltersKey(t *testing.T) {
 	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Patterns) != 3 {
+	if len(result.Patterns) != 4 {
 		t.Fatalf("patterns = %#v", result.Patterns)
 	}
 }

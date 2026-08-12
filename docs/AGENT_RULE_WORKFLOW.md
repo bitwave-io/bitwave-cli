@@ -257,6 +257,27 @@ The Canton examples include `FeeType`, `RewardFeeType`, `RewardType`, and
 be used. Metadata and method ID conditions can be added to any supported
 recipe:
 
+For Canton, treat `TransactionType` as a disambiguator rather than a complete
+rule. The same metadata value can have different meanings: for example,
+`FeeType=holding_fees` on `AmuletRules_Transfer` represents an idle-coin
+transfer fee, while the same value on `AmuletRules_BuyMemberTraffic`
+represents an idle-coin usage fee. Preserve exact live spellings; underscores
+and hyphens are not interchangeable unless transaction evidence proves they
+are normalized by the API.
+
+`metadata-guide --chart both` also returns a machine-readable Canton playbook:
+
+- fee, reward-fee, reward, wallet-program, and sweep rule archetypes;
+- whether a category/contact is required;
+- generic versus specific COA guidance;
+- validation and overlap checks.
+
+Example account names and numbers are mappings, not defaults. Resolve the
+active organization's approved category and contact IDs. Confirmed sweeps use
+internal-transfer categorization; rebates, subscriptions, minting fees, and
+rewards remain client accounting decisions and must not be inferred from a
+wallet name alone.
+
 ```bash
 bitwave --quiet rule apply \
   --preset metadata-categorization \

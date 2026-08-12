@@ -210,3 +210,21 @@ func TestMetadataGuideIncludesDocumentedCantonPattern(t *testing.T) {
 		t.Fatalf("metadata guide missing documented pattern or construction warning: %#v", guide)
 	}
 }
+
+func TestMetadataGuideUsesTransactionTypeToDisambiguateCantonMetadata(t *testing.T) {
+	guide := MetadataGuide()
+	found := map[string]string{}
+	for _, pattern := range guide.GeneralPatterns {
+		if pattern.Key == "FeeType" && pattern.Value == "holding_fees" {
+			found[pattern.TransactionType] = pattern.SpecificCategory
+		}
+	}
+	if found["AmuletRules_Transfer"] != "Idle Coin Transfer Fee" ||
+		found["AmuletRules_BuyMemberTraffic"] != "Idle Coin Usage Fee" {
+		t.Fatalf("holding fee patterns = %#v", found)
+	}
+
+	if len(guide.RuleArchetypes) == 0 || len(guide.AccountGuidance) == 0 || len(guide.DataQualityChecks) == 0 {
+		t.Fatalf("Canton playbook is incomplete: %#v", guide)
+	}
+}

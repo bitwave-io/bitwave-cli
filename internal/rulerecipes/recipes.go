@@ -15,7 +15,7 @@ const (
 	SourceURL          = "https://docs.bitwave.io/docs/set-up-categorization-rules"
 	MetadataSourceURL  = "https://docs.bitwave.io/docs/metadata-based-rule-categorization"
 	RuleUsageSourceURL = "https://docs.bitwave.io/docs/how-to-use-rules"
-	LastVerified       = "2026-08-11"
+	LastVerified       = "2026-08-12"
 )
 
 type Source struct {
@@ -79,6 +79,7 @@ func PlanningHierarchy() []PlanningTier {
 			Guidance: []string{
 				"Direction alone is insufficient; inspect transaction evidence and narrow with stable metadata, method ID, address, asset, wallet, or another supported condition.",
 				"Simple inflow and outflow rules should be wallet-scoped by default. Organization-wide scope is supported, but it should be a deliberate exception.",
+				"For Canton activity, inspect TransactionType together with FeeType, RewardFeeType, or RewardType. Preserve the exact key/value spelling observed in the organization and validate it before enabling the rule.",
 			},
 		},
 	}

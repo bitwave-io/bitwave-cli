@@ -119,6 +119,10 @@ func newRuleRecipesCmd() *cobra.Command {
 				"agentWorkflow":     []string{"metadata-guide", "context", "plan", "apply"},
 				"planningHierarchy": rulerecipes.PlanningHierarchy(),
 				"conditionStrategy": guide.Recommendation, "candidateConditions": guide.CandidateConditions,
+				"networkPlaybooks": map[string]any{"canton": map[string]any{
+					"ruleArchetypes": guide.RuleArchetypes, "accountGuidance": guide.AccountGuidance,
+					"dataQualityChecks": guide.DataQualityChecks, "internalTransferStatus": guide.InternalTransferStatus,
+				}},
 			})
 		},
 	}
