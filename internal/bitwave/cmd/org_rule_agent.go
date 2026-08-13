@@ -699,6 +699,12 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	if recipe.Name == "trade" && spec.IgnoreFailPricing {
 		warnings = append(warnings, "Trade ignoreFailPricing was enabled by request. The Bitwave default is unchecked/false so failed-priced transactions, including possible DeFi activity, are not swept into the generic trade rule.")
 	}
+	if recipe.Name == "catch-all-clearing" {
+		warnings = append(warnings, recipe.ConfirmationPrompt)
+		if spec.Priority < recipe.RecommendedPriority {
+			warnings = append(warnings, fmt.Sprintf("Catch-all priority %d has higher precedence than the recommended priority %d. Confirm that trade and internal-transfer rules still run first.", spec.Priority, recipe.RecommendedPriority))
+		}
+	}
 	if len(spec.Metadata) > 0 {
 		warnings = append(warnings, "Transaction samples are approximate because the search endpoint does not expose metadata filtering; validate against a known transaction after obtaining the rule ID.")
 	}
@@ -718,6 +724,9 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 	}
 	if (recipe.Name == "simple-inflow" || recipe.Name == "simple-outflow") && scope.ActualScope == "organization" {
 		scope.Risk = "broad-simple-flow"
+	}
+	if recipe.Name == "catch-all-clearing" {
+		scope.Risk = "catch-all-accounting"
 	}
 	return resolvedRulePlan{Spec: spec, Recipe: recipe, Payload: payload, Resolution: resolution, ScopeAssessment: scope, Samples: samples, NextToken: nextToken, ConditionCandidates: ruleConditionCandidates(samples, 25), Warnings: warnings}, nil
 }

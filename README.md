@@ -425,6 +425,11 @@ across all networks and transaction types. It ranks repeated metadata and
 method IDs, rejects transaction-specific/high-cardinality fields, and reports
 the observed wallet, transaction-type, network, and asset scope for each
 candidate so an LLM can narrow a proposed rule without loading full history.
+If the user wants a final clearing fallback, use `catch-all-clearing`. It
+defaults to direction `All` and multi-token handling and prompts the agent to
+confirm that trade and internal-transfer rules run first. This matters because
+owned-wallet transfers should normally move at cost; misclassifying them can
+create artificial gains or losses.
 Because background rule processing runs only intermittently (roughly twice per
 day), use `bitwave rule run --org ORG_ID --yes` after creation to trigger
 processing sooner.

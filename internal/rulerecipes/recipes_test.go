@@ -102,7 +102,7 @@ func TestDustInflowRequiresBoundedWalletAssetAndBuildsQuantityRule(t *testing.T)
 
 func TestPlanningHierarchyStartsWithOrganizationWideTypes(t *testing.T) {
 	hierarchy := PlanningHierarchy()
-	if len(hierarchy) != 2 || hierarchy[0].Tier != 1 || hierarchy[1].Tier != 2 {
+	if len(hierarchy) != 3 || hierarchy[0].Tier != 1 || hierarchy[1].Tier != 2 || hierarchy[2].Tier != 3 {
 		t.Fatalf("hierarchy = %#v", hierarchy)
 	}
 	if !hierarchy[0].RecommendedStart || !hierarchy[0].ApplyAsSingleBatch {
@@ -117,6 +117,41 @@ func TestPlanningHierarchyStartsWithOrganizationWideTypes(t *testing.T) {
 		if !ok || recipe.DefaultScope != "organization" {
 			t.Fatalf("recipe %q = %#v", preset, recipe)
 		}
+	}
+	if len(hierarchy[2].Presets) != 1 || hierarchy[2].Presets[0] != "catch-all-clearing" || hierarchy[2].RecommendedStart {
+		t.Fatalf("catch-all tier = %#v", hierarchy[2])
+	}
+}
+
+func TestCatchAllClearingDefaultsToMultiTokenAndExposesAccountingRisk(t *testing.T) {
+	recipe, ok := Find("catch-all-clearing")
+	if !ok || recipe.PlanningTier != 3 || recipe.RecommendedPriority != 3 || !recipe.DefaultMulti || recipe.ConfirmationPrompt == "" || len(recipe.Prerequisites) != 2 {
+		t.Fatalf("catch-all recipe = %#v", recipe)
+	}
+	payload, err := Build(Plan{
+		Preset: "catch-all-clearing", Name: "Remaining to clearing", Priority: 3, Enabled: true,
+		AccountingConnectionID: "Manual", CategoryID: "Manual.clearing", ContactID: "Manual.vendor",
+		FeeCategoryID: "Manual.gas", FeeContactID: "Manual.gas",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Transfer struct {
+			Priority   int    `json:"priority"`
+			Direction  string `json:"direction"`
+			MultiToken bool   `json:"multiToken"`
+			Action     struct {
+				Type       string `json:"type"`
+				CategoryID string `json:"categoryId"`
+			} `json:"action"`
+		} `json:"transfer"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Transfer.Priority != 3 || decoded.Transfer.Direction != "All" || !decoded.Transfer.MultiToken || decoded.Transfer.Action.Type != "SimpleCategorization" || decoded.Transfer.Action.CategoryID != "Manual.clearing" {
+		t.Fatalf("catch-all payload = %#v", decoded.Transfer)
 	}
 }
 

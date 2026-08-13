@@ -250,6 +250,38 @@ catch-all. `ignoreFailPricing=true` on a categorization rule is separate: it
 allows booking unpriced economic activity and must never be used as evidence
 that a transaction is blank.
 
+## Optional catch-all clearing rule
+
+A catch-all is a user choice, not an automatic onboarding step. When the user
+wants one, use the dedicated `catch-all-clearing` preset. It defaults to
+direction `All` and `multiToken=true`, and recommends priority 3:
+
+```bash
+bitwave --quiet rule apply \
+  --preset catch-all-clearing \
+  --name "Fallback - Remaining Transactions to Clearing" \
+  --priority 3 \
+  --accounting-connection-id CONNECTION_ID \
+  --category-id CLEARING_CATEGORY_ID \
+  --contact-id FALLBACK_CONTACT_ID \
+  --fee-category-id GAS_CATEGORY_ID \
+  --fee-contact-id GAS_CONTACT_ID \
+  --enabled --yes --org ORG_ID
+```
+
+Before creating it, the LLM should prompt the user to confirm the fallback
+treatment and check that enabled trade and internal-transfer rules have higher
+precedence. This is advisory: an explicit user decision may proceed with a
+different hierarchy.
+
+The accounting consequence must be explained plainly. Trades should remain
+trades. Transfers between owned wallets should normally carry assets at cost;
+if a broad clearing, income, or expense rule captures them instead, Bitwave may
+treat the movement like a disposal and calculate artificial gains or losses.
+Specific gas-only, metadata, counterparty, wallet, and other approved rules
+should also run before the fallback. Ask separately whether unpriced activity
+should be included through `--ignore-fail-pricing`.
+
 ## Prefer metadata and method ID when transaction evidence supports them
 
 Metadata rules are not Canton-only. An LLM should inspect representative

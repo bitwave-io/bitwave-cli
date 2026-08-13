@@ -60,6 +60,44 @@ func TestRuleApplyDryRunWithIDsNeedsNoDiscovery(t *testing.T) {
 	}
 }
 
+func TestCatchAllPlanPromptsWithoutBlockingExplicitChoice(t *testing.T) {
+	command := newRuleApplyCmd()
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	command.SetArgs([]string{
+		"--org", "org-1", "--preset", "catch-all-clearing", "--name", "Remaining to clearing", "--priority", "3",
+		"--accounting-connection-id", "Manual", "--category-id", "Manual.clearing", "--contact-id", "Manual.vendor",
+		"--fee-category-id", "Manual.gas", "--fee-contact-id", "Manual.gas", "--enabled", "--dry-run",
+	})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Plans []struct {
+			Payload  json.RawMessage `json:"payload"`
+			Warnings []string        `json:"warnings"`
+			Scope    struct {
+				Risk string `json:"risk"`
+			} `json:"scopeAssessment"`
+		} `json:"plans"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil || len(result.Plans) != 1 {
+		t.Fatalf("output = %s err=%v", output.String(), err)
+	}
+	var payload struct {
+		Transfer struct {
+			MultiToken bool `json:"multiToken"`
+		} `json:"transfer"`
+	}
+	if err := json.Unmarshal(result.Plans[0].Payload, &payload); err != nil || !payload.Transfer.MultiToken {
+		t.Fatalf("payload = %#v err=%v", payload, err)
+	}
+	if len(result.Plans[0].Warnings) == 0 || !strings.Contains(result.Plans[0].Warnings[0], "trade and internal-transfer rules") || result.Plans[0].Scope.Risk != "catch-all-accounting" {
+		t.Fatalf("plan = %#v", result.Plans[0])
+	}
+}
+
 func TestReadAgentRuleSpecsAcceptsBatch(t *testing.T) {
 	specs, err := readAgentRuleSpecs("-", agentRuleSpec{}, strings.NewReader(`[
       {"preset":"trade","name":"trades"},

@@ -185,6 +185,15 @@ Direction alone does not determine treatment, so these rules require more
 transaction evidence and narrower conditions such as stable metadata, method
 ID, address, asset, or—when genuinely relevant—wallet.
 
+Tier 3 is an optional clearing fallback. If the user wants it, use
+`catch-all-clearing`, recommend priority 3, direction `All`, and multi-token
+handling. Prompt the user to confirm the selected clearing treatment and check
+for higher-precedence enabled trade and internal-transfer rules. Do not block
+an explicit user decision, but explain that an owned-wallet transfer captured
+by clearing can be treated as a disposal, creating gains or losses instead of
+carrying the asset at cost. The preset exposes this prompt, its prerequisites,
+and the accounting risk as machine-readable recipe fields.
+
 `bitwave rule recipes --json` exposes the same policy through
 `planningHierarchy`, `planningTier`, and `defaultScope` for
 LLM clients. These are advisory defaults; requested filters and settings are

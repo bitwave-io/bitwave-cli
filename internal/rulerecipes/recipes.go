@@ -15,7 +15,7 @@ const (
 	SourceURL          = "https://docs.bitwave.io/docs/set-up-categorization-rules"
 	MetadataSourceURL  = "https://docs.bitwave.io/docs/metadata-based-rule-categorization"
 	RuleUsageSourceURL = "https://docs.bitwave.io/docs/how-to-use-rules"
-	LastVerified       = "2026-08-12"
+	LastVerified       = "2026-08-13"
 )
 
 type Source struct {
@@ -38,17 +38,21 @@ type Field struct {
 }
 
 type Recipe struct {
-	Name             string         `json:"name"`
-	Summary          string         `json:"summary"`
-	ActionType       string         `json:"actionType"`
-	PlanningTier     int            `json:"planningTier"`
-	DefaultScope     string         `json:"defaultScope"`
-	DefaultDirection string         `json:"defaultDirection"`
-	DefaultMulti     bool           `json:"defaultMultiToken"`
-	ApplySupported   bool           `json:"applySupported"`
-	Fields           []Field        `json:"fields"`
-	Defaults         map[string]any `json:"defaults"`
-	Guidance         []string       `json:"guidance"`
+	Name                string         `json:"name"`
+	Summary             string         `json:"summary"`
+	ActionType          string         `json:"actionType"`
+	PlanningTier        int            `json:"planningTier"`
+	RecommendedPriority int            `json:"recommendedPriority,omitempty"`
+	DefaultScope        string         `json:"defaultScope"`
+	DefaultDirection    string         `json:"defaultDirection"`
+	DefaultMulti        bool           `json:"defaultMultiToken"`
+	ApplySupported      bool           `json:"applySupported"`
+	Fields              []Field        `json:"fields"`
+	Defaults            map[string]any `json:"defaults"`
+	Guidance            []string       `json:"guidance"`
+	Prerequisites       []string       `json:"prerequisites,omitempty"`
+	ConfirmationPrompt  string         `json:"confirmationPrompt,omitempty"`
+	AccountingRisk      string         `json:"accountingRisk,omitempty"`
 }
 
 type PlanningTier struct {
@@ -80,6 +84,16 @@ func PlanningHierarchy() []PlanningTier {
 				"Direction alone is insufficient; inspect transaction evidence and narrow with stable metadata, method ID, address, asset, wallet, or another supported condition.",
 				"Simple inflow and outflow rules should be wallet-scoped by default. Organization-wide scope is supported, but it should be a deliberate exception.",
 				"For Canton activity, inspect TransactionType together with FeeType, RewardFeeType, or RewardType. Preserve the exact key/value spelling observed in the organization and validate it before enabling the rule.",
+			},
+		},
+		{
+			Tier: 3, Name: "optional clearing fallback",
+			Presets: []string{"catch-all-clearing"},
+			Guidance: []string{
+				"Offer a catch-all only after specific transaction-type and granular rules. It is optional, not a default requirement.",
+				"Prompt the user to confirm that enabled trade and internal-transfer rules have higher precedence before creating the fallback; proceed if the user accepts the accounting risk or requests a different hierarchy.",
+				"Internal transfers require special care: they normally move assets at cost. Booking them to a clearing, income, or expense account can create artificial disposals and gains or losses.",
+				"A true direction=All fallback should include multi-token transactions by default so remaining multi-line activity is not silently omitted.",
 			},
 		},
 	}
@@ -143,6 +157,23 @@ var catalog = []Recipe{
 			"Use a bounded date window first because enabled rules also affect historical data. Retain the ability to disable or remove the rule if data later appears.",
 			"Run this specific Empty/Ignore rule before any broad direction=All catch-all so the catch-all does not categorize blank records first.",
 			"Do not use this preset for failed pricing or otherwise non-blank economic activity. ignoreFailPricing belongs to a categorization action and is unrelated to ignoring blank transactions.",
+		},
+	},
+	{
+		Name: "catch-all-clearing", Summary: "Categorize remaining unmatched transactions to a user-approved clearing account.",
+		ActionType: "SimpleCategorization", PlanningTier: 3, RecommendedPriority: 3, DefaultScope: "organization", DefaultDirection: "All", DefaultMulti: true, ApplySupported: true,
+		Fields:             []Field{{"category", true, "User-approved clearing category."}, {"contact", true, "User-approved fallback contact."}, {"feeCategory", true, "Fee category for separate network-fee lines."}, {"feeContact", true, "Fee contact for separate network-fee lines."}},
+		Defaults:           map[string]any{"multiToken": true, "autoCategorizeFee": true, "allowMismatch": false, "ignoreFailPricing": false},
+		Prerequisites:      []string{"enabled higher-precedence trade rule", "enabled higher-precedence internal-transfer rule"},
+		ConfirmationPrompt: "Before I create this catch-all, should remaining unmatched transactions be booked to the selected clearing account? I recommend confirming that trade and internal-transfer rules run first; otherwise trades may be misclassified and transfers between owned wallets may create artificial gains or losses instead of moving at cost.",
+		AccountingRisk:     "A broad catch-all can override the intended economic treatment of unmatched trades and owned-wallet transfers. Internal transfers should normally carry assets at cost, not create a disposal.",
+		Guidance: []string{
+			"This is an optional final fallback. Ask for confirmation and explain the accounting consequence, but do not block an explicit user choice.",
+			"Use direction=All and multiToken=true by default. Keep the fallback at lower precedence than trade, internal-transfer, gas-only, metadata, counterparty, wallet, and other specific rules.",
+			"Check the active organization for enabled TradeCategorization and InternalTransferCategorization rules with higher precedence. If either is missing, warn and offer to create it first.",
+			"Trade rules should categorize trades as trades. Internal-transfer rules should categorize movements between owned wallets as internal transfers so cost basis carries rather than producing artificial gains or losses.",
+			"Resolve the clearing category, contact, fee category, and fee contact from the active organization. Do not invent account IDs.",
+			"Ask separately whether failed-pricing transactions should be included; set ignoreFailPricing only when the user wants that behavior.",
 		},
 	},
 	{
@@ -253,7 +284,7 @@ func Build(plan Plan) (json.RawMessage, error) {
 
 	action := map[string]any{"type": recipe.ActionType}
 	switch recipe.Name {
-	case "simple-inflow", "simple-outflow", "dust-inflow", "metadata-categorization":
+	case "simple-inflow", "simple-outflow", "dust-inflow", "metadata-categorization", "catch-all-clearing":
 		if plan.CategoryID == "" || plan.ContactID == "" {
 			return nil, fmt.Errorf("preset %q requires category and contact", recipe.Name)
 		}
