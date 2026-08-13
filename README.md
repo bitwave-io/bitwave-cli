@@ -411,6 +411,14 @@ bitwave inventory delete "US GAAP - Fair Value" --dry-run
 bitwave inventory create --profile us-federal-tax-fifo --dry-run
 ```
 
+`inventory update` mirrors the UI's **Update Now** action: it sends an explicit
+end date of yesterday in the organization timezone by default. Use `--as-of`
+to select an earlier date. Optional `--reference-run` and
+`--reference-end-date` flags expose the reference-run workflow as a required
+pair without making an LLM invent a reference.
+Use `bitwave inventory updates VIEW_ID_OR_NAME` to inspect run status and
+errors after starting the calculation.
+
 The CLI never infers that a U.S. location alone establishes U.S. GAAP, entity
 classification, federal tax treatment, or state/local obligations. The LLM
 must ask the user and their accountant to confirm the purpose, reporting

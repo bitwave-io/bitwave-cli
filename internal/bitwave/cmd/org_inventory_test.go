@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestUSInventoryProfilesKeepBooksAndTaxSeparate(t *testing.T) {
@@ -26,6 +27,21 @@ func TestUSInventoryProfilesKeepBooksAndTaxSeparate(t *testing.T) {
 	}
 	if books.Request.Config.InventoryMappingRule == nil || books.Request.Config.InventoryMappingRule.Type != "inventory-per-wallet" || tax.Request.Strategy.TaxStrategy != "FIFO" {
 		t.Fatalf("mapping/strategy books=%#v tax=%#v", books.Request, tax.Request)
+	}
+}
+
+func TestInventoryUpdateDateMatchesUIUpdateNow(t *testing.T) {
+	now := time.Date(2026, time.August, 13, 1, 30, 0, 0, time.UTC)
+	got, err := resolveInventoryUpdateDate("", "America/Los_Angeles", now)
+	if err != nil || got != "2026-08-11" {
+		t.Fatalf("date = %q err=%v", got, err)
+	}
+	got, err = resolveInventoryUpdateDate("2026-08-10", "America/Los_Angeles", now)
+	if err != nil || got != "2026-08-10" {
+		t.Fatalf("explicit date = %q err=%v", got, err)
+	}
+	if _, err := resolveInventoryUpdateDate("2026-08-12", "America/Los_Angeles", now); err == nil {
+		t.Fatal("expected organization-local today to be rejected")
 	}
 }
 

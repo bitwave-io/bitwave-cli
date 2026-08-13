@@ -32,6 +32,33 @@ bitwave inventory update "US GAAP - Fair Value" --yes
 bitwave inventory delete "US GAAP - Fair Value" --dry-run
 ```
 
+`inventory update` mirrors the web application's **Update Now** behavior. It
+uses the enhanced update-request endpoint and, unless `--as-of` is supplied,
+sets the current run end date to yesterday in the organization's timezone.
+This prevents a same-day pricing window from extending into the future. The
+resolved date and timezone are returned in JSON.
+
+When the reference-inventory-view feature is enabled, an LLM may provide a
+prior run and its end date together:
+
+```bash
+bitwave inventory update "US GAAP - Fair Value" \
+  --as-of 2026-08-12 \
+  --reference-run UPDATE_ID \
+  --reference-end-date 2026-07-31 \
+  --yes
+```
+
+After starting a run, inspect the same run history and errors shown by the UI:
+
+```bash
+bitwave inventory updates "US GAAP - Fair Value"
+```
+
+Never invent a reference run ID. `--reference-run` and
+`--reference-end-date` must either both be present or both be absent. Explicit
+end dates cannot be today or later in the organization timezone.
+
 All writes require `--yes`; `--dry-run` returns the exact request without
 changing the organization. Creation is idempotent by exact case-insensitive
 view name.

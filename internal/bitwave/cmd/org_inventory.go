@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -47,7 +48,7 @@ qualified accountant must verify the current primary sources, entity facts,
 asset scope, state/local requirements, and intended reporting purpose before
 relying on a view. Guidance never blocks an explicit user choice.`,
 	}
-	cmd.AddCommand(newOrgInventoryListCmd(), newOrgInventoryGuidanceCmd(), newOrgInventoryCreateCmd(), newOrgInventoryUpdateCmd(), newOrgInventoryDeleteCmd())
+	cmd.AddCommand(newOrgInventoryListCmd(), newOrgInventoryUpdatesCmd(), newOrgInventoryGuidanceCmd(), newOrgInventoryCreateCmd(), newOrgInventoryUpdateCmd(), newOrgInventoryDeleteCmd())
 	return cmd
 }
 
@@ -67,6 +68,38 @@ func newOrgInventoryListCmd() *cobra.Command {
 				return fmt.Errorf("list inventory views: %w", err)
 			}
 			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "inventoryViews": views})
+		},
+	}
+	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
+	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
+	return cmd
+}
+
+func newOrgInventoryUpdatesCmd() *cobra.Command {
+	var orgID string
+	cmd := &cobra.Command{
+		Use:   "updates VIEW_ID_OR_NAME",
+		Short: "List inventory calculation runs and errors",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			resolvedOrg, err := resolveReportOrg(orgID)
+			if err != nil {
+				return err
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrg))
+			views, err := client.InventoryViews(cmd.Context(), resolvedOrg)
+			if err != nil {
+				return fmt.Errorf("list inventory views: %w", err)
+			}
+			view, err := resolveInventoryView(args[0], views)
+			if err != nil {
+				return err
+			}
+			updates, err := client.InventoryViewUpdates(cmd.Context(), resolvedOrg, view.ID)
+			if err != nil {
+				return fmt.Errorf("list inventory updates: %w", err)
+			}
+			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "inventoryView": view, "updates": updates})
 		},
 	}
 	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
@@ -171,6 +204,8 @@ func newOrgInventoryCreateCmd() *cobra.Command {
 
 func newOrgInventoryUpdateCmd() *cobra.Command {
 	var f transactionMutationFlags
+	var asOf, referenceRun, referenceEndDate string
+	var transferAtHistoricalCost bool
 	cmd := &cobra.Command{
 		Use:   "update VIEW_ID_OR_NAME",
 		Short: "Start an inventory-view calculation",
@@ -182,6 +217,24 @@ func newOrgInventoryUpdateCmd() *cobra.Command {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
 			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			org, err := client.Org(cmd.Context(), orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("load organization timezone: %w", err))
+			}
+			resolvedAsOf, err := resolveInventoryUpdateDate(asOf, org.Timezone, time.Now())
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("--as-of: %w", err))
+			}
+			referenceRun = strings.TrimSpace(referenceRun)
+			referenceEndDate = strings.TrimSpace(referenceEndDate)
+			if (referenceRun == "") != (referenceEndDate == "") {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("--reference-run and --reference-end-date must be supplied together"))
+			}
+			if referenceEndDate != "" {
+				if _, err := resolveInventoryUpdateDate(referenceEndDate, org.Timezone, time.Now()); err != nil {
+					return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("--reference-end-date: %w", err))
+				}
+			}
 			views, err := client.InventoryViews(cmd.Context(), orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("list inventory views: %w", err))
@@ -190,22 +243,53 @@ func newOrgInventoryUpdateCmd() *cobra.Command {
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
-			request := map[string]any{"method": "POST", "path": "/orgs/" + orgID + "/inventory-views/" + view.ID + "/updates", "inventoryView": view}
+			input := orgreports.InventoryViewUpdateRequest{
+				RunIDReference:           referenceRun,
+				StartingDate:             referenceEndDate,
+				EndingDate:               resolvedAsOf,
+				TransferAtHistoricalCost: transferAtHistoricalCost,
+			}
+			request := map[string]any{"method": "POST", "path": "/orgs/" + orgID + "/inventory-views/" + view.ID + "/update-requests", "organizationTimezone": org.Timezone, "inventoryView": view, "body": input}
 			if f.dryRun {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: request})
 			}
 			if !f.yes {
 				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to start the inventory calculation without --yes (use --dry-run to preview)"))
 			}
-			result, err := client.TriggerInventoryViewUpdate(cmd.Context(), orgID, view.ID)
+			result, err := client.TriggerInventoryViewUpdateEnhanced(cmd.Context(), orgID, view.ID, input)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("start inventory-view update: %w", err))
 			}
-			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "started", "inventoryView": view, "runId": result.ID}})
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "started", "inventoryView": view, "runId": result.ID, "asOf": resolvedAsOf, "organizationTimezone": org.Timezone, "referenceRun": referenceRun, "referenceEndDate": referenceEndDate}})
 		},
 	}
 	addMutationFlags(cmd, &f)
+	cmd.Flags().StringVar(&asOf, "as-of", "", "Current run end date in YYYY-MM-DD (default: yesterday in the organization timezone, matching Update Now)")
+	cmd.Flags().StringVar(&referenceRun, "reference-run", "", "Optional prior inventory update ID to reference")
+	cmd.Flags().StringVar(&referenceEndDate, "reference-end-date", "", "Reference run end date in YYYY-MM-DD (requires --reference-run)")
+	cmd.Flags().BoolVar(&transferAtHistoricalCost, "transfer-at-historical-cost", false, "Value transfers at historical cost at the reference start date")
 	return cmd
+}
+
+func resolveInventoryUpdateDate(requested, timezone string, now time.Time) (string, error) {
+	location, err := time.LoadLocation(strings.TrimSpace(timezone))
+	if err != nil {
+		return "", fmt.Errorf("organization timezone %q is invalid: %w", timezone, err)
+	}
+	maximum := now.In(location).AddDate(0, 0, -1).Format("2006-01-02")
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		return maximum, nil
+	}
+	parsed, err := time.ParseInLocation("2006-01-02", requested, location)
+	if err != nil {
+		return "", errors.New("must be a valid calendar date in YYYY-MM-DD format")
+	}
+	maxDate, _ := time.ParseInLocation("2006-01-02", maximum, location)
+	if parsed.After(maxDate) {
+		return "", fmt.Errorf("cannot be today or in the future; latest allowed date is %s", maximum)
+	}
+	return requested, nil
 }
 
 func newOrgInventoryDeleteCmd() *cobra.Command {
