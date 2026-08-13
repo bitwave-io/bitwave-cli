@@ -393,6 +393,32 @@ bitwave report actions \
 `transaction-export` also accepts the aliases `transactions-export` and
 `txn-export`.
 
+Inventory views can be created and recalculated without opening the web app.
+The jurisdiction profiles are compact prompts for an LLM; they are advisory,
+not a substitute for legal, tax, accounting, or financial advice:
+
+```sh
+# Inspect current, source-linked U.S. books and tax prompts first.
+bitwave inventory guidance --jurisdiction US
+
+# Preview, create, then calculate a U.S. GAAP books view.
+bitwave inventory create --profile us-gaap --dry-run
+bitwave inventory create --profile us-gaap --yes
+bitwave inventory update "US GAAP - Fair Value" --yes
+
+# Tax is a separate decision and a separate view.
+bitwave inventory create --profile us-federal-tax-fifo --dry-run
+```
+
+The CLI never infers that a U.S. location alone establishes U.S. GAAP, entity
+classification, federal tax treatment, or state/local obligations. The LLM
+must ask the user and their accountant to confirm the purpose, reporting
+framework, entity and asset scope, wallet/account mapping, lot-selection and
+recordkeeping policy, fee treatment, pricing, fiscal year, and applicable
+jurisdictions. Sources must be rechecked at execution time because rules and
+standards change. See
+[`docs/INVENTORY_JURISDICTION_GUIDANCE.md`](docs/INVENTORY_JURISDICTION_GUIDANCE.md).
+
 Organization categorization rules have an agent-native workflow. An LLM can
 load compact Bitwave rule knowledge, discover only relevant organization
 choices, and apply one or many rules in a single authenticated process:
