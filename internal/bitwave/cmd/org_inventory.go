@@ -48,7 +48,7 @@ qualified accountant must verify the current primary sources, entity facts,
 asset scope, state/local requirements, and intended reporting purpose before
 relying on a view. Guidance never blocks an explicit user choice.`,
 	}
-	cmd.AddCommand(newOrgInventoryListCmd(), newOrgInventoryUpdatesCmd(), newOrgInventoryGuidanceCmd(), newOrgInventoryCreateCmd(), newOrgInventoryUpdateCmd(), newOrgInventoryDeleteCmd())
+	cmd.AddCommand(newOrgInventoryListCmd(), newOrgInventoryUpdatesCmd(), newOrgInventoryGuidanceCmd(), newOrgInventoryCreateCmd(), newOrgInventoryUpdateCmd(), newOrgInventoryCancelCmd(), newOrgInventoryDeleteCmd())
 	return cmd
 }
 
@@ -324,6 +324,63 @@ func newOrgInventoryDeleteCmd() *cobra.Command {
 				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("delete inventory view: %w", err))
 			}
 			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "deleted", "inventoryView": view}})
+		},
+	}
+	addMutationFlags(cmd, &f)
+	return cmd
+}
+
+func newOrgInventoryCancelCmd() *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{
+		Use:   "cancel VIEW_ID_OR_NAME UPDATE_ID",
+		Short: "Cancel one running inventory calculation",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			operation := "cancel-inventory-update"
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			views, err := client.InventoryViews(cmd.Context(), orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("list inventory views: %w", err))
+			}
+			view, err := resolveInventoryView(args[0], views)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			updateID := strings.TrimSpace(args[1])
+			updates, err := client.InventoryViewUpdates(cmd.Context(), orgID, view.ID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("list inventory updates: %w", err))
+			}
+			var matched *orgreports.InventoryViewUpdate
+			for i := range updates {
+				if updates[i].ID == updateID {
+					matched = &updates[i]
+					break
+				}
+			}
+			if matched == nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("inventory update %q not found for view %q", updateID, view.Name))
+			}
+			if matched.Status != "Running" && matched.Status != "New" {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("inventory update %q is %s, not Running or New", updateID, matched.Status))
+			}
+			request := map[string]any{"method": "POST", "path": "/orgs/" + orgID + "/inventory-views/" + view.ID + "/" + updateID + "/cancel", "inventoryView": view, "update": matched}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: request})
+			}
+			if !f.yes {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to cancel the inventory update without --yes (use --dry-run to preview)"))
+			}
+			result, err := client.CancelInventoryViewUpdate(cmd.Context(), orgID, view.ID, updateID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("cancel inventory update: %w", err))
+			}
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "cancelled", "inventoryView": view, "updateId": result.ID}})
 		},
 	}
 	addMutationFlags(cmd, &f)

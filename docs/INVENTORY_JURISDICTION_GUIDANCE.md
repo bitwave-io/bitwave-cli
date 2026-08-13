@@ -38,6 +38,21 @@ sets the current run end date to yesterday in the organization's timezone.
 This prevents a same-day pricing window from extending into the future. The
 resolved date and timezone are returned in JSON.
 
+Before choosing that default, an LLM must determine the latest period through
+which transaction sync, pricing, categorization, and reconciliation are
+complete. When books are only ready through an earlier close date, pass that
+date explicitly with `--as-of`; do not extend the run merely because newer
+transactions exist. Uncategorized activity can produce incomplete or errored
+actions and compromise downstream reports. If a wrong-cutoff run is still
+`Running` or `New`, inspect and cancel that exact run before replacing it:
+
+```bash
+bitwave inventory updates "US GAAP - Fair Value"
+bitwave inventory cancel "US GAAP - Fair Value" UPDATE_ID --dry-run
+bitwave inventory cancel "US GAAP - Fair Value" UPDATE_ID --yes
+bitwave inventory update "US GAAP - Fair Value" --as-of 2026-07-31 --yes
+```
+
 When the reference-inventory-view feature is enabled, an LLM may provide a
 prior run and its end date together:
 

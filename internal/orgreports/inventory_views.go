@@ -125,3 +125,15 @@ func (c *Client) InventoryViewUpdates(ctx context.Context, orgID, inventoryViewI
 	}
 	return response.Items, nil
 }
+
+func (c *Client) CancelInventoryViewUpdate(ctx context.Context, orgID, inventoryViewID, updateID string) (*CreateResult, error) {
+	var result CreateResult
+	path := "/orgs/" + url.PathEscape(orgID) + "/inventory-views/" + url.PathEscape(inventoryViewID) + "/" + url.PathEscape(updateID) + "/cancel"
+	if err := c.doJSON(ctx, http.MethodPost, path, nil, &result); err != nil {
+		return nil, err
+	}
+	if !result.Success || result.ID == "" {
+		return nil, fmt.Errorf("inventory-view cancel response did not confirm cancellation")
+	}
+	return &result, nil
+}

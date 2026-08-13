@@ -52,6 +52,11 @@ func TestInventoryViewCreateAndUpdateContracts(t *testing.T) {
 				t.Fatalf("method = %s", r.Method)
 			}
 			w.WriteHeader(http.StatusNoContent)
+		case "/orgs/org-1/inventory-views/view-1/run-2/cancel":
+			if r.Method != http.MethodPost {
+				t.Fatalf("method = %s", r.Method)
+			}
+			_, _ = w.Write([]byte(`{"success":true,"id":"run-2"}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -80,6 +85,10 @@ func TestInventoryViewCreateAndUpdateContracts(t *testing.T) {
 	updates, err := c.InventoryViewUpdates(context.Background(), "org-1", created.ID)
 	if err != nil || len(updates) != 1 || updates[0].ID != "run-2" || updates[0].EndingSEC == 0 {
 		t.Fatalf("updates = %#v err=%v", updates, err)
+	}
+	cancelled, err := c.CancelInventoryViewUpdate(context.Background(), "org-1", created.ID, "run-2")
+	if err != nil || cancelled.ID != "run-2" {
+		t.Fatalf("cancelled = %#v err=%v", cancelled, err)
 	}
 	if err := c.DeleteInventoryView(context.Background(), "org-1", created.ID); err != nil {
 		t.Fatal(err)
