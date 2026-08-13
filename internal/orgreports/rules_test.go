@@ -1,0 +1,198 @@
+package orgreports
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func TestRuleContracts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer token" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		switch r.URL.Path {
+		case "/graphql-reports":
+			var request struct {
+				OperationName string `json:"operationName"`
+				Variables     struct {
+					OrgID string `json:"orgId"`
+				} `json:"variables"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			if request.OperationName != "rules" || request.Variables.OrgID != "org-1" {
+				t.Fatalf("request = %#v", request)
+			}
+			_, _ = w.Write([]byte(`{"data":{"rules":[{"id":"rule-1","name":"ETH inflows","disabled":true,"coin":"ETH"}]}}`))
+		case "/graphql":
+			var request struct {
+				OperationName string `json:"operationName"`
+				Variables     struct {
+					OrgID string         `json:"orgId"`
+					Rule  map[string]any `json:"rule"`
+				} `json:"variables"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatal(err)
+			}
+			if request.Variables.OrgID != "org-1" {
+				t.Fatalf("request = %#v", request)
+			}
+			if request.OperationName == "RunRulesForOrg" {
+				_, _ = w.Write([]byte(`{"data":{"runRulesForOrg":true}}`))
+				return
+			}
+			if request.OperationName != "CreateRule" || request.Variables.Rule["transfer"] == nil {
+				t.Fatalf("request = %#v", request)
+			}
+			_, _ = w.Write([]byte(`{"data":{"createRule":{"success":true,"errors":[]}}}`))
+		case "/orgs/org-1/transactions/txn-1/rules/rule-1":
+			if r.Method != http.MethodGet {
+				t.Fatalf("method = %s", r.Method)
+			}
+			_, _ = w.Write([]byte(`{"valid":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, func() (string, error) { return "token", nil })
+	ctx := context.Background()
+	rules, err := client.Rules(ctx, "org-1")
+	if err != nil || len(rules) != 1 {
+		t.Fatalf("rules = %#v err=%v", rules, err)
+	}
+	created, err := client.CreateRule(ctx, "org-1", json.RawMessage(`{"transfer":{"name":"ETH inflows"}}`))
+	if err != nil || !created.Success {
+		t.Fatalf("created = %#v err=%v", created, err)
+	}
+	if err := client.RunRules(ctx, "org-1"); err != nil {
+		t.Fatalf("run rules: %v", err)
+	}
+	validation, err := client.ValidateRule(ctx, "org-1", "txn-1", "rule-1")
+	if err != nil || string(validation) != `{"valid":true}` {
+		t.Fatalf("validation = %s err=%v", validation, err)
+	}
+}
+
+func TestUpdateRuleContract(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			OperationName string `json:"operationName"`
+			Variables     struct {
+				OrgID  string         `json:"orgId"`
+				RuleID string         `json:"ruleId"`
+				Rule   map[string]any `json:"rule"`
+			} `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.OperationName != "UpdateRule" || request.Variables.OrgID != "org-1" || request.Variables.RuleID != "rule-1" || request.Variables.Rule["transfer"] == nil {
+			t.Fatalf("request = %#v", request)
+		}
+		_, _ = w.Write([]byte(`{"data":{"updateRule":{"success":true,"errors":[]}}}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, func() (string, error) { return "token", nil })
+	updated, err := client.UpdateRule(context.Background(), "org-1", "rule-1", json.RawMessage(`{"transfer":{"name":"ETH inflows","walletId":"wallet-1"}}`))
+	if err != nil || !updated.Success {
+		t.Fatalf("updated = %#v err=%v", updated, err)
+	}
+}
+
+func TestExecuteBulkRulesContract(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/org/org-1/rules/execute" {
+			t.Fatalf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer token" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		var body struct {
+			ExecuteUpdates string `json:"executeUpdates"`
+			After          int64  `json:"after"`
+			Before         int64  `json:"before"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if body.ExecuteUpdates != "true" || body.After != 946684800 || body.Before != 946771199 {
+			t.Fatalf("body = %#v", body)
+		}
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+
+	client := New(server.URL, func() (string, error) { return "token", nil })
+	if err := client.ExecuteBulkRules(context.Background(), "org-1", 946684800, 946771199); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.ExecuteBulkRules(context.Background(), "org-1", 10, 1); err == nil {
+		t.Fatal("expected invalid date range to fail before request")
+	}
+}
+
+func TestRuleReadAndMutationContracts(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer token" {
+			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
+		}
+		var request struct {
+			OperationName string         `json:"operationName"`
+			Variables     map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		switch request.OperationName {
+		case "rule":
+			_, _ = w.Write([]byte(`{"data":{"rule":{"id":"rule-1","name":"one","disabled":false,"priority":1,"direction":"Inbound","action":{"type":"Ignore","__typename":"IgnoreAction"},"__typename":"TransferRule"}}}`))
+		case "rulesPaginated":
+			_, _ = w.Write([]byte(`{"data":{"rulesPaginated":{"items":[{"id":"rule-1","name":"one","disabled":false,"priority":1,"direction":"Inbound","action":{"type":"Ignore","__typename":"IgnoreAction"},"__typename":"TransferRule"}],"nextPageToken":"next"}}}`))
+		case "ToggleRuleStatus":
+			if request.Variables["disabled"] != true {
+				t.Fatalf("variables = %#v", request.Variables)
+			}
+			_, _ = w.Write([]byte(`{"data":{"toggleRuleStatus":true}}`))
+		case "DeleteRule":
+			_, _ = w.Write([]byte(`{"data":{"deleteRule":true}}`))
+		default:
+			t.Fatalf("operation = %q", request.OperationName)
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, func() (string, error) { return "token", nil })
+	ctx := context.Background()
+	rule, err := client.Rule(ctx, "org-1", "rule-1")
+	if err != nil || !json.Valid(rule) {
+		t.Fatalf("rule = %s err=%v", rule, err)
+	}
+	page, err := client.RulesPage(ctx, "org-1", 25, "")
+	if err != nil || len(page.Items) != 1 || page.NextPageToken != "next" {
+		t.Fatalf("page = %#v err=%v", page, err)
+	}
+	if err := client.ToggleRule(ctx, "org-1", "rule-1", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := client.DeleteRule(ctx, "org-1", "rule-1"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProductionRuleEndpoints(t *testing.T) {
+	client := New("https://api.bitwave.io", func() (string, error) { return "", nil })
+	if client.RulesQueryURL != "https://api4.bitwave.io/graphql-reports" {
+		t.Fatalf("query URL = %s", client.RulesQueryURL)
+	}
+	if client.RulesMutationURL != "https://api-app.bitwave.io/graphql" {
+		t.Fatalf("mutation URL = %s", client.RulesMutationURL)
+	}
+}

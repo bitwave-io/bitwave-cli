@@ -1,0 +1,108 @@
+# Spam-token triage
+
+Bitwave's public address service exposes token metadata by ticker:
+
+```text
+GET https://address-svc-utyjy373hq-uc.a.run.app/symbols/{SYMBOL}
+```
+
+The response can include the coin ID, network, contract address, canonical and
+pricing symbols, and `spamScore`. Bitwave's operational spam threshold is
+`spamScore >= 0.5`. A lower nonzero score is worth review but is not an
+automatic ignore recommendation.
+
+## Check supplied tickers in bulk
+
+```bash
+bitwave --quiet transaction spam check TUSD ETH SOL-USDC --json
+```
+
+For a large list, put newline- or comma-separated symbols in a file:
+
+```bash
+bitwave --quiet transaction spam check --file token-symbols.txt \
+  --concurrency 20 --json
+```
+
+The CLI accepts up to 10,000 distinct symbols and performs bounded concurrent
+lookups. Override the endpoint for testing with
+`BITWAVE_ADDRESS_SERVICE_URL`. `--threshold` is available only for a
+deliberate alternative policy.
+
+## Analyze an organization
+
+Run spam triage after the initial type-first categorization rules:
+
+```bash
+bitwave --quiet transaction spam analyze --org ORG_ID --json
+```
+
+The command:
+
+1. Uses the same `amountCurrencyName` lookup that powers the transaction UI's
+   Filter by Ticker dropdown, with `limit=-1` for all values up to the service's
+   5,000-value hard cap. It does not download the full ledger.
+2. Uses Transaction Summary's asset choices to map those ticker symbols back to
+   stable Bitwave asset IDs.
+3. Checks the distinct symbols concurrently with the address service.
+4. Requires the returned `coinId` to match the transaction's `COIN.{id}`. A
+   ticker match alone is not enough because symbols can collide across assets.
+5. Fetches at most 100 matching transactions for each confirmed spam asset.
+6. Returns a transaction ID only when every token-bearing line contains that
+   same spam asset.
+
+Categorized transactions are excluded unless the user explicitly directs the
+LLM to include them in read-only analysis with `--include-categorized`. The
+bulk-ignore command cannot include categorized transactions. A transaction
+containing both a legitimate and spam token is never ignore-ready in this
+workflow.
+
+The organization response reports clean lookups as a count instead of printing
+thousands of clean token records. Full details are retained for spam candidates,
+nonzero scores requiring review, unresolved symbols, and mismatched coin IDs.
+
+## Bulk-ignore the eligible transactions
+
+Preview the exact selection and mutation:
+
+```bash
+bitwave --quiet transaction spam bulk-ignore \
+  --org ORG_ID --dry-run --json
+```
+
+Let the CLI perform the bulk ignore after review:
+
+```bash
+bitwave --quiet transaction spam bulk-ignore \
+  --org ORG_ID --yes --json
+```
+
+When the user or LLM has already selected suspicious tickers from the same
+choices shown in the transaction UI, skip the full-org discovery pass:
+
+```bash
+bitwave --quiet transaction spam bulk-ignore \
+  --org ORG_ID \
+  --ticker Zepe.io --ticker MegaDoge --ticker DxDex.io \
+  --yes --json
+```
+
+`--ticker` first checks every selected value against the address service. Only
+tickers meeting the configured spam-score threshold are sent as
+`filters.amountCurrencyNames` to the transaction search API, which is the same
+filter used by the UI. It selects only `Uncategorized` and `Unignored`
+transactions and still excludes every transaction containing a different
+token line. Explicit selection never bypasses spam-score classification.
+
+This runs the same discovery and coin-ID validation itself; the LLM does not
+need to copy transaction IDs between commands. The mutation uses Bitwave's
+bulk transaction-state workflow.
+
+If an asset plan has `transactionPageTruncated: true`, rerun bulk-ignore after
+the first workflow finishes. Ignored transactions are excluded by default, so
+the next bounded page becomes available without loading every match into one
+LLM response.
+
+Do not interpret an unresolved symbol as clean. Explain that the service could
+not classify it and leave the transaction unchanged unless the user provides
+another basis for ignoring it.

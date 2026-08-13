@@ -8,6 +8,8 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"runtime/debug"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -16,8 +18,36 @@ import (
 	"github.com/bitwave-io/bitwave-cli/internal/update"
 )
 
-// Version is set at build time via -ldflags.
-var Version = "0.1.0-dev"
+const developmentVersion = "0.3.0-dev"
+
+// Version is populated by GoReleaser or Make via -ldflags. Empty is the
+// unambiguous linker sentinel: versioned `go install` builds have no ldflags,
+// so init falls back to the module version embedded in Go build information.
+var Version string
+
+func init() {
+	info, ok := debug.ReadBuildInfo()
+	Version = resolveRuntimeVersion(Version, info, ok)
+}
+
+func resolveRuntimeVersion(linkerVersion string, info *debug.BuildInfo, ok bool) string {
+	// An ldflags value is authoritative for release and local packaged builds.
+	if strings.TrimSpace(linkerVersion) != "" {
+		return linkerVersion
+	}
+	return resolveBuildVersion(developmentVersion, info, ok)
+}
+
+func resolveBuildVersion(fallback string, info *debug.BuildInfo, ok bool) string {
+	if !ok || info == nil {
+		return fallback
+	}
+	version := strings.TrimSpace(info.Main.Version)
+	if version == "" || version == "(devel)" {
+		return fallback
+	}
+	return strings.TrimPrefix(version, "v")
+}
 
 // NewRootCmd builds the bitwave root command tree.
 func NewRootCmd() *cobra.Command {
@@ -144,8 +174,12 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 	addInGroup(groupReports, newClearedCmd())
 	addInGroup(groupReports, newCSVCmd())
 	addInGroup(groupReports, newStatsCmd())
+	addInGroup(groupReports, newOrgReportCmd())
 
 	addInGroup(groupWorkflows, newMigrateCmd())
+	addInGroup(groupWorkflows, newOrgTransactionsCmd())
+	addInGroup(groupWorkflows, newOrgRulesCmd())
+	addInGroup(groupWorkflows, newOrgInventoryCmd())
 	// Period-close is parked until the orchestrator is ported into this CLI;
 	// re-register to bring `bitwave close` back (see close.go).
 	// addInGroup(groupWorkflows, newCloseCmd())
