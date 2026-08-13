@@ -194,6 +194,14 @@ by clearing can be treated as a disposal, creating gains or losses instead of
 carrying the asset at cost. The preset exposes this prompt, its prerequisites,
 and the accounting risk as machine-readable recipe fields.
 
+For verified same-wallet multi-line activity with offsetting same-asset
+quantities, consider `--collapse-values`. Exact offsets can collapse away and
+partial offsets can remain as one net line. This is value handling, not proof
+of transaction type: rule out trades, DeFi, bridges, routed swaps, and fees
+before applying internal-transfer treatment. The option is explicit,
+previewable, and reversible with `--no-collapse-values`; the reusable decision
+logic is returned by `rule recipes` as `valueHandling`.
+
 `bitwave rule recipes --json` exposes the same policy through
 `planningHierarchy`, `planningTier`, and `defaultScope` for
 LLM clients. These are advisory defaults; requested filters and settings are

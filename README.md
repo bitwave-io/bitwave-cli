@@ -430,6 +430,10 @@ defaults to direction `All` and multi-token handling and prompts the agent to
 confirm that trade and internal-transfer rules run first. This matters because
 owned-wallet transfers should normally move at cost; misclassifying them can
 create artificial gains or losses.
+For verified same-wallet multi-line transactions with offsetting asset values,
+rules also support `--collapse-values`. The CLI explains how exact offsets can
+disappear and partial offsets can net, while warning that trades, DeFi,
+bridges, fees, and routed swaps can have a similar shape.
 Because background rule processing runs only intermittently (roughly twice per
 day), use `bitwave rule run --org ORG_ID --yes` after creation to trigger
 processing sooner.

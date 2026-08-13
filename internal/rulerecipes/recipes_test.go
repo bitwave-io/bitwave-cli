@@ -155,6 +155,30 @@ func TestCatchAllClearingDefaultsToMultiTokenAndExposesAccountingRisk(t *testing
 	}
 }
 
+func TestCollapseValuesIsExplicitAndDocumented(t *testing.T) {
+	value := true
+	payload, err := Build(Plan{
+		Preset: "internal-transfer", Name: "Same-wallet net movement", Priority: 1,
+		AccountingConnectionID: "Manual", FeeCategoryID: "Manual.gas", FeeContactID: "Manual.gas",
+		CollapseValues: &value,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Transfer struct {
+			CollapseValues bool `json:"collapseValues"`
+		} `json:"transfer"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil || !decoded.Transfer.CollapseValues {
+		t.Fatalf("payload = %#v err=%v", decoded, err)
+	}
+	guide := ValueHandlingGuide()
+	if guide.Option != "collapseValues" || len(guide.CandidateShape) < 3 || len(guide.Safeguards) < 4 {
+		t.Fatalf("guide = %#v", guide)
+	}
+}
+
 func TestGasFeeOnlyUsesDetailedFeeExtractor(t *testing.T) {
 	payload, err := Build(Plan{
 		Preset: "gas-fee-only", Name: "Gas Fee Only", Priority: 1, Enabled: true,

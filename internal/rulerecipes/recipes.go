@@ -64,6 +64,37 @@ type PlanningTier struct {
 	Guidance           []string `json:"guidance"`
 }
 
+type ValueHandlingKnowledge struct {
+	Option         string   `json:"option"`
+	Purpose        string   `json:"purpose"`
+	CandidateShape []string `json:"candidateShape"`
+	Effect         []string `json:"effect"`
+	Safeguards     []string `json:"safeguards"`
+}
+
+func ValueHandlingGuide() ValueHandlingKnowledge {
+	return ValueHandlingKnowledge{
+		Option:  "collapseValues",
+		Purpose: "Net same-asset values within one matched transaction so fully offsetting assets can disappear and partially offsetting assets can remain as a single net line.",
+		CandidateShape: []string{
+			"The transaction is multi-line and often multi-token.",
+			"The same Bitwave wallet appears on the relevant inbound and outbound lines.",
+			"At least one asset has offsetting positive and negative quantities; exact offsets net to zero and unequal offsets leave a residual.",
+		},
+		Effect: []string{
+			"Equal and opposite values for the same asset can collapse to an empty result for that asset.",
+			"Unequal inbound and outbound values for the same asset can collapse to one net value line.",
+			"The option changes value presentation and handling; it does not by itself prove the accounting action is an internal transfer.",
+		},
+		Safeguards: []string{
+			"Inspect all transaction lines, wallet IDs, assets, quantities, and ownership before recommending collapseValues.",
+			"Do not infer internal-transfer treatment merely because values offset in one wallet; rule out a genuine trade, DeFi interaction, bridge, fee, or routed swap.",
+			"Preview and validate a representative expected match and non-match before enabling a recurring rule.",
+			"Ask the user when the economic meaning remains ambiguous. collapseValues is optional and must remain overridable.",
+		},
+	}
+}
+
 func PlanningHierarchy() []PlanningTier {
 	return []PlanningTier{
 		{
@@ -136,9 +167,9 @@ var catalog = []Recipe{
 	{
 		Name: "internal-transfer", Summary: "Categorize wallet-to-wallet transfers and associated fees.",
 		ActionType: "InternalTransferCategorization", PlanningTier: 1, DefaultScope: "organization", DefaultDirection: "All", ApplySupported: true,
-		Fields:   []Field{{"feeCategory", true, "Fee category ID or exact name."}, {"feeContact", true, "Fee contact ID or exact name."}},
-		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false},
-		Guidance: []string{"Create one organization-wide internal-transfer rule and omit wallet filters by default.", "Enable multi-token only when matching transfers contain more than one transferred asset.", "Add wallet scope only for an explicit exception where treatment genuinely differs."},
+		Fields:   []Field{{"feeCategory", true, "Fee category ID or exact name."}, {"feeContact", true, "Fee contact ID or exact name."}, {"collapseValues", false, "Net offsetting same-asset values within matched multi-line transactions."}},
+		Defaults: map[string]any{"multiToken": false, "autoCategorizeFee": true, "allowMismatch": false, "collapseValues": false},
+		Guidance: []string{"Create one organization-wide internal-transfer rule and omit wallet filters by default.", "Enable multi-token only when matching transfers contain more than one transferred asset.", "Consider collapseValues for verified same-wallet, multi-line movements containing offsetting values; exact offsets can disappear and partial offsets leave a net line.", "Offsetting lines do not by themselves prove an internal transfer. Rule out trades, DeFi, bridges, fees, and routed swaps before enabling collapseValues.", "Add wallet scope only for an explicit exception where treatment genuinely differs."},
 	},
 	{
 		Name: "gas-fee-only", Summary: "Categorize transactions containing only network/contract execution fees.",
@@ -163,7 +194,7 @@ var catalog = []Recipe{
 		Name: "catch-all-clearing", Summary: "Categorize remaining unmatched transactions to a user-approved clearing account.",
 		ActionType: "SimpleCategorization", PlanningTier: 3, RecommendedPriority: 3, DefaultScope: "organization", DefaultDirection: "All", DefaultMulti: true, ApplySupported: true,
 		Fields:             []Field{{"category", true, "User-approved clearing category."}, {"contact", true, "User-approved fallback contact."}, {"feeCategory", true, "Fee category for separate network-fee lines."}, {"feeContact", true, "Fee contact for separate network-fee lines."}},
-		Defaults:           map[string]any{"multiToken": true, "autoCategorizeFee": true, "allowMismatch": false, "ignoreFailPricing": false},
+		Defaults:           map[string]any{"multiToken": true, "autoCategorizeFee": true, "allowMismatch": false, "collapseValues": false, "ignoreFailPricing": false},
 		Prerequisites:      []string{"enabled higher-precedence trade rule", "enabled higher-precedence internal-transfer rule"},
 		ConfirmationPrompt: "Before I create this catch-all, should remaining unmatched transactions be booked to the selected clearing account? I recommend confirming that trade and internal-transfer rules run first; otherwise trades may be misclassified and transfers between owned wallets may create artificial gains or losses instead of moving at cost.",
 		AccountingRisk:     "A broad catch-all can override the intended economic treatment of unmatched trades and owned-wallet transfers. Internal transfers should normally carry assets at cost, not create a disposal.",
@@ -234,6 +265,7 @@ type Plan struct {
 	MultiToken                *bool
 	AutoCategorizeFee         *bool
 	AllowMismatch             *bool
+	CollapseValues            *bool
 	IgnoreFailPricing         bool
 	Metadata                  []MetadataPair
 	MetadataOperator          string
@@ -280,6 +312,10 @@ func Build(plan Plan) (json.RawMessage, error) {
 	allowMismatch, _ := recipe.Defaults["allowMismatch"].(bool)
 	if plan.AllowMismatch != nil {
 		allowMismatch = *plan.AllowMismatch
+	}
+	collapseValues, _ := recipe.Defaults["collapseValues"].(bool)
+	if plan.CollapseValues != nil {
+		collapseValues = *plan.CollapseValues
 	}
 
 	action := map[string]any{"type": recipe.ActionType}
@@ -344,7 +380,7 @@ func Build(plan Plan) (json.RawMessage, error) {
 		"name": plan.Name, "priority": plan.Priority, "disabled": !plan.Enabled,
 		"accountingConnectionId": plan.AccountingConnectionID, "action": action,
 		"direction": direction, "multiToken": multiToken, "autoCategorizeFee": autoCategorizeFee,
-		"allowMismatch": allowMismatch, "collapseValues": false,
+		"allowMismatch": allowMismatch, "collapseValues": collapseValues,
 	}
 	optionalString(transfer, "coin", plan.Asset)
 	optionalString(transfer, "methodId", strings.TrimSpace(plan.MethodID))

@@ -98,6 +98,45 @@ func TestCatchAllPlanPromptsWithoutBlockingExplicitChoice(t *testing.T) {
 	}
 }
 
+func TestRulePlanExposesCollapseValuesWithWarning(t *testing.T) {
+	command := newRuleApplyCmd()
+	var output bytes.Buffer
+	command.SetOut(&output)
+	command.SetErr(&output)
+	command.SetArgs([]string{
+		"--org", "org-1", "--preset", "internal-transfer", "--name", "Net same-wallet movement",
+		"--accounting-connection-id", "Manual", "--fee-category-id", "Manual.gas", "--fee-contact-id", "Manual.gas",
+		"--collapse-values", "--enabled", "--dry-run",
+	})
+	if err := command.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Plans []struct {
+			Payload  json.RawMessage `json:"payload"`
+			Warnings []string        `json:"warnings"`
+		} `json:"plans"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil || len(result.Plans) != 1 {
+		t.Fatalf("output = %s err=%v", output.String(), err)
+	}
+	var payload struct {
+		Transfer struct {
+			CollapseValues bool `json:"collapseValues"`
+		} `json:"transfer"`
+	}
+	if err := json.Unmarshal(result.Plans[0].Payload, &payload); err != nil || !payload.Transfer.CollapseValues {
+		t.Fatalf("payload = %#v err=%v", payload, err)
+	}
+	found := false
+	for _, warning := range result.Plans[0].Warnings {
+		found = found || strings.Contains(warning, "routed swap")
+	}
+	if !found {
+		t.Fatalf("warnings = %#v", result.Plans[0].Warnings)
+	}
+}
+
 func TestReadAgentRuleSpecsAcceptsBatch(t *testing.T) {
 	specs, err := readAgentRuleSpecs("-", agentRuleSpec{}, strings.NewReader(`[
       {"preset":"trade","name":"trades"},

@@ -282,6 +282,35 @@ Specific gas-only, metadata, counterparty, wallet, and other approved rules
 should also run before the fallback. Ask separately whether unpriced activity
 should be included through `--ignore-fail-pricing`.
 
+## Collapsing offsetting values
+
+`collapseValues` is useful for certain multi-line transactions where the same
+wallet has inbound and outbound lines for the same assets. Exact positive and
+negative quantities can net to zero; unequal quantities can remain as a single
+net line. The agent can set it explicitly:
+
+```bash
+bitwave --quiet rule plan \
+  --preset internal-transfer \
+  --multi-token --collapse-values \
+  --accounting-connection-id CONNECTION_ID \
+  --fee-category-id GAS_CATEGORY_ID \
+  --fee-contact-id GAS_CONTACT_ID \
+  --org ORG_ID
+```
+
+The LLM should inspect every line first. A good candidate is multi-line, often
+multi-token, uses the same wallet on the relevant inbound/outbound lines, and
+contains offsetting quantities for one or more assets. However, this shape does
+not prove an internal transfer: trades, routed swaps, DeFi interactions,
+bridges, and fee mechanics can also produce offsetting same-wallet lines.
+Explain the proposed net result, ask when the economic meaning is ambiguous,
+and validate a matching and non-matching transaction. Use
+`--no-collapse-values` to retain individual values explicitly.
+
+`bitwave rule recipes` exposes the same logic in the machine-readable
+`valueHandling` object.
+
 ## Prefer metadata and method ID when transaction evidence supports them
 
 Metadata rules are not Canton-only. An LLM should inspect representative

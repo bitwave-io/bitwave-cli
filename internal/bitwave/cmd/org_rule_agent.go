@@ -48,6 +48,7 @@ type agentRuleSpec struct {
 	MultiToken                *bool                      `json:"multiToken,omitempty"`
 	AutoCategorizeFee         *bool                      `json:"autoCategorizeFee,omitempty"`
 	AllowMismatch             *bool                      `json:"allowMismatch,omitempty"`
+	CollapseValues            *bool                      `json:"collapseValues,omitempty"`
 	IgnoreFailPricing         bool                       `json:"ignoreFailPricing,omitempty"`
 	Metadata                  []rulerecipes.MetadataPair `json:"metadata,omitempty"`
 	MetadataOperator          string                     `json:"metadataOperator,omitempty"`
@@ -67,6 +68,8 @@ type ruleAgentFlags struct {
 	noAutoCategorizeFee bool
 	allowMismatch       bool
 	strictMatch         bool
+	collapseValues      bool
+	noCollapseValues    bool
 	metadata            []string
 }
 
@@ -118,6 +121,7 @@ func newRuleRecipesCmd() *cobra.Command {
 				"lastVerified": rulerecipes.LastVerified, "recipes": recipes,
 				"agentWorkflow":     []string{"metadata-guide", "context", "plan", "apply"},
 				"planningHierarchy": rulerecipes.PlanningHierarchy(),
+				"valueHandling":     rulerecipes.ValueHandlingGuide(),
 				"conditionStrategy": guide.Recommendation, "candidateConditions": guide.CandidateConditions,
 				"networkPlaybooks": map[string]any{"canton": map[string]any{
 					"ruleArchetypes": guide.RuleArchetypes, "accountGuidance": guide.AccountGuidance,
@@ -322,6 +326,8 @@ func addRuleAgentFlags(cmd *cobra.Command, f *ruleAgentFlags, includeMutation bo
 	cmd.Flags().BoolVar(&f.noAutoCategorizeFee, "no-auto-categorize-fee", false, "Override the recipe not to categorize fees")
 	cmd.Flags().BoolVar(&f.allowMismatch, "allow-mismatch", false, "Allow action/value mismatches")
 	cmd.Flags().BoolVar(&f.strictMatch, "strict-match", false, "Reject action/value mismatches")
+	cmd.Flags().BoolVar(&f.collapseValues, "collapse-values", false, "Net offsetting same-asset values within matched transactions")
+	cmd.Flags().BoolVar(&f.noCollapseValues, "no-collapse-values", false, "Keep individual transaction values instead of netting them")
 	cmd.Flags().BoolVar(&f.spec.IgnoreFailPricing, "ignore-fail-pricing", false, "Allow categorization when pricing fails")
 	cmd.Flags().StringArrayVar(&f.metadata, "metadata", nil, "Metadata condition KEY=VALUE (repeatable)")
 	cmd.Flags().StringVar(&f.spec.MetadataOperator, "metadata-operator", "", "Combine metadata with AND, OR, NAND, NOR, or XOR (default AND)")
@@ -343,6 +349,9 @@ func prepareAgentRulePlans(cmd *cobra.Command, f *ruleAgentFlags) ([]resolvedRul
 	}
 	if f.allowMismatch && f.strictMatch {
 		return nil, "", errors.New("--allow-mismatch and --strict-match are mutually exclusive")
+	}
+	if f.collapseValues && f.noCollapseValues {
+		return nil, "", errors.New("--collapse-values and --no-collapse-values are mutually exclusive")
 	}
 	specs, err := readAgentRuleSpecs(f.input, f.spec, cmd.InOrStdin())
 	if err != nil {
@@ -406,6 +415,14 @@ func applyBooleanOverrides(spec *agentRuleSpec, f *ruleAgentFlags) {
 	if f.strictMatch {
 		value := false
 		spec.AllowMismatch = &value
+	}
+	if f.collapseValues {
+		value := true
+		spec.CollapseValues = &value
+	}
+	if f.noCollapseValues {
+		value := false
+		spec.CollapseValues = &value
 	}
 }
 
@@ -660,7 +677,7 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 		AccountingConnectionID: connectionID, Asset: strings.ToUpper(strings.TrimSpace(spec.Asset)), MinAssetQty: strings.TrimSpace(spec.MinAssetQty), MaxAssetQty: strings.TrimSpace(spec.MaxAssetQty), MethodID: strings.TrimSpace(spec.MethodID), Direction: canonicalRuleDirection(spec.Direction),
 		WalletID: walletID, FromAddress: spec.FromAddress, ToAddress: spec.ToAddress,
 		AfterDateSEC: after, BeforeDateSEC: before, Enabled: spec.Enabled,
-		MultiToken: spec.MultiToken, AutoCategorizeFee: spec.AutoCategorizeFee, AllowMismatch: spec.AllowMismatch,
+		MultiToken: spec.MultiToken, AutoCategorizeFee: spec.AutoCategorizeFee, AllowMismatch: spec.AllowMismatch, CollapseValues: spec.CollapseValues,
 		IgnoreFailPricing: spec.IgnoreFailPricing, Metadata: spec.Metadata, MetadataOperator: spec.MetadataOperator,
 		MetadataTransactionRecord: spec.MetadataTransactionRecord,
 	}
@@ -704,6 +721,9 @@ func resolveAgentRulePlan(ctx context.Context, client *orgreports.Client, orgID 
 		if spec.Priority < recipe.RecommendedPriority {
 			warnings = append(warnings, fmt.Sprintf("Catch-all priority %d has higher precedence than the recommended priority %d. Confirm that trade and internal-transfer rules still run first.", spec.Priority, recipe.RecommendedPriority))
 		}
+	}
+	if spec.CollapseValues != nil && *spec.CollapseValues {
+		warnings = append(warnings, "collapseValues nets offsetting same-asset values inside each matched transaction. Confirm the sampled lines represent the intended economic activity; offsetting same-wallet lines can also be a trade, DeFi interaction, bridge, fee, or routed swap.")
 	}
 	if len(spec.Metadata) > 0 {
 		warnings = append(warnings, "Transaction samples are approximate because the search endpoint does not expose metadata filtering; validate against a known transaction after obtaining the rule ID.")
