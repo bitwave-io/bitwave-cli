@@ -29,6 +29,7 @@ bitwave inventory guidance --jurisdiction US
 bitwave inventory create --profile us-gaap --dry-run
 bitwave inventory create --profile us-gaap --yes
 bitwave inventory update "US GAAP - Fair Value" --yes
+bitwave inventory delete "US GAAP - Fair Value" --dry-run
 ```
 
 All writes require `--yes`; `--dry-run` returns the exact request without
@@ -43,12 +44,16 @@ GAAP financial statements:
 - engine v2.9;
 - FIFO operational lot selection, per wallet;
 - GAAP fair-value valuation for in-scope crypto assets;
-- acquisition transaction costs expensed rather than capitalized;
+- trading fees capitalized under the selected Bitwave policy;
+- valuation pricing explicitly inherited from the organization's configured
+  default rather than left unspecified;
 - NFTs excluded because they do not meet ASU 2023-08's fungibility scope
   criterion; and
 - original acquisition dates preserved for wallet-level internal transfers.
 
-FIFO is not represented as a FASB requirement. The accountant must determine
+Fee capitalization is a configurable accounting-policy decision, not a
+universal jurisdiction rule; the accountant must confirm it. FIFO is not
+represented as a FASB requirement. The accountant must determine
 which assets meet every ASU 2023-08 scope criterion and separately analyze
 NFTs, issued or related-party assets, assets carrying enforceable rights,
 wrapped or receipt tokens, staking, DeFi, derivatives, and industry-specific

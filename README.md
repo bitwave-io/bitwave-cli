@@ -405,6 +405,7 @@ bitwave inventory guidance --jurisdiction US
 bitwave inventory create --profile us-gaap --dry-run
 bitwave inventory create --profile us-gaap --yes
 bitwave inventory update "US GAAP - Fair Value" --yes
+bitwave inventory delete "US GAAP - Fair Value" --dry-run
 
 # Tax is a separate decision and a separate view.
 bitwave inventory create --profile us-federal-tax-fifo --dry-run

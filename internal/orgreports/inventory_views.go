@@ -32,6 +32,7 @@ type InventoryMappingRule struct {
 
 type InventoryViewConfig struct {
 	CapitalizeTradingFees                  bool                  `json:"capitalizeTradingFees"`
+	ImpairmentMethodology                  string                `json:"impairmentMethodology,omitempty"`
 	InventoryMappingRule                   *InventoryMappingRule `json:"inventoryMappingRule,omitempty"`
 	DefaultValuationStrategy               string                `json:"defaultValuationStrategy,omitempty"`
 	EngineVersionOverride                  float64               `json:"engineVersionOverride,omitempty"`
@@ -67,4 +68,10 @@ func (c *Client) TriggerInventoryViewUpdate(ctx context.Context, orgID, inventor
 		return nil, fmt.Errorf("inventory-view update response did not include a run id")
 	}
 	return &result, nil
+}
+
+func (c *Client) DeleteInventoryView(ctx context.Context, orgID, inventoryViewID string) error {
+	path := "/orgs/" + url.PathEscape(orgID) + "/inventory-views/" + url.PathEscape(inventoryViewID)
+	_, err := c.do(ctx, http.MethodDelete, path, nil)
+	return err
 }

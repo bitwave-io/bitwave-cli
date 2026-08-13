@@ -47,7 +47,7 @@ qualified accountant must verify the current primary sources, entity facts,
 asset scope, state/local requirements, and intended reporting purpose before
 relying on a view. Guidance never blocks an explicit user choice.`,
 	}
-	cmd.AddCommand(newOrgInventoryListCmd(), newOrgInventoryGuidanceCmd(), newOrgInventoryCreateCmd(), newOrgInventoryUpdateCmd())
+	cmd.AddCommand(newOrgInventoryListCmd(), newOrgInventoryGuidanceCmd(), newOrgInventoryCreateCmd(), newOrgInventoryUpdateCmd(), newOrgInventoryDeleteCmd())
 	return cmd
 }
 
@@ -208,6 +208,44 @@ func newOrgInventoryUpdateCmd() *cobra.Command {
 	return cmd
 }
 
+func newOrgInventoryDeleteCmd() *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{
+		Use:   "delete VIEW_ID_OR_NAME",
+		Short: "Permanently delete one inventory view",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			operation := "delete-inventory-view"
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			views, err := client.InventoryViews(cmd.Context(), orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("list inventory views: %w", err))
+			}
+			view, err := resolveInventoryView(args[0], views)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			request := map[string]any{"method": "DELETE", "path": "/orgs/" + orgID + "/inventory-views/" + view.ID, "inventoryView": view}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: request, Warnings: []string{"Inventory-view deletion is permanent."}})
+			}
+			if !f.yes {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to permanently delete the inventory view without --yes (use --dry-run to preview)"))
+			}
+			if err := client.DeleteInventoryView(cmd.Context(), orgID, view.ID); err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("delete inventory view: %w", err))
+			}
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "deleted", "inventoryView": view}})
+		},
+	}
+	addMutationFlags(cmd, &f)
+	return cmd
+}
+
 func inventoryProfileByID(id string) (inventoryProfile, error) {
 	id = strings.ToLower(strings.TrimSpace(id))
 	for _, profile := range usInventoryProfiles() {
@@ -228,25 +266,27 @@ func usInventoryProfiles() []inventoryProfile {
 	}
 	commonConfig := orgreports.InventoryViewConfig{
 		InventoryMappingRule:                   &orgreports.InventoryMappingRule{Type: "inventory-per-wallet"},
+		ImpairmentMethodology:                  "org-default",
 		EngineVersionOverride:                  2.9,
 		CostBasisCarryForwardAcquiredSide:      false,
 		ProcessAcquisitionsBeforeDisposals:     true,
 		UseOriginalAcquisitionDateForTransfers: true,
 	}
 	gaapConfig := commonConfig
-	gaapConfig.CapitalizeTradingFees = false
+	gaapConfig.CapitalizeTradingFees = true
 	gaapConfig.DefaultValuationStrategy = "gaap-fair-value"
 	taxConfig := commonConfig
 	taxConfig.CapitalizeTradingFees = true
 	return []inventoryProfile{
 		{
 			ID: usGAAPProfile, Jurisdiction: "US", Purpose: "books", Name: "US GAAP - Fair Value",
-			Summary: "Starting profile for U.S. GAAP financial statements: FIFO lot tracking per wallet, fair-value remeasurement for in-scope crypto assets, and acquisition transaction costs expensed.",
+			Summary: "Starting profile for U.S. GAAP financial statements: FIFO lot tracking per wallet, fair-value remeasurement for in-scope crypto assets, capitalized trading fees, and the organization's pricing methodology.",
 			Request: orgreports.InventoryViewCreateRequest{Name: "US GAAP - Fair Value", Config: gaapConfig, Strategy: orgreports.InventoryViewStrategy{TaxStrategy: "FIFO"}, Impair: true, IgnoreNFTs: true, IgnoreOrgWrappingTreatments: false},
 			Confirmations: []string{
 				"Confirm the entity actually reports under U.S. GAAP; a U.S. location alone does not establish the accounting framework.",
 				"Confirm which holdings meet every ASU 2023-08 scope criterion; NFTs, issued/related-party tokens, and assets with enforceable underlying rights require separate analysis.",
-				"Confirm fee treatment, especially if industry-specific guidance applies; the profile expenses acquisition transaction costs rather than capitalizing them.",
+				"Confirm fee treatment with the accountant; this Bitwave profile capitalizes trading fees even though some accounting guidance or entity policies may require expense treatment.",
+				"The valuation pricing methodology explicitly inherits the organization's configured default; verify that organization policy before running the view.",
 				"FIFO is an operational lot-selection default in this view, not a FASB-mandated election.",
 			},
 			Limitations: []string{"Does not determine federal, state, or local tax treatment.", "Does not cover SEC reporting, broker/dealer, investment-company, derivatives, staking, DeFi, wrapping, or transfer-control conclusions."},

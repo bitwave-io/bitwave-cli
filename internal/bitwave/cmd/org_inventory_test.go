@@ -18,10 +18,10 @@ func TestUSInventoryProfilesKeepBooksAndTaxSeparate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if books.Purpose != "books" || !books.Request.Impair || books.Request.Config.DefaultValuationStrategy != "gaap-fair-value" || books.Request.Config.CapitalizeTradingFees {
+	if books.Purpose != "books" || !books.Request.Impair || books.Request.Config.DefaultValuationStrategy != "gaap-fair-value" || !books.Request.Config.CapitalizeTradingFees || books.Request.Config.ImpairmentMethodology != "org-default" {
 		t.Fatalf("books = %#v", books)
 	}
-	if tax.Purpose != "tax" || tax.Request.Impair || !tax.Request.Config.CapitalizeTradingFees {
+	if tax.Purpose != "tax" || tax.Request.Impair || !tax.Request.Config.CapitalizeTradingFees || tax.Request.Config.ImpairmentMethodology != "org-default" {
 		t.Fatalf("tax = %#v", tax)
 	}
 	if books.Request.Config.InventoryMappingRule == nil || books.Request.Config.InventoryMappingRule.Type != "inventory-per-wallet" || tax.Request.Strategy.TaxStrategy != "FIFO" {
