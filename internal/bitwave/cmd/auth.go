@@ -37,6 +37,11 @@ For headless / CI use, prefer the BITWAVE_AGENT_TOKEN env var (issued by
 also supported via --client-id / --client-secret (also reads BITWAVE_CLIENT_ID
 and BITWAVE_CLIENT_SECRET).
 
+NOTE: this signs into the auth service used by the workspace ledger. It is
+NOT the Bitwave platform's client id / client key model (api.bitwave.io
+/v2/oauth/token) — platform integration is a separate, forthcoming surface
+(see docs/PLATFORM-INTEGRATION.md).
+
 Tokens land in ~/.bitwave/credentials.json and are auto-refreshed.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if clientID == "" {

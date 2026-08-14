@@ -37,6 +37,23 @@ var defaultGLBaseURL = "https://api.bitwave.io"
 // rules as defaultGLBaseURL.
 var defaultCoreBaseURL = "https://api.bitwave.io"
 
+// resolveIdentityEmail returns the logged-in user's email (the same value
+// `bitwave auth status` displays), or "" when no email is resolvable — e.g.
+// agent/bearer-token identities that carry no email claim. Never returns an
+// error; a missing email is a normal, expected case.
+func resolveIdentityEmail() string {
+	// Env/flag token identities (agent, CI bearer) carry no email claim we can
+	// read locally.
+	if os.Getenv("BITWAVE_AGENT_TOKEN") != "" || tokenFlag != "" || os.Getenv("BITWAVE_TOKEN") != "" {
+		return ""
+	}
+	creds, err := auth.LoadCredentials()
+	if err != nil || creds == nil {
+		return ""
+	}
+	return auth.ExtractEmailFromIDToken(creds.IDToken)
+}
+
 // resolveGLBaseURL: BITWAVE_BASE_URL_GL env → build-time default.
 func resolveGLBaseURL() string {
 	if v := os.Getenv("BITWAVE_BASE_URL_GL"); v != "" {

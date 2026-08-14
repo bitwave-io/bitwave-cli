@@ -21,6 +21,9 @@ type Workspace struct {
 	OrgId        string `json:"orgId"`
 	Name         string `json:"name"`
 	BaseCurrency string `json:"baseCurrency"`
+	// URL is the browser-facing workspace URL. Empty on older servers that
+	// predate the field; callers must handle absence gracefully.
+	URL string `json:"url"`
 }
 
 // Journal is the minimal journal shape.
@@ -115,24 +118,50 @@ type CreateWorkspaceRequest struct {
 	Name         string `json:"name"`
 	BaseCurrency string `json:"baseCurrency"`
 	OrgId        string `json:"orgId,omitempty"`
+	// NotifyEmail, when set, asks the server to email the creator a link to
+	// the new workspace. Omitted from the request when empty (e.g. agent
+	// identities with no resolvable email).
+	NotifyEmail string `json:"notifyEmail,omitempty"`
 }
 
-// CreateWorkspace creates a new workspace and returns its id.
-func (c *Client) CreateWorkspace(req CreateWorkspaceRequest) (string, error) {
+// CreateWorkspaceResult is what CreateWorkspace returns: the new workspace id
+// and its browser-facing URL. URL is empty on servers that predate the field.
+type CreateWorkspaceResult struct {
+	Id  string
+	URL string
+}
+
+// CreateWorkspace creates a new workspace and returns its id and URL.
+func (c *Client) CreateWorkspace(req CreateWorkspaceRequest) (CreateWorkspaceResult, error) {
 	if req.OrgId == "" {
 		req.OrgId = c.OrgId
 	}
 	data, err := c.do("POST", "/v1/workspaces", req)
 	if err != nil {
-		return "", err
+		return CreateWorkspaceResult{}, err
 	}
 	var resp struct {
-		Id string `json:"id"`
+		Id  string `json:"id"`
+		URL string `json:"url"`
 	}
 	if err := json.Unmarshal(data, &resp); err != nil || resp.Id == "" {
-		return "", fmt.Errorf("parse create workspace response")
+		return CreateWorkspaceResult{}, fmt.Errorf("parse create workspace response")
 	}
-	return resp.Id, nil
+	return CreateWorkspaceResult{Id: resp.Id, URL: resp.URL}, nil
+}
+
+// GetWorkspace fetches a single workspace by id via GET /v1/workspaces/{id}.
+func (c *Client) GetWorkspace(workspaceId string) (Workspace, error) {
+	path := fmt.Sprintf("/v1/workspaces/%s", workspaceId)
+	data, err := c.do("GET", path, nil)
+	if err != nil {
+		return Workspace{}, err
+	}
+	var w Workspace
+	if err := json.Unmarshal(data, &w); err != nil || w.Id == "" {
+		return Workspace{}, fmt.Errorf("parse workspace response")
+	}
+	return w, nil
 }
 
 // ListJournals returns the journals in a workspace.

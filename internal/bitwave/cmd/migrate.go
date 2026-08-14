@@ -17,7 +17,8 @@ func newMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Push a local workspace up to a new cloud workspace under the active org",
-		Long: `Migrate the cwd's local workspace to the cloud ledger:
+		Long: `Migrate the cwd's local workspace to Bitwave's workspace ledger
+service (the cloud-hosted journal/entry model — not the Bitwave platform API):
   1. Create a new LedgerWorkspace in the active org
   2. Push every journal's entries (and the accounts/prices) into it
   3. Rewrite .bitwave.toml to mode=cloud + the new ids
@@ -74,7 +75,7 @@ the server-side delegation endpoint lands.`,
 			}
 
 			wc := workspaces.New(resolveGLBaseURL(), active.OrgID, makeOrgTokenResolver(active.OrgID))
-			wsId, err := wc.CreateWorkspace(workspaces.CreateWorkspaceRequest{
+			ws, err := wc.CreateWorkspace(workspaces.CreateWorkspaceRequest{
 				Name:         workspaceName,
 				BaseCurrency: cfg.BaseCurrency,
 			})
@@ -84,7 +85,7 @@ the server-side delegation endpoint lands.`,
 
 			// Push each local journal as its own cloud journal so the multi-
 			// journal layout survives the migration.
-			cs := store.NewCloud(resolveGLBaseURL(), active.OrgID, wsId, makeOrgTokenResolver(active.OrgID))
+			cs := store.NewCloud(resolveGLBaseURL(), active.OrgID, ws.Id, makeOrgTokenResolver(active.OrgID))
 			journalIds, err := ls.JournalIds()
 			if err != nil {
 				return err
@@ -131,7 +132,7 @@ the server-side delegation endpoint lands.`,
 
 			cfg.Mode = config.ModeCloud
 			cfg.OrgId = active.OrgID
-			cfg.WorkspaceId = wsId
+			cfg.WorkspaceId = ws.Id
 			cfg.Name = workspaceName
 			if err := config.Save(dir, cfg); err != nil {
 				return fmt.Errorf("update %s: %w", config.FileName, err)
@@ -144,7 +145,7 @@ the server-side delegation endpoint lands.`,
 				renameToBak(filepath.Join(dir, jid+store.JournalExt))
 			}
 
-			fmt.Printf("Migrated to cloud workspace %s (org %s)\n", wsId, active.OrgID)
+			fmt.Printf("Migrated to cloud workspace %s (org %s)\n", ws.Id, active.OrgID)
 			return nil
 		},
 	}
