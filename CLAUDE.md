@@ -14,6 +14,24 @@ on-chain wallets + the on-chain → journal sync bridge live in
 [`bitwave-wallet-sdk`](https://github.com/bitwave-io/bitwave-wallet-sdk).
 This repo is the CLI surface on top of both.
 
+## ⚠️ Two cloud surfaces — never conflate them
+
+Everything this CLI calls "cloud" (cloud workspaces, journals, `je`, reports,
+`migrate`, `share`) talks to **gl-svc** — the workspace/journal-entry ledger.
+That is the **alternate** model. It is NOT the connection to Bitwave proper.
+
+**Bitwave proper is the platform API in `~/Source/bitwave/api-svc`**: a
+totally different surface (transactions + categorization, inventory views /
+lots / cost basis, async report runs, close reports, wallets, connections)
+with a different auth model — **org-scoped client id / client key** exchanged
+at `POST api.bitwave.io/v2/oauth/token` (grant `client_credentials`) for a
+1-hour Bearer JWT, no refresh token (re-mint on expiry). The CLI has **no
+platform integration yet**. Full endpoint map + proposed command shape:
+[docs/PLATFORM-INTEGRATION.md](docs/PLATFORM-INTEGRATION.md).
+
+When writing code or docs here, say **"Bitwave platform"** for api-svc and
+**"workspace ledger"** for gl-svc; never plain "the Bitwave cloud" for gl-svc.
+
 ---
 
 # bitwave — Plain-text accounting
@@ -58,6 +76,7 @@ command.
 | `bitwave workspace use [id]` | Bind cwd to a cloud workspace (bare invocation = picker). |
 | `bitwave workspace current` | Print the cwd's workspace id. |
 | `bitwave workspace create --name N` | Create a cloud workspace without binding cwd. |
+| `bitwave workspace url` | Print the online URL for the cwd's bound cloud workspace. |
 
 ## Journals
 
@@ -189,7 +208,7 @@ root.go brings it back.
 | `BITWAVE_AGENT_TOKEN` | Well-known agent identity token (highest priority) |
 | `BITWAVE_TOKEN` | Bearer token (CI/legacy) |
 | `BITWAVE_AUTH_URL` | Auth service URL (default `https://auth.bitwave.io`) |
-| `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL (default `https://api.bitwave.io`) |
+| `BITWAVE_BASE_URL_GL` | Workspace ledger (gl-svc) API base URL — not the platform API (default `https://api.bitwave.io`) |
 | `BITWAVE_BASE_URL_CORE` | Core API base URL (used for org list/create) |
 | `BITWAVE_TELEMETRY` | `0` disables anonymous usage telemetry, `1` force-enables (see docs/TELEMETRY.md) |
 | `DO_NOT_TRACK` | Non-zero disables telemetry (cross-tool convention) |

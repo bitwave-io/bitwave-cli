@@ -70,8 +70,12 @@ Modes:
   - Local (default): files live on disk. No auth needed. ` + "`bitwave share`" + ` also
     works anonymously in local mode (the recipient is the one who signs in
     to adopt the workspace).
-  - Cloud (` + "`bitwave init --cloud`" + `): backed by the cloud ledger under your org. Requires
-    ` + "`bitwave auth login`" + ` and ` + "`bitwave org use`" + `.
+  - Cloud (` + "`bitwave init --cloud`" + `): backed by Bitwave's workspace ledger
+    service under your org. Requires ` + "`bitwave auth login`" + ` and
+    ` + "`bitwave org use`" + `. Note: this is the workspace ledger, NOT the
+    Bitwave platform API (transactions, categorization, inventory, close) —
+    that is a separate surface with client id/key auth, not yet driven by
+    this CLI.
 
 Auth (used by cloud-mode commands; priority order):
   - BITWAVE_AGENT_TOKEN env  Well-known agent identity

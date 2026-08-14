@@ -176,10 +176,18 @@ The exhaustive matrix lives in the [`bitwave-accounting-sdk`](https://github.com
 
 ---
 
-## Cloud mode
+## Cloud mode (workspace ledger)
 
 Local workspaces are just files. Cloud workspaces are the same surface,
-backed by [Bitwave](https://bitwave.io)'s cloud general ledger.
+backed by Bitwave's **workspace ledger service** — a cloud-hosted version of
+the same plain-text journal/entry model.
+
+> **Note — this is not the Bitwave platform.** Cloud mode syncs your
+> workspace's journals to Bitwave's workspace ledger. It is a separate
+> surface from the [Bitwave](https://bitwave.io) platform itself
+> (transactions, categorization, inventory, close reports), which uses a
+> client id / client key model. Platform integration is not part of cloud
+> mode; see `docs/PLATFORM-INTEGRATION.md` for the distinction.
 
 ```sh
 # Sign in (PKCE browser flow).
@@ -455,7 +463,7 @@ my-books/
 ```
 
 Cloud mode keeps only `.bitwave.toml` locally — everything else lives in
-`the cloud ledger`. Switching modes is rewriting `.bitwave.toml`.
+the workspace ledger service. Switching modes is rewriting `.bitwave.toml`.
 
 ---
 
@@ -466,7 +474,7 @@ Cloud mode keeps only `.bitwave.toml` locally — everything else lives in
 | `BITWAVE_AGENT_TOKEN` | Well-known agent identity token (highest priority) | — |
 | `BITWAVE_TOKEN` | Bearer token (CI / legacy) | — |
 | `BITWAVE_AUTH_URL` | Auth service URL | `https://auth.bitwave.io` |
-| `BITWAVE_BASE_URL_GL` | Cloud ledger API base URL | `https://api.bitwave.io` |
+| `BITWAVE_BASE_URL_GL` | Workspace ledger API base URL (not the Bitwave platform API) | `https://api.bitwave.io` |
 | `BITWAVE_BASE_URL_CORE` | Core API base URL (org list/create) | `https://api.bitwave.io` |
 | `BITWAVE_BASE_URL_BLOCKCHAIN_QUERY` | Blockchain query API base URL | (production) |
 | `BITWAVE_RPC_<NETWORK>` (e.g. `BITWAVE_RPC_BASE`) | EVM RPC URL override | derived per-network default |
@@ -755,9 +763,11 @@ bitwave init --cloud --name "FY2026"
 # cloud workspace dashboard, or via `bitwave je export | hledger -f - is`.
 ```
 
-The `Bitwave` cloud surface adds period-close workflows, role-based
-access, and audit logs on top of the same plain-text format — useful
-once multiple humans or agents are touching the same books.
+The Bitwave **platform** (a separate surface from workspace cloud mode —
+see `docs/PLATFORM-INTEGRATION.md`) adds transaction categorization,
+inventory / cost-basis tracking, close reports, role-based access, and
+audit logs — useful once multiple humans or agents are touching the
+same books.
 
 ## When to escalate to the user
 

@@ -39,6 +39,9 @@ Cloud mode (--cloud):
   bitwave init --cloud --name N [--base-currency USD]
     Creates a LedgerWorkspace under the active org and binds the cwd to it.
     Requires ` + "`bitwave auth login`" + ` and an active org (` + "`bitwave org use`" + `).
+    Cloud mode syncs to Bitwave's workspace ledger service — the hosted
+    journal/entry model. It is NOT the Bitwave platform API (transactions,
+    categorization, inventory), which is a separate surface.
 
 Examples:
   cd ~/my-expenses && bitwave init
@@ -99,10 +102,12 @@ func runInitCloud(dir, name, baseCurrency string) error {
 	if err != nil {
 		return err
 	}
+	notifyEmail := resolveIdentityEmail()
 	c := workspaces.New(resolveGLBaseURL(), active.OrgID, makeOrgTokenResolver(active.OrgID))
-	id, err := c.CreateWorkspace(workspaces.CreateWorkspaceRequest{
+	res, err := c.CreateWorkspace(workspaces.CreateWorkspaceRequest{
 		Name:         name,
 		BaseCurrency: baseCurrency,
+		NotifyEmail:  notifyEmail,
 	})
 	if err != nil {
 		return fmt.Errorf("create workspace: %w", err)
@@ -112,12 +117,18 @@ func runInitCloud(dir, name, baseCurrency string) error {
 		Name:         name,
 		BaseCurrency: baseCurrency,
 		OrgId:        active.OrgID,
-		WorkspaceId:  id,
+		WorkspaceId:  res.Id,
 	}
 	if err := config.Save(dir, cfg); err != nil {
 		return fmt.Errorf("save .bitwave.toml: %w", err)
 	}
-	fmt.Printf("Created cloud workspace: %s (%s)\n", name, id)
+	fmt.Printf("Created cloud workspace: %s (%s)\n", name, res.Id)
 	fmt.Printf("Bound %s to it.\n", dir)
+	if res.URL != "" {
+		fmt.Printf("View online: %s\n", res.URL)
+	}
+	if notifyEmail != "" {
+		fmt.Printf("We emailed %s a link.\n", notifyEmail)
+	}
 	return nil
 }

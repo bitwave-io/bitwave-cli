@@ -28,7 +28,46 @@ later commands (bitwave je, bitwave bal, ...) target the right workspace.`,
 	cmd.AddCommand(newWorkspaceCurrentCmd())
 	cmd.AddCommand(newWorkspaceCreateCmd())
 	cmd.AddCommand(newWorkspaceAdoptCmd())
+	cmd.AddCommand(newWorkspaceURLCmd())
 	return cmd
+}
+
+// newWorkspaceURLCmd prints the browser URL for the cwd's bound cloud
+// workspace, fetched fresh from GET /v1/workspaces/{id}.
+func newWorkspaceURLCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "url",
+		Short: "Print the browser URL for the cwd's bound cloud workspace",
+		Long: `bitwave workspace url reads the workspace bound in the cwd's .bitwave.toml
+and prints its online URL. Requires a cloud-mode workspace; local-mode
+workspaces have no online URL.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cfg, _, err := loadCwdConfig()
+			if err != nil {
+				return err
+			}
+			if cfg.Mode != config.ModeCloud {
+				return fmt.Errorf("workspace at cwd is in %s mode, not cloud — local workspaces have no online URL", cfg.Mode)
+			}
+			if cfg.WorkspaceId == "" {
+				return fmt.Errorf("no workspace_id in .bitwave.toml — run `bitwave workspace use`")
+			}
+			active, err := requireActiveOrg()
+			if err != nil {
+				return err
+			}
+			c := workspaces.New(resolveGLBaseURL(), active.OrgID, makeOrgTokenResolver(active.OrgID))
+			w, err := c.GetWorkspace(cfg.WorkspaceId)
+			if err != nil {
+				return fmt.Errorf("get workspace: %w", err)
+			}
+			if w.URL == "" {
+				return fmt.Errorf("workspace %s has no URL (the server may predate this feature)", cfg.WorkspaceId)
+			}
+			fmt.Println(w.URL)
+			return nil
+		},
+	}
 }
 
 // newWorkspaceAdoptCmd accepts a pending shared workspace from the cloud ledger. The
@@ -221,14 +260,17 @@ which creates the workspace and binds the directory in one step.`,
 				return err
 			}
 			c := workspaces.New(resolveGLBaseURL(), active.OrgID, makeOrgTokenResolver(active.OrgID))
-			id, err := c.CreateWorkspace(workspaces.CreateWorkspaceRequest{
+			res, err := c.CreateWorkspace(workspaces.CreateWorkspaceRequest{
 				Name:         name,
 				BaseCurrency: baseCurrency,
 			})
 			if err != nil {
 				return fmt.Errorf("create workspace: %w", err)
 			}
-			fmt.Printf("Created workspace: %s (%s)\n", name, id)
+			fmt.Printf("Created workspace: %s (%s)\n", name, res.Id)
+			if res.URL != "" {
+				fmt.Printf("View online: %s\n", res.URL)
+			}
 			return nil
 		},
 	}
