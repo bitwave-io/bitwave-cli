@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/bitwave-io/bitwave-cli/internal/auth"
 	"github.com/bitwave-io/bitwave-cli/internal/orgctx"
@@ -80,17 +81,34 @@ func makeTokenResolver() func() (string, error) {
 // org-scoped token when going through the credentials file. Static-token
 // paths (env / flag) pass through unchanged.
 func makeOrgTokenResolver(orgId string) func() (string, error) {
+	// Org token exchange uses a rotating refresh token. A cloud command can
+	// issue several API requests (for example Project loads workspace metadata,
+	// accounts, entries, commodities, and prices), so exchanging on every
+	// request needlessly rotates the refresh token and can invalidate the
+	// credentials mid-command. Resolve lazily once and reuse the access token
+	// for the lifetime of this command/client graph.
+	var (
+		once       sync.Once
+		token      string
+		resolveErr error
+	)
 	return func() (string, error) {
-		if v := os.Getenv("BITWAVE_AGENT_TOKEN"); v != "" {
-			return v, nil
-		}
-		if tokenFlag != "" {
-			return tokenFlag, nil
-		}
-		if v := os.Getenv("BITWAVE_TOKEN"); v != "" {
-			return v, nil
-		}
-		return auth.LoadAndRefreshWithOrg(resolveAuthURL(), orgId)
+		once.Do(func() {
+			if v := os.Getenv("BITWAVE_AGENT_TOKEN"); v != "" {
+				token = v
+				return
+			}
+			if tokenFlag != "" {
+				token = tokenFlag
+				return
+			}
+			if v := os.Getenv("BITWAVE_TOKEN"); v != "" {
+				token = v
+				return
+			}
+			token, resolveErr = auth.LoadAndRefreshWithOrg(resolveAuthURL(), orgId)
+		})
+		return token, resolveErr
 	}
 }
 
