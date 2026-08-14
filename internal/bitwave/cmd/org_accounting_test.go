@@ -1,0 +1,46 @@
+package cmd
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/bitwave-io/bitwave-cli/internal/orgreports"
+)
+
+func TestAccountingStatusCountsActiveConnectionsAndAccounts(t *testing.T) {
+	connections := []orgreports.AccountingConnection{{ID: "ac-1", Type: "manual"}}
+	readiness := buildAccountingReadiness(connections, nil)
+	if readiness.ConnectionCount != 1 || readiness.ChartAccountCount != 0 {
+		t.Fatalf("readiness = %#v", readiness)
+	}
+	readiness = buildAccountingReadiness(connections, []orgreports.Category{{ID: "cat-1", Enabled: true, AccountingConnectionID: "ac-1"}})
+	if readiness.ConnectionCount != 1 || readiness.ChartAccountCount != 1 {
+		t.Fatalf("readiness = %#v", readiness)
+	}
+}
+
+func TestChartAccountValidationAndImportShape(t *testing.T) {
+	account := chartAccountInput{ConnectionID: "ac-1", ID: "4000", Name: "Revenue", Type: "Revenue", Code: "4000"}
+	if err := validateChartAccount(account); err != nil {
+		t.Fatal(err)
+	}
+	request := accountRequest(account)
+	if request.Source != "manual" || request.Type != "revenue" || request.ID != "4000" {
+		t.Fatalf("request = %#v", request)
+	}
+	loaded, err := loadChartAccounts("-", strings.NewReader(`{"accounts":[{"connectionId":"ac-1","id":"5000","name":"Fees","type":"expense"}]}`))
+	if err != nil || len(loaded) != 1 || loaded[0].ID != "5000" {
+		t.Fatalf("loaded = %#v err=%v", loaded, err)
+	}
+	account.Type = "made-up"
+	if err := validateChartAccount(account); err == nil {
+		t.Fatal("expected invalid account type")
+	}
+}
+
+func TestOrgAccountingHelpDescribesBitwaveResources(t *testing.T) {
+	cmd := newOrgAccountingCmd()
+	if !strings.Contains(cmd.Short, "Bitwave accounting connections") {
+		t.Fatalf("help = %q", cmd.Short)
+	}
+}

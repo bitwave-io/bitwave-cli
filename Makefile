@@ -2,7 +2,7 @@
 
 BITWAVE_BIN := bitwave
 BITWAVE_SRC := ./cmd/bitwave
-VERSION ?= 0.1.0-dev
+VERSION ?= 0.3.0-dev
 MODULE  := github.com/bitwave-io/bitwave-cli
 LDFLAGS := -s -w \
 	-X $(MODULE)/internal/bitwave/cmd.Version=$(VERSION)

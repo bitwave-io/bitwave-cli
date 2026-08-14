@@ -3,8 +3,8 @@
 A release is one command:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
 The `Release` workflow (`.github/workflows/release.yml`) then:
@@ -24,6 +24,16 @@ The `Release` workflow (`.github/workflows/release.yml`) then:
 
 Local dry-runs: `goreleaser check`, `goreleaser build --snapshot --clean`,
 `node scripts/publish-npm.mjs --dry-run`.
+
+## Version sources
+
+- Tagged releases use the tag injected by GoReleaser, such as `0.3.0`.
+- `make bitwave` defaults to `0.3.0-dev`; override with `VERSION=...`.
+- Versioned `go install github.com/bitwave-io/bitwave-cli/cmd/bitwave@v0.3.0`
+  builds derive `0.3.0` from Go build information when no ldflags are present.
+- Plain source-checkout builds use Go's embedded module version when available,
+  including a traceable pseudo-version; otherwise they report `0.3.0-dev`.
+  Both forms keep telemetry and update checks disabled as development builds.
 
 ## Required repository secrets
 

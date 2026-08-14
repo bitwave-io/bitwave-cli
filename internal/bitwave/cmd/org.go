@@ -27,6 +27,8 @@ func newOrgCmd() *cobra.Command {
 	cmd.AddCommand(newOrgUseCmd())
 	cmd.AddCommand(newOrgCreateCmd())
 	cmd.AddCommand(newOrgClearCmd())
+	cmd.AddCommand(newOrgWalletsCmd())
+	cmd.AddCommand(newOrgAccountingCmd())
 	return cmd
 }
 
@@ -88,7 +90,16 @@ func newOrgUseCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				orgID := args[0]
-				return orgctx.Save(&orgctx.Active{OrgID: orgID, OrgName: lookupOrgName(orgID)})
+				orgName := lookupOrgName(orgID)
+				if err := orgctx.Save(&orgctx.Active{OrgID: orgID, OrgName: orgName}); err != nil {
+					return err
+				}
+				if orgName == "" {
+					fmt.Printf("Active org: %s\n", orgID)
+				} else {
+					fmt.Printf("Active org: %s (%s)\n", orgName, orgID)
+				}
+				return nil
 			}
 			c := orgs.New(resolveCoreBaseURL(), makeTokenResolver())
 			list, err := c.List()
