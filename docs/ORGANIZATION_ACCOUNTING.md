@@ -64,13 +64,40 @@ bitwave org accounting accounts import --input accounts.json --yes --json
 Supported account types are `asset`, `bank`, `equity`, `expense`, `liability`,
 `other`, and `revenue`.
 
+`categories` is an alias for `accounts`. Match the web application's enabled
+state controls with:
+
+```bash
+bitwave org accounting categories disable CATEGORY_ID --dry-run --json
+bitwave org accounting categories disable CATEGORY_ID --yes --json
+bitwave org accounting categories enable CATEGORY_ID --yes --json
+bitwave org accounting categories disable-all --yes --json
+```
+
 Create one categorization contact:
 
 ```bash
 bitwave org accounting contacts create \
   --accounting-connection CONNECTION_ID \
-  --name "Counterparty" --type vendor \
+  --name "Counterparty" --type Vendor \
   --yes --json
+```
+
+A remote contact ID is optional, matching the web application. Optional
+`--first-name`, `--last-name`, and `--email` fields are also supported.
+
+Update the complete Bitwave `UpdateContactInput` contract without losing
+address, metadata, default-category, or connection fields:
+
+```bash
+bitwave org accounting contacts update CONTACT_ID \
+  --input contact-update.json --dry-run --json
+bitwave org accounting contacts update CONTACT_ID \
+  --input contact-update.json --yes --json
+
+bitwave org accounting contacts disable CONTACT_ID --yes --json
+bitwave org accounting contacts enable CONTACT_ID --yes --json
+bitwave org accounting contacts disable-all --yes --json
 ```
 
 The caller is responsible for choosing the connection, accounts, contacts, and

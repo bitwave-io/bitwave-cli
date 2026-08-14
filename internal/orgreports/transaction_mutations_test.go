@@ -166,3 +166,56 @@ func TestTransactionMutationContracts(t *testing.T) {
 		t.Fatalf("transfer = %s err=%v", transfer, err)
 	}
 }
+
+func TestAccountingResourceMutationContracts(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			OperationName string         `json:"operationName"`
+			Variables     map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if request.Variables["orgId"] != "org-1" {
+			t.Fatalf("variables = %#v", request.Variables)
+		}
+		switch request.OperationName {
+		case "UpdateContact":
+			contact, ok := request.Variables["contact"].(map[string]any)
+			if !ok || contact["id"] != "contact-1" || contact["enabled"] != false {
+				t.Fatalf("contact = %#v", request.Variables["contact"])
+			}
+			_, _ = w.Write([]byte(`{"data":{"updateContact":{"id":"contact-1","name":"Vendor","enabled":false}}}`))
+		case "DisableContacts":
+			_, _ = w.Write([]byte(`{"data":{"disableContacts":{"success":true}}}`))
+		case "UpdateCategory":
+			if request.Variables["id"] != "cat-1" || request.Variables["enabled"] != false {
+				t.Fatalf("variables = %#v", request.Variables)
+			}
+			_, _ = w.Write([]byte(`{"data":{"updateCategory":{"id":"cat-1","name":"Revenue","enabled":false}}}`))
+		case "DisableCategories":
+			_, _ = w.Write([]byte(`{"data":{"disableCategories":{"success":true}}}`))
+		default:
+			t.Fatalf("operation = %q", request.OperationName)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(srv.URL, func() (string, error) { return "token", nil })
+	client.RulesMutationURL = srv.URL
+	ctx := context.Background()
+	contact, err := client.UpdateContact(ctx, "org-1", json.RawMessage(`{"id":"contact-1","enabled":false}`))
+	if err != nil || !json.Valid(contact) {
+		t.Fatalf("contact = %s err=%v", contact, err)
+	}
+	if err := client.DisableContacts(ctx, "org-1"); err != nil {
+		t.Fatal(err)
+	}
+	category, err := client.UpdateCategoryEnabled(ctx, "org-1", "cat-1", false)
+	if err != nil || !json.Valid(category) {
+		t.Fatalf("category = %s err=%v", category, err)
+	}
+	if err := client.DisableCategories(ctx, "org-1"); err != nil {
+		t.Fatal(err)
+	}
+}

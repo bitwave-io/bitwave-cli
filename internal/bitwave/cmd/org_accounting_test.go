@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -16,6 +17,41 @@ func TestAccountingStatusCountsActiveConnectionsAndAccounts(t *testing.T) {
 	readiness = buildAccountingReadiness(connections, []orgreports.Category{{ID: "cat-1", Enabled: true, AccountingConnectionID: "ac-1"}})
 	if readiness.ConnectionCount != 1 || readiness.ChartAccountCount != 1 {
 		t.Fatalf("readiness = %#v", readiness)
+	}
+}
+
+func TestContactUpdateBodyPinsArgumentID(t *testing.T) {
+	body, err := contactUpdateBody("contact-1", json.RawMessage(`{"enabled":false,"defaultRevenueCategoryId":"cat-1"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input map[string]any
+	if err := json.Unmarshal(body, &input); err != nil {
+		t.Fatal(err)
+	}
+	if input["id"] != "contact-1" || input["enabled"] != false {
+		t.Fatalf("input = %#v", input)
+	}
+	if _, err := contactUpdateBody("contact-1", json.RawMessage(`{"id":"contact-2"}`)); err == nil {
+		t.Fatal("expected mismatched contact id to fail")
+	}
+}
+
+func TestAccountingCommandsExposeCategoryAndContactParity(t *testing.T) {
+	accounts := newOrgAccountingAccountsCmd()
+	if len(accounts.Aliases) != 1 || accounts.Aliases[0] != "categories" {
+		t.Fatalf("aliases = %v", accounts.Aliases)
+	}
+	for _, command := range []string{"enable", "disable", "disable-all"} {
+		if found, _, err := accounts.Find([]string{command}); err != nil || found.Name() != command {
+			t.Fatalf("accounts command %q missing: found=%v err=%v", command, found, err)
+		}
+	}
+	contacts := newOrgAccountingContactsCmd()
+	for _, command := range []string{"update", "enable", "disable", "disable-all"} {
+		if found, _, err := contacts.Find([]string{command}); err != nil || found.Name() != command {
+			t.Fatalf("contacts command %q missing: found=%v err=%v", command, found, err)
+		}
 	}
 }
 
