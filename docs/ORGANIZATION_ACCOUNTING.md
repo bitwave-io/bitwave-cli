@@ -25,17 +25,18 @@ Bitwave.
 
 ```bash
 bitwave org accounting manual create --dry-run --json
-bitwave org accounting manual create --yes --json
+bitwave org accounting manual create --json
 ```
 
-If a manual connection already exists, the operation returns
-`skipped_existing` with its ID.
+Bitwave automatically provisions the manual accounting setup with the stable
+connection ID `Manual`. For compatibility, `manual create` now selects and
+returns that connection; it does not create a second manual connection.
 
 Create one manual account:
 
 ```bash
 bitwave org accounting accounts create \
-  --accounting-connection CONNECTION_ID \
+  --accounting-connection Manual \
   --id 4000 --code 4000 --name "Revenue" --type revenue \
   --yes --json
 ```
@@ -46,7 +47,7 @@ Import several manual accounts:
 {
   "accounts": [
     {
-      "connectionId": "CONNECTION_ID",
+      "connectionId": "Manual",
       "id": "4000",
       "code": "4000",
       "name": "Revenue",

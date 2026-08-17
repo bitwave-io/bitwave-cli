@@ -120,7 +120,7 @@ func runTransactionStateMutation(cmd *cobra.Command, operation, transition strin
 		return mutationError(cmd, operation, f.jsonOutput, err)
 	}
 	request := orgreports.BulkStateRequest{BulkActionID: f.bulkActionID, TransactionIDs: transactionIDs, Update: transition}
-	preview := map[string]any{"method": "POST", "path": fmt.Sprintf("/v3/orgs/%s/transactions/bulk/state", orgID), "body": request}
+	preview := map[string]any{"method": "POST", "path": fmt.Sprintf("/v3/orgs/%s/transactions/bulk-state", orgID), "body": request}
 	if f.dryRun {
 		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 	}

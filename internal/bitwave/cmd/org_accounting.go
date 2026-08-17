@@ -16,6 +16,21 @@ import (
 
 var chartAccountTypes = []string{"asset", "bank", "equity", "expense", "liability", "other", "revenue"}
 
+const implicitManualConnectionID = "Manual"
+
+// withImplicitManualConnection exposes the Bitwave-provisioned manual chart.
+// The connection is stable organization state and is not returned by every
+// accounting-connections response.
+func withImplicitManualConnection(connections []orgreports.AccountingConnection) []orgreports.AccountingConnection {
+	for _, connection := range connections {
+		if strings.EqualFold(strings.TrimSpace(connection.ID), implicitManualConnectionID) {
+			return connections
+		}
+	}
+	result := append([]orgreports.AccountingConnection(nil), connections...)
+	return append(result, orgreports.AccountingConnection{ID: implicitManualConnectionID, Name: "Bitwave", Type: "manual"})
+}
+
 type accountingReadiness struct {
 	Connections       []orgreports.AccountingConnection `json:"connections"`
 	ConnectionCount   int                               `json:"connectionCount"`
@@ -262,6 +277,7 @@ func newOrgAccountingStatusCmd() *cobra.Command {
 }
 
 func buildAccountingReadiness(connections []orgreports.AccountingConnection, categories []orgreports.Category) accountingReadiness {
+	connections = withImplicitManualConnection(connections)
 	active := make([]orgreports.AccountingConnection, 0, len(connections))
 	activeIDs := map[string]bool{}
 	for _, connection := range connections {
@@ -301,6 +317,7 @@ func newOrgAccountingConnectionsListCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("list accounting connections: %w", err)
 			}
+			connections = withImplicitManualConnection(connections)
 			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "connections": connections})
 		},
 	}
@@ -310,7 +327,7 @@ func newOrgAccountingConnectionsListCmd() *cobra.Command {
 }
 
 func newOrgAccountingManualCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "manual", Short: "Create a Bitwave-managed manual accounting connection"}
+	cmd := &cobra.Command{Use: "manual", Short: "Select Bitwave's automatically provisioned manual accounting connection"}
 	cmd.AddCommand(newOrgAccountingManualCreateCmd())
 	return cmd
 }
@@ -318,40 +335,19 @@ func newOrgAccountingManualCmd() *cobra.Command {
 func newOrgAccountingManualCreateCmd() *cobra.Command {
 	var f transactionMutationFlags
 	cmd := &cobra.Command{
-		Use: "create", Short: "Create a manual accounting connection and its default Bitwave accounts",
+		Use: "create", Short: "Return the automatically provisioned Manual connection",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			operation := "create-manual-accounting-connection"
 			orgID, err := resolveReportOrg(f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
-			preview := map[string]any{"method": "POST", "path": "/orgs/" + orgID + "/connections/manual"}
+			status := "success"
 			if f.dryRun {
-				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
+				status = "preview"
 			}
-			if !f.yes {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
-			}
-			_, client, err := accountingClient(orgID)
-			if err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, err)
-			}
-			connections, err := client.AccountingConnections(cmd.Context(), orgID)
-			if err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("check accounting connections: %w", err))
-			}
-			for _, connection := range connections {
-				if !connection.Disabled && (strings.Contains(strings.ToLower(connection.Type), "manual") || strings.EqualFold(connection.Name, "manual")) {
-					envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "skipped_existing", "connectionId": connection.ID, "nextCommand": "bitwave org accounting status --json"}}
-					return outputMutation(cmd, f.jsonOutput, envelope, "manual accounting connection already exists: "+connection.ID+"\n")
-				}
-			}
-			response, err := client.CreateManualAccountingConnection(cmd.Context(), orgID)
-			if err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("create manual accounting connection: %w", err))
-			}
-			envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"connectionId": response.ConnectionID, "nextCommand": "bitwave org accounting status --json"}}
-			return outputMutation(cmd, f.jsonOutput, envelope, "created manual accounting connection "+response.ConnectionID+"\n")
+			envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, DryRun: f.dryRun, Result: map[string]any{"status": "existing_manual_selected", "connectionId": implicitManualConnectionID, "nextCommand": "bitwave org accounting status --json"}}
+			return outputMutation(cmd, f.jsonOutput, envelope, "using automatically provisioned manual accounting connection: "+implicitManualConnectionID+"\n")
 		},
 	}
 	addMutationFlags(cmd, &f)
@@ -536,6 +532,7 @@ func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f 
 	if err != nil {
 		return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("validate accounting connection: %w", err))
 	}
+	connections = withImplicitManualConnection(connections)
 	connectionTypes := map[string]string{}
 	for _, connection := range connections {
 		if !connection.Disabled {

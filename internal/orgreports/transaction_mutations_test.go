@@ -14,7 +14,7 @@ func TestTransactionMutationContracts(t *testing.T) {
 			t.Fatalf("authorization = %q", r.Header.Get("Authorization"))
 		}
 		switch r.URL.Path {
-		case "/v3/orgs/org-1/transactions/bulk/state":
+		case "/v3/orgs/org-1/transactions/bulk-state":
 			if r.Method != http.MethodPost {
 				t.Fatalf("method = %s", r.Method)
 			}

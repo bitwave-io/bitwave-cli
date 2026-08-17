@@ -11,11 +11,18 @@ import (
 func TestAccountingStatusCountsActiveConnectionsAndAccounts(t *testing.T) {
 	connections := []orgreports.AccountingConnection{{ID: "ac-1", Type: "manual"}}
 	readiness := buildAccountingReadiness(connections, nil)
-	if readiness.ConnectionCount != 1 || readiness.ChartAccountCount != 0 {
+	if readiness.ConnectionCount != 2 || readiness.ChartAccountCount != 0 {
 		t.Fatalf("readiness = %#v", readiness)
 	}
 	readiness = buildAccountingReadiness(connections, []orgreports.Category{{ID: "cat-1", Enabled: true, AccountingConnectionID: "ac-1"}})
-	if readiness.ConnectionCount != 1 || readiness.ChartAccountCount != 1 {
+	if readiness.ConnectionCount != 2 || readiness.ChartAccountCount != 1 {
+		t.Fatalf("readiness = %#v", readiness)
+	}
+}
+
+func TestAccountingStatusIncludesImplicitManualConnection(t *testing.T) {
+	readiness := buildAccountingReadiness(nil, []orgreports.Category{{ID: "cat-1", Enabled: true, AccountingConnectionID: implicitManualConnectionID}})
+	if readiness.ConnectionCount != 1 || readiness.Connections[0].ID != implicitManualConnectionID || readiness.ChartAccountCount != 1 {
 		t.Fatalf("readiness = %#v", readiness)
 	}
 }
