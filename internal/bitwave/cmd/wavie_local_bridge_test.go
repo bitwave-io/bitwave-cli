@@ -39,6 +39,9 @@ func TestWavieBridgeStatusAndCORS(t *testing.T) {
 	if !status.Connected || status.Tool.Name != wavieLocalToolName || status.Tool.Safety != "write" {
 		t.Fatalf("status = %#v", status)
 	}
+	if !strings.Contains(status.Tool.Description, "ordinary user intent") || !strings.Contains(status.Tool.Description, "never require the user to mention the CLI") {
+		t.Fatalf("tool description does not require intent-based routing: %q", status.Tool.Description)
+	}
 
 	blocked := httptest.NewRecorder()
 	blockedRequest := httptest.NewRequest(http.MethodGet, "/v1/status", nil)

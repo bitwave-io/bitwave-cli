@@ -192,7 +192,7 @@ func (b *wavieBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Connected: true, ProtocolVersion: wavieBridgeProtocol, CLIVersion: Version, LocalRoot: b.localRoot,
 			Tool: wavieBridgeTool{
 				Name:        wavieLocalToolName,
-				Description: "Run the locally installed Bitwave CLI with the user's existing authentication. Arguments are executed directly without a shell. Every request requires explicit approval in the Bitwave web app.",
+				Description: "Use the locally installed Bitwave CLI whenever the user asks to inspect or change Bitwave state and no equivalent server tool is available. Infer this from ordinary user intent; never require the user to mention the CLI. The command uses the user's existing authentication, executes arguments directly without a shell, and requires approval in the Bitwave web app.",
 				InputSchema: wavieLocalToolSchema,
 				Safety:      "write",
 			},
