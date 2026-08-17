@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	bitwavecli "github.com/bitwave-io/bitwave-cli/sdk"
 )
 
 func TestPublicCommandTreeDoesNotExposeWavieCommands(t *testing.T) {
@@ -54,7 +56,7 @@ func TestWavieBridgeStatusAndCORS(t *testing.T) {
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
-	if !status.Connected || status.Tool.Name != wavieLocalToolName || status.Tool.Safety != "write" {
+	if !status.Connected || status.Tool.Name != bitwavecli.ToolName || status.Tool.Safety != "write" {
 		t.Fatalf("status = %#v", status)
 	}
 	if !strings.Contains(status.Tool.Description, "ordinary user intent") || !strings.Contains(status.Tool.Description, "empty array") {
@@ -96,38 +98,30 @@ func TestClassifyBitwaveArgs(t *testing.T) {
 }
 
 func TestNormalizeBitwaveArgsDefaultsToHelp(t *testing.T) {
-	got := normalizeBitwaveArgs(nil)
+	got := bitwavecli.NormalizeArgs(nil)
 	if len(got) != 1 || got[0] != "--help" {
 		t.Fatalf("normalizeBitwaveArgs(nil) = %q, want [--help]", got)
 	}
 	original := []string{"report", "balance"}
-	got = normalizeBitwaveArgs(original)
+	got = bitwavecli.NormalizeArgs(original)
 	if len(got) != 2 || got[0] != "report" || got[1] != "balance" {
 		t.Fatalf("normalizeBitwaveArgs(%q) = %q", original, got)
 	}
 }
 
 func TestValidateBitwaveArgsRejectsRecursiveWavie(t *testing.T) {
-	if err := validateBitwaveArgs([]string{"org", "wavie", "chat"}); err == nil {
+	if err := bitwavecli.ValidateArgs([]string{"org", "wavie", "chat"}); err == nil {
 		t.Fatal("expected recursive Wavie command to be rejected")
 	}
-	if err := validateBitwaveArgs([]string{"org", "transactions", "list", "--json"}); err != nil {
+	if err := bitwavecli.ValidateArgs([]string{"org", "transactions", "list", "--json"}); err != nil {
 		t.Fatalf("ordinary args rejected: %v", err)
-	}
-}
-
-func TestLimitedBufferCapsOutput(t *testing.T) {
-	buffer := &limitedBuffer{limit: 4}
-	n, err := buffer.Write([]byte("abcdef"))
-	if err != nil || n != 6 || buffer.String() != "abcd" || !buffer.truncated {
-		t.Fatalf("n=%d err=%v string=%q truncated=%v", n, err, buffer.String(), buffer.truncated)
 	}
 }
 
 func TestWavieBridgeExecutesApprovedCommandAndCachesResult(t *testing.T) {
 	bridge := newWavieBridge("/bin/echo", t.TempDir(), nil)
 	body := `{"requestId":"tool-1","args":["hello","world"],"reason":"read version","approved":true}`
-	execute := func() localCommandResult {
+	execute := func() bitwavecli.CommandResult {
 		req := httptest.NewRequest(http.MethodPost, "/v1/execute", strings.NewReader(body))
 		req.Header.Set(wavieBridgeHeader, wavieBridgeProtocol)
 		response := httptest.NewRecorder()
@@ -135,7 +129,7 @@ func TestWavieBridgeExecutesApprovedCommandAndCachesResult(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 		}
-		var result localCommandResult
+		var result bitwavecli.CommandResult
 		if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +158,7 @@ func TestWavieBridgeBindsExecutionToSessionOrganization(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
-	var result localCommandResult
+	var result bitwavecli.CommandResult
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		t.Fatal(err)
 	}

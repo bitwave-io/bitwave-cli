@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	bitwavecli "github.com/bitwave-io/bitwave-cli/sdk"
 	"github.com/spf13/cobra"
 )
 
@@ -65,7 +66,7 @@ type wavieBridge struct {
 	sem        chan struct{}
 
 	mu          sync.Mutex
-	results     map[string]localCommandResult
+	results     map[string]bitwavecli.CommandResult
 	resultOrder []string
 }
 
@@ -180,7 +181,7 @@ func newWavieBridge(executable, localRoot string, origins []string) *wavieBridge
 		localRoot:  localRoot,
 		origins:    allowed,
 		sem:        make(chan struct{}, 1),
-		results:    make(map[string]localCommandResult),
+		results:    make(map[string]bitwavecli.CommandResult),
 	}
 }
 
@@ -198,9 +199,9 @@ func (b *wavieBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		b.writeJSON(w, http.StatusOK, wavieBridgeStatus{
 			Connected: true, ProtocolVersion: wavieBridgeProtocol, CLIVersion: Version, LocalRoot: b.localRoot,
 			Tool: wavieBridgeTool{
-				Name:        wavieLocalToolName,
-				Description: "Run the Bitwave CLI for the organization already selected by this Wavie session. Pass command arguments as an array without the `bitwave` executable name; omit `args` or pass an empty array to return `bitwave --help`. Select this tool from ordinary user intent whenever the user asks to inspect or change Bitwave data; never require them to mention the CLI. Prefer `--json` for structured results. For organization balances use `report balance`; `bal` reads a separate local plain-text ledger. Arguments execute directly without a shell. Read-only commands run automatically and commands that change data require user approval.",
-				InputSchema: wavieLocalToolSchema,
+				Name:        bitwavecli.ToolName,
+				Description: bitwavecli.ToolDescription,
+				InputSchema: bitwavecli.ToolInputSchema,
 				Safety:      "write",
 			},
 		})
@@ -248,7 +249,7 @@ func (b *wavieBridge) execute(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "requestId and reason are required", http.StatusBadRequest)
 		return
 	}
-	if err := validateBitwaveArgs(input.Args); err != nil {
+	if err := bitwavecli.ValidateArgs(input.Args); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -276,7 +277,7 @@ func (b *wavieBridge) execute(w http.ResponseWriter, r *http.Request) {
 		b.writeJSON(w, http.StatusOK, cached)
 		return
 	}
-	result := executeBitwaveCommandForOrg(r.Context(), b.executable, b.localRoot, input.Args, input.OrganizationID)
+	result := bitwavecli.Execute(r.Context(), b.executable, b.localRoot, input.Args, input.OrganizationID)
 	b.cacheResult(input.RequestID, result)
 	b.writeJSON(w, http.StatusOK, result)
 }
@@ -357,14 +358,14 @@ func isHighRiskCommand(words []string) bool {
 	return len(words) > 1 && words[0] == "wallets" && words[1] == "send"
 }
 
-func (b *wavieBridge) cachedResult(requestID string) (localCommandResult, bool) {
+func (b *wavieBridge) cachedResult(requestID string) (bitwavecli.CommandResult, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	result, ok := b.results[requestID]
 	return result, ok
 }
 
-func (b *wavieBridge) cacheResult(requestID string, result localCommandResult) {
+func (b *wavieBridge) cacheResult(requestID string, result bitwavecli.CommandResult) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, exists := b.results[requestID]; exists {
