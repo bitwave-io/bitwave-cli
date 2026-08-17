@@ -178,6 +178,7 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 	addInGroup(groupWorkflows, newOrgTransactionsCmd())
 	addInGroup(groupWorkflows, newOrgRulesCmd())
 	addInGroup(groupWorkflows, newOrgInventoryCmd())
+	addInGroup(groupWorkflows, newAPICmd())
 	// Period-close is parked until the orchestrator is ported into this CLI;
 	// re-register to bring `bitwave close` back (see close.go).
 	// addInGroup(groupWorkflows, newCloseCmd())

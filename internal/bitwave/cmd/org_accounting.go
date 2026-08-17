@@ -16,6 +16,21 @@ import (
 
 var chartAccountTypes = []string{"asset", "bank", "equity", "expense", "liability", "other", "revenue"}
 
+const implicitManualConnectionID = "Manual"
+
+// withImplicitManualConnection exposes the Bitwave-provisioned manual chart.
+// The connection is stable organization state and is not returned by every
+// accounting-connections response.
+func withImplicitManualConnection(connections []orgreports.AccountingConnection) []orgreports.AccountingConnection {
+	for _, connection := range connections {
+		if strings.EqualFold(strings.TrimSpace(connection.ID), implicitManualConnectionID) {
+			return connections
+		}
+	}
+	result := append([]orgreports.AccountingConnection(nil), connections...)
+	return append(result, orgreports.AccountingConnection{ID: implicitManualConnectionID, Name: "Bitwave", Type: "manual"})
+}
+
 type accountingReadiness struct {
 	Connections       []orgreports.AccountingConnection `json:"connections"`
 	ConnectionCount   int                               `json:"connectionCount"`
@@ -41,8 +56,12 @@ func newOrgAccountingCmd() *cobra.Command {
 }
 
 func newOrgAccountingContactsCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "contacts", Short: "List or create Bitwave categorization contacts"}
-	cmd.AddCommand(newOrgAccountingContactsListCmd(), newOrgAccountingContactCreateCmd())
+	cmd := &cobra.Command{Use: "contacts", Short: "List, create, and update Bitwave categorization contacts"}
+	cmd.AddCommand(
+		newOrgAccountingContactsListCmd(), newOrgAccountingContactCreateCmd(), newOrgAccountingContactUpdateCmd(),
+		newOrgAccountingContactToggleCmd("enable", true), newOrgAccountingContactToggleCmd("disable", false),
+		newOrgAccountingContactsDisableAllCmd(),
+	)
 	return cmd
 }
 
@@ -102,16 +121,21 @@ func newOrgAccountingContactCreateCmd() *cobra.Command {
 			input.RemoteID = strings.TrimSpace(input.RemoteID)
 			input.Name = strings.TrimSpace(input.Name)
 			input.Type = strings.TrimSpace(input.Type)
-			if input.ConnectionID == "" || input.RemoteID == "" || input.Name == "" {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("--accounting-connection, --id, and --name are required"))
+			input.FirstName = strings.TrimSpace(input.FirstName)
+			input.LastName = strings.TrimSpace(input.LastName)
+			input.EmailAddress = strings.TrimSpace(input.EmailAddress)
+			if input.ConnectionID == "" || input.Name == "" {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("--accounting-connection and --name are required"))
 			}
-			if !strings.EqualFold(input.Type, "Customer") && !strings.EqualFold(input.Type, "Vendor") {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("--type must be Customer or Vendor"))
+			if !strings.EqualFold(input.Type, "None") && !strings.EqualFold(input.Type, "Customer") && !strings.EqualFold(input.Type, "Vendor") {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("--type must be None, Customer, or Vendor"))
 			}
 			if strings.EqualFold(input.Type, "customer") {
 				input.Type = "Customer"
-			} else {
+			} else if strings.EqualFold(input.Type, "vendor") {
 				input.Type = "Vendor"
+			} else {
+				input.Type = "None"
 			}
 			orgID, err := resolveReportOrg(f.orgID)
 			if err != nil {
@@ -136,9 +160,90 @@ func newOrgAccountingContactCreateCmd() *cobra.Command {
 	}
 	addMutationFlags(cmd, &f)
 	cmd.Flags().StringVar(&input.ConnectionID, "accounting-connection", "", "Accounting connection ID")
-	cmd.Flags().StringVar(&input.RemoteID, "id", "", "Stable remote contact ID")
+	cmd.Flags().StringVar(&input.RemoteID, "id", "", "Optional remote contact ID")
 	cmd.Flags().StringVar(&input.Name, "name", "", "Contact name")
-	cmd.Flags().StringVar(&input.Type, "type", "", "Contact type: Customer or Vendor")
+	cmd.Flags().StringVar(&input.Type, "type", "None", "Contact type: None, Customer, or Vendor")
+	cmd.Flags().StringVar(&input.FirstName, "first-name", "", "Optional first name")
+	cmd.Flags().StringVar(&input.LastName, "last-name", "", "Optional last name")
+	cmd.Flags().StringVar(&input.EmailAddress, "email", "", "Optional email address")
+	return cmd
+}
+
+func newOrgAccountingContactUpdateCmd() *cobra.Command {
+	var f transactionMutationFlags
+	var inputPath string
+	cmd := &cobra.Command{
+		Use: "update CONTACT_ID", Short: "Update a contact using Bitwave's complete UpdateContactInput", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			body, err := readJSONObject(inputPath, cmd.InOrStdin())
+			if err != nil {
+				return mutationError(cmd, "update-contact", f.jsonOutput, err)
+			}
+			body, err = contactUpdateBody(args[0], body)
+			if err != nil {
+				return mutationError(cmd, "update-contact", f.jsonOutput, err)
+			}
+			return runContactUpdate(cmd, f, "update-contact", body)
+		},
+	}
+	addMutationFlags(cmd, &f)
+	cmd.Flags().StringVarP(&inputPath, "input", "i", "", "UpdateContactInput JSON file, or - for stdin (required)")
+	return cmd
+}
+
+func newOrgAccountingContactToggleCmd(name string, enabled bool) *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{
+		Use: name + " CONTACT_ID", Short: strings.ToUpper(name[:1]) + name[1:] + " a contact", Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			body, _ := json.Marshal(map[string]any{"id": args[0], "enabled": enabled})
+			return runContactUpdate(cmd, f, name+"-contact", body)
+		},
+	}
+	addMutationFlags(cmd, &f)
+	return cmd
+}
+
+func runContactUpdate(cmd *cobra.Command, f transactionMutationFlags, operation string, body json.RawMessage) error {
+	orgID, err := resolveReportOrg(f.orgID)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
+	}
+	if f.dryRun {
+		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: body})
+	}
+	if !f.yes {
+		return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes"))
+	}
+	_, client, err := accountingClient(orgID)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
+	}
+	result, err := client.UpdateContact(cmd.Context(), orgID, body)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
+	}
+	return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: result})
+}
+
+func contactUpdateBody(contactID string, body json.RawMessage) (json.RawMessage, error) {
+	var input map[string]any
+	if err := json.Unmarshal(body, &input); err != nil {
+		return nil, err
+	}
+	if existing, ok := input["id"].(string); ok && existing != "" && existing != contactID {
+		return nil, fmt.Errorf("input contact id %q does not match argument %q", existing, contactID)
+	}
+	input["id"] = contactID
+	return json.Marshal(input)
+}
+
+func newOrgAccountingContactsDisableAllCmd() *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{Use: "disable-all", Short: "Disable every organization contact", RunE: func(cmd *cobra.Command, _ []string) error {
+		return runDisableAllAccountingResources(cmd, f, "disable-contacts", "contacts")
+	}}
+	addMutationFlags(cmd, &f)
 	return cmd
 }
 
@@ -172,6 +277,7 @@ func newOrgAccountingStatusCmd() *cobra.Command {
 }
 
 func buildAccountingReadiness(connections []orgreports.AccountingConnection, categories []orgreports.Category) accountingReadiness {
+	connections = withImplicitManualConnection(connections)
 	active := make([]orgreports.AccountingConnection, 0, len(connections))
 	activeIDs := map[string]bool{}
 	for _, connection := range connections {
@@ -211,6 +317,7 @@ func newOrgAccountingConnectionsListCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("list accounting connections: %w", err)
 			}
+			connections = withImplicitManualConnection(connections)
 			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "connections": connections})
 		},
 	}
@@ -220,7 +327,7 @@ func newOrgAccountingConnectionsListCmd() *cobra.Command {
 }
 
 func newOrgAccountingManualCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "manual", Short: "Create a Bitwave-managed manual accounting connection"}
+	cmd := &cobra.Command{Use: "manual", Short: "Select Bitwave's automatically provisioned manual accounting connection"}
 	cmd.AddCommand(newOrgAccountingManualCreateCmd())
 	return cmd
 }
@@ -228,40 +335,19 @@ func newOrgAccountingManualCmd() *cobra.Command {
 func newOrgAccountingManualCreateCmd() *cobra.Command {
 	var f transactionMutationFlags
 	cmd := &cobra.Command{
-		Use: "create", Short: "Create a manual accounting connection and its default Bitwave accounts",
+		Use: "create", Short: "Return the automatically provisioned Manual connection",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			operation := "create-manual-accounting-connection"
 			orgID, err := resolveReportOrg(f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
-			preview := map[string]any{"method": "POST", "path": "/orgs/" + orgID + "/connections/manual"}
+			status := "success"
 			if f.dryRun {
-				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
+				status = "preview"
 			}
-			if !f.yes {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
-			}
-			_, client, err := accountingClient(orgID)
-			if err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, err)
-			}
-			connections, err := client.AccountingConnections(cmd.Context(), orgID)
-			if err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("check accounting connections: %w", err))
-			}
-			for _, connection := range connections {
-				if !connection.Disabled && (strings.Contains(strings.ToLower(connection.Type), "manual") || strings.EqualFold(connection.Name, "manual")) {
-					envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"status": "skipped_existing", "connectionId": connection.ID, "nextCommand": "bitwave org accounting status --json"}}
-					return outputMutation(cmd, f.jsonOutput, envelope, "manual accounting connection already exists: "+connection.ID+"\n")
-				}
-			}
-			response, err := client.CreateManualAccountingConnection(cmd.Context(), orgID)
-			if err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("create manual accounting connection: %w", err))
-			}
-			envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"connectionId": response.ConnectionID, "nextCommand": "bitwave org accounting status --json"}}
-			return outputMutation(cmd, f.jsonOutput, envelope, "created manual accounting connection "+response.ConnectionID+"\n")
+			envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, DryRun: f.dryRun, Result: map[string]any{"status": "existing_manual_selected", "connectionId": implicitManualConnectionID, "nextCommand": "bitwave org accounting status --json"}}
+			return outputMutation(cmd, f.jsonOutput, envelope, "using automatically provisioned manual accounting connection: "+implicitManualConnectionID+"\n")
 		},
 	}
 	addMutationFlags(cmd, &f)
@@ -269,9 +355,78 @@ func newOrgAccountingManualCreateCmd() *cobra.Command {
 }
 
 func newOrgAccountingAccountsCmd() *cobra.Command {
-	cmd := &cobra.Command{Use: "accounts", Short: "List, create, or import Bitwave manual chart accounts"}
-	cmd.AddCommand(newOrgAccountingAccountsListCmd(), newOrgAccountingAccountCreateCmd(), newOrgAccountingAccountsImportCmd())
+	cmd := &cobra.Command{Use: "accounts", Aliases: []string{"categories"}, Short: "List, create, import, enable, or disable Bitwave categories/accounts"}
+	cmd.AddCommand(
+		newOrgAccountingAccountsListCmd(), newOrgAccountingAccountCreateCmd(), newOrgAccountingAccountsImportCmd(),
+		newOrgAccountingCategoryToggleCmd("enable", true), newOrgAccountingCategoryToggleCmd("disable", false),
+		newOrgAccountingCategoriesDisableAllCmd(),
+	)
 	return cmd
+}
+
+func newOrgAccountingCategoryToggleCmd(name string, enabled bool) *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{Use: name + " CATEGORY_ID", Short: strings.ToUpper(name[:1]) + name[1:] + " a category/account", Args: cobra.ExactArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+		operation := name + "-category"
+		orgID, err := resolveReportOrg(f.orgID)
+		if err != nil {
+			return mutationError(cmd, operation, f.jsonOutput, err)
+		}
+		request := map[string]any{"id": args[0], "enabled": enabled}
+		if f.dryRun {
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: request})
+		}
+		if !f.yes {
+			return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes"))
+		}
+		_, client, err := accountingClient(orgID)
+		if err != nil {
+			return mutationError(cmd, operation, f.jsonOutput, err)
+		}
+		result, err := client.UpdateCategoryEnabled(cmd.Context(), orgID, args[0], enabled)
+		if err != nil {
+			return mutationError(cmd, operation, f.jsonOutput, err)
+		}
+		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: result})
+	}}
+	addMutationFlags(cmd, &f)
+	return cmd
+}
+
+func newOrgAccountingCategoriesDisableAllCmd() *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{Use: "disable-all", Short: "Disable every organization category/account", RunE: func(cmd *cobra.Command, _ []string) error {
+		return runDisableAllAccountingResources(cmd, f, "disable-categories", "categories")
+	}}
+	addMutationFlags(cmd, &f)
+	return cmd
+}
+
+func runDisableAllAccountingResources(cmd *cobra.Command, f transactionMutationFlags, operation, resource string) error {
+	orgID, err := resolveReportOrg(f.orgID)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
+	}
+	request := map[string]any{"resource": resource, "all": true}
+	if f.dryRun {
+		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: request})
+	}
+	if !f.yes {
+		return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to disable all resources without --yes"))
+	}
+	_, client, err := accountingClient(orgID)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
+	}
+	if resource == "contacts" {
+		err = client.DisableContacts(cmd.Context(), orgID)
+	} else {
+		err = client.DisableCategories(cmd.Context(), orgID)
+	}
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
+	}
+	return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: request})
 }
 
 func newOrgAccountingAccountsListCmd() *cobra.Command {
@@ -377,6 +532,7 @@ func runCreateChartAccounts(cmd *cobra.Command, accounts []chartAccountInput, f 
 	if err != nil {
 		return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("validate accounting connection: %w", err))
 	}
+	connections = withImplicitManualConnection(connections)
 	connectionTypes := map[string]string{}
 	for _, connection := range connections {
 		if !connection.Disabled {

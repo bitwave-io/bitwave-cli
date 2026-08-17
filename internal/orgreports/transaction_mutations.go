@@ -57,20 +57,39 @@ type Category struct {
 }
 
 type Contact struct {
-	ID                     string `json:"id"`
-	Name                   string `json:"name"`
-	RemoteID               string `json:"remoteId,omitempty"`
-	Enabled                bool   `json:"enabled"`
-	Source                 string `json:"source,omitempty"`
-	Type                   string `json:"type,omitempty"`
-	AccountingConnectionID string `json:"accountingConnectionId,omitempty"`
+	ID                       string           `json:"id"`
+	Name                     string           `json:"name"`
+	RemoteID                 string           `json:"remoteId,omitempty"`
+	FirstName                string           `json:"firstName,omitempty"`
+	LastName                 string           `json:"lastName,omitempty"`
+	EmailAddress             string           `json:"emailAddress,omitempty"`
+	Enabled                  bool             `json:"enabled"`
+	Source                   string           `json:"source,omitempty"`
+	Type                     string           `json:"type,omitempty"`
+	AccountingConnectionID   string           `json:"accountingConnectionId,omitempty"`
+	DefaultExpenseCategoryID string           `json:"defaultExpenseCategoryId,omitempty"`
+	DefaultRevenueCategoryID string           `json:"defaultRevenueCategoryId,omitempty"`
+	Metadata                 map[string]any   `json:"metadata,omitempty"`
+	Addresses                []ContactAddress `json:"addresses,omitempty"`
+}
+
+type ContactAddress struct {
+	Coin                     string `json:"coin,omitempty"`
+	Address                  string `json:"address,omitempty"`
+	Memo                     string `json:"memo,omitempty"`
+	NetworkID                string `json:"networkId,omitempty"`
+	DefaultExpenseCategoryID string `json:"defaultExpenseCategoryId,omitempty"`
+	DefaultRevenueCategoryID string `json:"defaultRevenueCategoryId,omitempty"`
 }
 
 type CreateContactInput struct {
 	ConnectionID string `json:"connectionId"`
-	RemoteID     string `json:"remoteId"`
+	RemoteID     string `json:"remoteId,omitempty"`
 	Name         string `json:"name"`
 	Type         string `json:"type"`
+	FirstName    string `json:"firstName,omitempty"`
+	LastName     string `json:"lastName,omitempty"`
+	EmailAddress string `json:"emailAddress,omitempty"`
 }
 
 type AccountingConnection struct {
@@ -207,7 +226,7 @@ func (c *Client) BulkUpdateTransactionState(ctx context.Context, orgID string, i
 		return nil, fmt.Errorf("at least one transaction id is required")
 	}
 	var response BulkStateResponse
-	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk/state"
+	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk-state"
 	if err := c.doJSON(ctx, http.MethodPost, path, input, &response); err != nil {
 		return nil, err
 	}
@@ -228,7 +247,7 @@ func (c *Client) Transaction(ctx context.Context, orgID, transactionID string) (
 
 func (c *Client) BulkTransactionStateStatus(ctx context.Context, orgID, workflowID string) (*BulkStateResponse, error) {
 	var response BulkStateResponse
-	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk/state/" + url.PathEscape(workflowID)
+	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk-state/" + url.PathEscape(workflowID)
 	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
 		return nil, err
 	}
@@ -360,4 +379,96 @@ func (c *Client) CreateContact(ctx context.Context, orgID string, input CreateCo
 		return "", fmt.Errorf("create contact returned an empty id")
 	}
 	return response.Data.CreateContact, nil
+}
+
+func (c *Client) UpdateContact(ctx context.Context, orgID string, input json.RawMessage) (json.RawMessage, error) {
+	request := map[string]any{
+		"operationName": "UpdateContact",
+		"query":         `mutation UpdateContact($orgId: ID!, $contact: UpdateContactInput!) { updateContact(orgId: $orgId, contact: $contact) { id name enabled defaultExpenseCategoryId defaultRevenueCategoryId accountingConnectionId } }`,
+		"variables":     map[string]any{"orgId": orgID, "contact": input},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesMutationURL, request, true)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Data struct {
+			UpdateContact json.RawMessage `json:"updateContact"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decode update contact response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return nil, err
+	}
+	if len(response.Data.UpdateContact) == 0 || string(response.Data.UpdateContact) == "null" {
+		return nil, fmt.Errorf("update contact returned no contact")
+	}
+	return response.Data.UpdateContact, nil
+}
+
+func (c *Client) DisableContacts(ctx context.Context, orgID string) error {
+	return c.runSuccessMutation(ctx, "DisableContacts", `mutation DisableContacts($orgId: ID!) { disableContacts(orgId: $orgId) { success } }`, orgID, "disableContacts")
+}
+
+func (c *Client) UpdateCategoryEnabled(ctx context.Context, orgID, categoryID string, enabled bool) (json.RawMessage, error) {
+	request := map[string]any{
+		"operationName": "UpdateCategory",
+		"query":         `mutation UpdateCategory($orgId: ID!, $id: ID!, $enabled: Boolean!) { updateCategory(orgId: $orgId, id: $id, enabled: $enabled) { id name enabled } }`,
+		"variables":     map[string]any{"orgId": orgID, "id": categoryID, "enabled": enabled},
+	}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesMutationURL, request, true)
+	if err != nil {
+		return nil, err
+	}
+	var response struct {
+		Data struct {
+			UpdateCategory json.RawMessage `json:"updateCategory"`
+		} `json:"data"`
+		Errors []graphQLError `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("decode update category response: %w", err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return nil, err
+	}
+	if len(response.Data.UpdateCategory) == 0 || string(response.Data.UpdateCategory) == "null" {
+		return nil, fmt.Errorf("update category returned no category")
+	}
+	return response.Data.UpdateCategory, nil
+}
+
+func (c *Client) DisableCategories(ctx context.Context, orgID string) error {
+	return c.runSuccessMutation(ctx, "DisableCategories", `mutation DisableCategories($orgId: ID!) { disableCategories(orgId: $orgId) { success } }`, orgID, "disableCategories")
+}
+
+func (c *Client) runSuccessMutation(ctx context.Context, operation, query, orgID, field string) error {
+	request := map[string]any{"operationName": operation, "query": query, "variables": map[string]any{"orgId": orgID}}
+	data, err := c.doEndpoint(ctx, http.MethodPost, c.RulesMutationURL, request, true)
+	if err != nil {
+		return err
+	}
+	var response struct {
+		Data   map[string]json.RawMessage `json:"data"`
+		Errors []graphQLError             `json:"errors"`
+	}
+	if err := json.Unmarshal(data, &response); err != nil {
+		return fmt.Errorf("decode %s response: %w", operation, err)
+	}
+	if err := graphqlErrors(response.Errors); err != nil {
+		return err
+	}
+	var result struct {
+		Success bool `json:"success"`
+	}
+	if err := json.Unmarshal(response.Data[field], &result); err != nil {
+		return fmt.Errorf("decode %s result: %w", operation, err)
+	}
+	if !result.Success {
+		return fmt.Errorf("%s was rejected", operation)
+	}
+	return nil
 }

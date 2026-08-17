@@ -223,13 +223,21 @@ func (c *Client) do(ctx context.Context, method, path string, body any) ([]byte,
 }
 
 func (c *Client) doEndpoint(ctx context.Context, method, endpoint string, body any, authenticated bool) ([]byte, error) {
-	var reader io.Reader
+	var data []byte
 	if body != nil {
-		data, err := json.Marshal(body)
+		var err error
+		data, err = json.Marshal(body)
 		if err != nil {
 			return nil, err
 		}
-		reader = bytes.NewReader(data)
+	}
+	return c.doEndpointBytes(ctx, method, endpoint, data, authenticated, nil)
+}
+
+func (c *Client) doEndpointBytes(ctx context.Context, method, endpoint string, body []byte, authenticated bool, headers http.Header) ([]byte, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, endpoint, reader)
@@ -246,6 +254,12 @@ func (c *Client) doEndpoint(ctx context.Context, method, endpoint string, body a
 	req.Header.Set("Accept", "application/json, text/csv")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	for name, values := range headers {
+		req.Header.Del(name)
+		for _, value := range values {
+			req.Header.Add(name, value)
+		}
 	}
 
 	resp, err := c.HTTPClient.Do(req)

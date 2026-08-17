@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,7 +14,7 @@ import (
 
 func newOrgInventoryCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "inventory", Short: "Manage Bitwave organization inventory views"}
-	cmd.AddCommand(newOrgInventoryListCmd(), newOrgInventoryCreateCmd(), newOrgInventoryUpdateCmd(), newOrgInventoryUpdatesCmd(), newOrgInventoryDeleteCmd())
+	cmd.AddCommand(newOrgInventoryListCmd(), newOrgInventoryCreateCmd(), newOrgInventoryUpdateCmd(), newOrgInventoryUpdatesCmd(), newOrgInventoryCancelCmd(), newOrgInventoryDeleteCmd())
 	return cmd
 }
 
@@ -50,6 +51,10 @@ func newOrgInventoryCreateCmd() *cobra.Command {
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
+			request, err = useOrgDefaultInventoryPricing(request)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
 			orgID, err := resolveReportOrg(f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
@@ -71,6 +76,27 @@ func newOrgInventoryCreateCmd() *cobra.Command {
 	addMutationFlags(cmd, &f)
 	cmd.Flags().StringVarP(&input, "input", "i", "", "Complete inventory-view JSON request, or - for stdin (required)")
 	return cmd
+}
+
+// useOrgDefaultInventoryPricing mirrors the inventory-view UI. The backend can
+// fall back to the organization policy when the field is absent, but persisting
+// the explicit value prevents the view from displaying an unknown methodology.
+func useOrgDefaultInventoryPricing(request json.RawMessage) (json.RawMessage, error) {
+	var object map[string]any
+	if err := json.Unmarshal(request, &object); err != nil {
+		return nil, fmt.Errorf("decode inventory-view request: %w", err)
+	}
+	config, ok := object["config"].(map[string]any)
+	if !ok {
+		config = map[string]any{}
+		object["config"] = config
+	}
+	config["impairmentMethodology"] = "org-default"
+	result, err := json.Marshal(object)
+	if err != nil {
+		return nil, fmt.Errorf("encode inventory-view request: %w", err)
+	}
+	return result, nil
 }
 
 func newOrgInventoryUpdateCmd() *cobra.Command {
@@ -154,6 +180,43 @@ func newOrgInventoryUpdatesCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
 	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
+	return cmd
+}
+
+func newOrgInventoryCancelCmd() *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{
+		Use: "cancel VIEW_ID_OR_NAME UPDATE_ID", Short: "Cancel a running inventory calculation", Args: cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			operation := "cancel-inventory-update"
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			views, err := client.InventoryViews(cmd.Context(), orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			view, err := resolveInventoryView(args[0], views)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			request := map[string]any{"inventoryViewId": view.ID, "updateId": args[1]}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: request})
+			}
+			if !f.yes {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to cancel an inventory calculation without --yes"))
+			}
+			result, err := client.CancelInventoryViewUpdate(cmd.Context(), orgID, view.ID, strings.TrimSpace(args[1]))
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: result})
+		},
+	}
+	addMutationFlags(cmd, &f)
 	return cmd
 }
 
