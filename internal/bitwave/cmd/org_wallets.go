@@ -85,7 +85,7 @@ use the same accountBasedBlockchain creation contract as Bitwave Add Source.
 After creation, data typically appears within 15 minutes but can take up to 24
 hours depending on transaction history volume and network load.`,
 	}
-	cmd.AddCommand(newOrgWalletsListCmd(), newOrgWalletsNetworksCmd(), newOrgWalletsAddCmd(), newOrgWalletsRollupCmd())
+	cmd.AddCommand(newOrgWalletsListCmd(), newOrgWalletsNetworksCmd(), newOrgWalletsAddCmd(), newOrgWalletsRollupCmd(), newOrgWalletResyncCmd())
 	return cmd
 }
 
