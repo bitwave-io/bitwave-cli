@@ -45,14 +45,26 @@ type Config struct {
 // ErrNotAWorkspace is returned by Find/Load when no .bitwave.toml is present.
 var ErrNotAWorkspace = errors.New("not a bitwave workspace (no .bitwave.toml)")
 
+// legacyMarkers are workspace marker names from before the CLI was renamed
+// to bitwave. The file format is identical — only the filename changed — so
+// such workspaces just need the marker renamed.
+var legacyMarkers = []string{".bwx.toml", ".wavie.toml"}
+
 // Find walks up from start looking for a .bitwave.toml. Returns the workspace
 // directory (the one containing the file). Returns ErrNotAWorkspace if none
-// is found before the filesystem root.
+// is found before the filesystem root; if a pre-rename marker is found along
+// the way, the error says exactly how to adopt the workspace.
 func Find(start string) (string, error) {
 	dir := start
 	for {
 		if _, err := os.Stat(filepath.Join(dir, FileName)); err == nil {
 			return dir, nil
+		}
+		for _, legacy := range legacyMarkers {
+			if _, err := os.Stat(filepath.Join(dir, legacy)); err == nil {
+				return "", fmt.Errorf("%w; found pre-rename marker %s in %s — same format, only the filename changed: mv %s %s",
+					ErrNotAWorkspace, legacy, dir, filepath.Join(dir, legacy), filepath.Join(dir, FileName))
+			}
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {

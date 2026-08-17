@@ -18,6 +18,7 @@ func main() {
 	executed, err := root.ExecuteC()
 	telemetry.RecordCommand(cmd.Version, executed, err, time.Since(start))
 	telemetry.MaybeFlush(cmd.Version, false)
+	cmd.PostRunMaintenance()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
