@@ -214,6 +214,7 @@ root.go brings it back.
 | `DO_NOT_TRACK` | Non-zero disables telemetry (cross-tool convention) |
 | `BITWAVE_TELEMETRY_URL` | Override the telemetry ingest endpoint (default `https://api.bitwave.io/metrics`) |
 | `BITWAVE_NO_UPDATE_CHECK` | `1` disables the daily update check |
+| `BITWAVE_NO_WAVIE_SERVICE` | `1` disables automatic registration of the local Wavie CLI bridge |
 
 ## Cross-tool compatibility & accounting internals
 

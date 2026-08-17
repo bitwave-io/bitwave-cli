@@ -179,6 +179,7 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 	addInGroup(groupWorkflows, newOrgRulesCmd())
 	addInGroup(groupWorkflows, newOrgInventoryCmd())
 	addInGroup(groupWorkflows, newAPICmd())
+	addInGroup(groupWorkflows, newWavieLocalCmd())
 	// Period-close is parked until the orchestrator is ported into this CLI;
 	// re-register to bring `bitwave close` back (see close.go).
 	// addInGroup(groupWorkflows, newCloseCmd())
@@ -203,6 +204,7 @@ func PostRunMaintenance() {
 	if !quietFlag && os.Getenv("BITWAVE_QUIET") != "1" {
 		update.BackgroundRefresh(Version)
 	}
+	MaybeEnsureWavieService()
 }
 
 func newVersionCmd() *cobra.Command {

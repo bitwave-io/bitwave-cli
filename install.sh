@@ -71,3 +71,10 @@ case ":$PATH:" in
   *) printf 'note: %s is not on your PATH — add:\n  export PATH="%s:$PATH"\n' "$INSTALL_DIR" "$INSTALL_DIR" ;;
 esac
 "$INSTALL_DIR/bitwave" version || true
+
+# Wavie discovers the CLI through a loopback-only per-user bridge. Register it
+# during installation so users do not need to start a terminal process before
+# opening Wavie. A service-manager failure must not make the CLI unusable.
+if ! "$INSTALL_DIR/bitwave" --quiet wavie service install; then
+  printf 'note: Wavie automatic CLI connection could not be started; run:\n  bitwave wavie service install\n' >&2
+fi

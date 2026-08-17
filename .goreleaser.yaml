@@ -80,3 +80,10 @@ homebrew_casks:
     directory: Casks
     homepage: https://github.com/bitwave-io/bitwave-cli
     description: Agent-first accounting platform — run locally, share in the cloud
+    hooks:
+      pre:
+        uninstall: |
+          system_command "#{staged_path}/bitwave", args: ["--quiet", "wavie", "service", "uninstall"]
+      post:
+        install: |
+          system_command "#{staged_path}/bitwave", args: ["--quiet", "wavie", "service", "install"]
