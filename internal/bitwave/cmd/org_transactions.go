@@ -52,11 +52,102 @@ method, path, and JSON body without sending a mutation.`,
 	cmd.AddCommand(newTransactionStateCmd("unignore", orgreports.TransactionStateUnignore))
 	cmd.AddCommand(newGetOrgTransactionCmd())
 	cmd.AddCommand(newSearchOrgTransactionsCmd())
+	cmd.AddCommand(newTransactionSummaryCmd())
 	cmd.AddCommand(newCreateOrgTransactionCmd())
 	cmd.AddCommand(newCategorizeTransactionCmd())
 	cmd.AddCommand(newBulkCategorizeTransactionsCmd())
 	cmd.AddCommand(newCategorizationOptionsCmd())
 	return cmd
+}
+
+func newTransactionSummaryCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "summary",
+		Short: "Read the wallet, counterparty, and asset tables from Transaction Summary",
+		Long: `Read the same aggregate datasets used by Bitwave's Transaction Summary dashboard.
+
+These bounded endpoints are useful before exporting individual transactions.
+Interacting addresses are returned in full and are never shortened by the CLI.`,
+	}
+	cmd.AddCommand(newTransactionSummaryWalletsCmd(), newTransactionSummaryAddressesCmd(), newTransactionSummaryAssetsCmd())
+	return cmd
+}
+
+func newTransactionSummaryWalletsCmd() *cobra.Command {
+	var orgID, from, to string
+	var page, limit int
+	cmd := &cobra.Command{
+		Use: "wallets", Short: "List wallet-level transaction totals", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			resolvedOrg, err := resolveReportOrg(orgID)
+			if err != nil {
+				return err
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrg))
+			items, err := client.TransactionSummaryWallets(cmd.Context(), resolvedOrg, strings.TrimSpace(from), strings.TrimSpace(to), page, limit)
+			if err != nil {
+				return fmt.Errorf("list transaction-summary wallets: %w", err)
+			}
+			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "wallets": items, "page": page, "limit": limit})
+		},
+	}
+	addTransactionSummaryFlags(cmd, &orgID, &from, &to, &page, &limit)
+	return cmd
+}
+
+func newTransactionSummaryAddressesCmd() *cobra.Command {
+	var orgID, walletID, from, to, sortField string
+	var page, limit int
+	cmd := &cobra.Command{
+		Use: "addresses", Short: "List interacting-address transaction totals", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			resolvedOrg, err := resolveReportOrg(orgID)
+			if err != nil {
+				return err
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrg))
+			items, err := client.TransactionSummaryAddresses(cmd.Context(), resolvedOrg, strings.TrimSpace(walletID), strings.TrimSpace(from), strings.TrimSpace(to), strings.TrimSpace(sortField), page, limit)
+			if err != nil {
+				return fmt.Errorf("list transaction-summary addresses: %w", err)
+			}
+			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "addresses": items, "page": page, "limit": limit})
+		},
+	}
+	addTransactionSummaryFlags(cmd, &orgID, &from, &to, &page, &limit)
+	cmd.Flags().StringVar(&walletID, "wallet", "", "Exact wallet ID")
+	cmd.Flags().StringVar(&sortField, "sort", "", "Dashboard field to sort descending")
+	return cmd
+}
+
+func newTransactionSummaryAssetsCmd() *cobra.Command {
+	var orgID string
+	cmd := &cobra.Command{
+		Use: "assets", Short: "List assets available in Transaction Summary", Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			resolvedOrg, err := resolveReportOrg(orgID)
+			if err != nil {
+				return err
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrg))
+			items, err := client.TransactionSummaryAssets(cmd.Context(), resolvedOrg)
+			if err != nil {
+				return fmt.Errorf("list transaction-summary assets: %w", err)
+			}
+			return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "assets": items})
+		},
+	}
+	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
+	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
+	return cmd
+}
+
+func addTransactionSummaryFlags(cmd *cobra.Command, orgID, from, to *string, page, limit *int) {
+	cmd.Flags().StringVar(orgID, "org", "", "Organization ID override")
+	cmd.Flags().StringVar(from, "from", "", "Inclusive dashboard start date")
+	cmd.Flags().StringVar(to, "to", "", "Inclusive dashboard end date")
+	cmd.Flags().IntVar(page, "page", 1, "Dashboard page number")
+	cmd.Flags().IntVar(limit, "limit", 100, "Records per page (1-500)")
+	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
 }
 
 func newGetOrgTransactionCmd() *cobra.Command {
