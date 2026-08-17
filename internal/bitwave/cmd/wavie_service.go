@@ -42,7 +42,8 @@ func newWavieServiceCmd() *cobra.Command {
 Normal users do not need to run these commands. Supported installers register
 and start the service automatically; these commands are available for support,
 development, and recovery. The service listens on loopback only, and commands
-still require approval in the Bitwave web app.`,
+that change Bitwave state require approval in the web app. Read-only commands
+run automatically.`,
 	}
 	cmd.AddCommand(
 		newWavieServiceActionCmd("install", "Install and start the Wavie background service", installWavieService),

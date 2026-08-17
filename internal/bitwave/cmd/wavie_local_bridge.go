@@ -46,10 +46,16 @@ type wavieBridgeTool struct {
 }
 
 type wavieBridgeExecuteRequest struct {
-	RequestID string   `json:"requestId"`
-	Args      []string `json:"args"`
-	Reason    string   `json:"reason"`
-	Approved  bool     `json:"approved"`
+	RequestID      string   `json:"requestId"`
+	OrganizationID string   `json:"organizationId,omitempty"`
+	Args           []string `json:"args"`
+	Reason         string   `json:"reason"`
+	Approved       bool     `json:"approved"`
+}
+
+type wavieBridgeApprovalRequired struct {
+	RequiresApproval bool   `json:"requiresApproval"`
+	Risk             string `json:"risk"`
 }
 
 type wavieBridge struct {
@@ -70,8 +76,8 @@ func newWavieLocalCmd() *cobra.Command {
 		Long: `Connect the installed Bitwave CLI to Wavie in the Bitwave web app.
 
 The local bridge listens only on the loopback interface. Wavie can propose
-structured Bitwave CLI commands, but the web app must show and approve each
-command before the bridge will execute it. No shell interpreter is exposed.`,
+structured Bitwave CLI commands. Read-only commands run automatically; changes
+must be approved in the web app. No shell interpreter is exposed.`,
 	}
 	cmd.AddCommand(newWavieConnectCmd())
 	cmd.AddCommand(newWavieServiceCmd())
@@ -192,7 +198,7 @@ func (b *wavieBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Connected: true, ProtocolVersion: wavieBridgeProtocol, CLIVersion: Version, LocalRoot: b.localRoot,
 			Tool: wavieBridgeTool{
 				Name:        wavieLocalToolName,
-				Description: "Use the locally installed Bitwave CLI whenever the user asks to inspect or change Bitwave state and no equivalent server tool is available. Infer this from ordinary user intent; never require the user to mention the CLI. The command uses the user's existing authentication, executes arguments directly without a shell, and requires approval in the Bitwave web app.",
+				Description: "Use the locally installed Bitwave CLI whenever the user asks to inspect or change Bitwave state and no equivalent server tool is available. Infer this from ordinary user intent; never require the user to mention the CLI. For organization balances use `report balance` (not `bal`, which reads a local plain-text ledger). Common organization reports are `report balance`, `report transaction-export`, and `report actions`. The Wavie session already identifies the organization, so do not call status or help merely to rediscover context or familiar commands. Read-only commands run automatically; changes require approval. Arguments execute directly without a shell.",
 				InputSchema: wavieLocalToolSchema,
 				Safety:      "write",
 			},
@@ -235,17 +241,21 @@ func (b *wavieBridge) execute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input.RequestID = strings.TrimSpace(input.RequestID)
+	input.OrganizationID = strings.TrimSpace(input.OrganizationID)
 	input.Reason = strings.TrimSpace(input.Reason)
 	if input.RequestID == "" || input.Reason == "" {
 		http.Error(w, "requestId and reason are required", http.StatusBadRequest)
 		return
 	}
-	if !input.Approved {
-		http.Error(w, "the command was not approved in the Bitwave web app", http.StatusForbidden)
-		return
-	}
 	if err := validateBitwaveArgs(input.Args); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if risk := classifyBitwaveArgs(input.Args); risk != "read" && !input.Approved {
+		b.writeJSON(w, http.StatusPreconditionRequired, wavieBridgeApprovalRequired{
+			RequiresApproval: true,
+			Risk:             risk,
+		})
 		return
 	}
 	if cached, ok := b.cachedResult(input.RequestID); ok {
@@ -265,9 +275,85 @@ func (b *wavieBridge) execute(w http.ResponseWriter, r *http.Request) {
 		b.writeJSON(w, http.StatusOK, cached)
 		return
 	}
-	result := executeBitwaveCommand(r.Context(), b.executable, b.localRoot, input.Args)
+	result := executeBitwaveCommandForOrg(r.Context(), b.executable, b.localRoot, input.Args, input.OrganizationID)
 	b.cacheResult(input.RequestID, result)
 	b.writeJSON(w, http.StatusOK, result)
+}
+
+// classifyBitwaveArgs is the local authority for approval policy. The model's
+// description of a command is intentionally not trusted for this decision.
+// Unknown commands fail closed and require approval.
+func classifyBitwaveArgs(args []string) string {
+	if len(args) == 0 {
+		return "read"
+	}
+	for _, arg := range args {
+		switch strings.ToLower(strings.TrimSpace(arg)) {
+		case "--help", "-h", "help", "--version":
+			return "read"
+		}
+	}
+	words := commandWords(args)
+	if len(words) == 0 {
+		return "write"
+	}
+	switch words[0] {
+	case "version", "status", "bal", "balance", "reg", "register", "print", "accounts", "contacts", "commodities", "equity", "cleared", "csv", "stats", "report":
+		return "read"
+	case "org":
+		if len(words) > 1 && (words[1] == "current" || words[1] == "list") {
+			return "read"
+		}
+	case "transaction", "transactions", "txn":
+		if len(words) > 1 {
+			switch words[1] {
+			case "get", "search", "summary", "categorization-options":
+				return "read"
+			}
+		}
+	case "rule", "rules":
+		if len(words) > 1 && (words[1] == "get" || words[1] == "list" || words[1] == "validate") {
+			return "read"
+		}
+	case "inventory":
+		if len(words) > 1 && (words[1] == "list" || words[1] == "updates") {
+			return "read"
+		}
+	}
+	if isHighRiskCommand(words) {
+		return "destructive"
+	}
+	return "write"
+}
+
+func commandWords(args []string) []string {
+	words := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.ToLower(strings.TrimSpace(args[i]))
+		if arg == "" {
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			// Global flags accepted before the command. Values for these flags are
+			// skipped so they cannot be mistaken for a command word.
+			if (arg == "--token" || arg == "--auth-url") && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		words = append(words, arg)
+	}
+	return words
+}
+
+func isHighRiskCommand(words []string) bool {
+	if len(words) == 0 {
+		return false
+	}
+	if words[0] == "migrate" {
+		return true
+	}
+	return len(words) > 1 && words[0] == "wallets" && words[1] == "send"
 }
 
 func (b *wavieBridge) cachedResult(requestID string) (localCommandResult, bool) {

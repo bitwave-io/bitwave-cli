@@ -350,11 +350,18 @@ func validateBitwaveArgs(args []string) error {
 }
 
 func executeBitwaveCommand(ctx context.Context, executable, cwd string, args []string) localCommandResult {
+	return executeBitwaveCommandForOrg(ctx, executable, cwd, args, "")
+}
+
+func executeBitwaveCommandForOrg(ctx context.Context, executable, cwd string, args []string, organizationID string) localCommandResult {
 	stdout := &limitedBuffer{limit: maxLocalToolOutput}
 	stderr := &limitedBuffer{limit: maxLocalToolOutput}
 	local := exec.CommandContext(ctx, executable, args...)
 	local.Dir = cwd
 	local.Env = append(os.Environ(), "BITWAVE_QUIET=1")
+	if organizationID = strings.TrimSpace(organizationID); organizationID != "" {
+		local.Env = append(local.Env, "BITWAVE_ORG_ID="+organizationID)
+	}
 	local.Stdout = stdout
 	local.Stderr = stderr
 	err := local.Run()

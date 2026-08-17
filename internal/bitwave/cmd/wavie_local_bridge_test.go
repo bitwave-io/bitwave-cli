@@ -52,6 +52,28 @@ func TestWavieBridgeStatusAndCORS(t *testing.T) {
 	}
 }
 
+func TestClassifyBitwaveArgs(t *testing.T) {
+	for _, args := range [][]string{
+		{"--help"}, {"--quiet", "report", "balance", "--as-of", "2024-12-31"},
+		{"bal", "--to", "2024-12-31"}, {"org", "current"},
+		{"transactions", "search", "--to", "2024-12-31"}, {"rules", "list"},
+	} {
+		if risk := classifyBitwaveArgs(args); risk != "read" {
+			t.Fatalf("classifyBitwaveArgs(%q) = %q, want read", args, risk)
+		}
+	}
+	for _, args := range [][]string{{"org", "use", "abc"}, {"transactions", "categorize", "txn"}, {"rules", "create"}} {
+		if risk := classifyBitwaveArgs(args); risk != "write" {
+			t.Fatalf("classifyBitwaveArgs(%q) = %q, want write", args, risk)
+		}
+	}
+	for _, args := range [][]string{{"migrate"}, {"wallets", "send"}} {
+		if risk := classifyBitwaveArgs(args); risk != "destructive" {
+			t.Fatalf("classifyBitwaveArgs(%q) = %q, want destructive", args, risk)
+		}
+	}
+}
+
 func TestWavieBridgeExecutesApprovedCommandAndCachesResult(t *testing.T) {
 	bridge := newWavieBridge("/bin/echo", t.TempDir(), nil)
 	body := `{"requestId":"tool-1","args":["hello","world"],"reason":"read version","approved":true}`
@@ -82,15 +104,35 @@ func TestWavieBridgeExecutesApprovedCommandAndCachesResult(t *testing.T) {
 	}
 }
 
-func TestWavieBridgeRequiresUIApprovalAndProtocolHeader(t *testing.T) {
+func TestWavieBridgeBindsExecutionToSessionOrganization(t *testing.T) {
+	bridge := newWavieBridge("/usr/bin/env", t.TempDir(), nil)
+	body := `{"requestId":"tool-org","organizationId":"org-from-session","args":[],"reason":"verify org scope","approved":false}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/execute", strings.NewReader(body))
+	req.Header.Set(wavieBridgeHeader, wavieBridgeProtocol)
+	response := httptest.NewRecorder()
+	bridge.ServeHTTP(response, req)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var result localCommandResult
+	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Stdout, "BITWAVE_ORG_ID=org-from-session") {
+		t.Fatalf("session organization missing from environment: %s", result.Stdout)
+	}
+}
+
+func TestWavieBridgeAutoRunsReadsAndRequiresApprovalForWrites(t *testing.T) {
 	bridge := newWavieBridge("/path/that/does/not/exist", t.TempDir(), nil)
 	for name, testCase := range map[string]struct {
 		body     string
 		header   string
 		expected int
 	}{
-		"no approval": {`{"requestId":"tool-1","args":["--version"],"reason":"test","approved":false}`, wavieBridgeProtocol, http.StatusForbidden},
-		"no header":   {`{"requestId":"tool-2","args":["--version"],"reason":"test","approved":true}`, "", http.StatusBadRequest},
+		"read without approval executes": {`{"requestId":"tool-1","args":["--version"],"reason":"test","approved":false}`, wavieBridgeProtocol, http.StatusOK},
+		"write without approval":         {`{"requestId":"tool-3","args":["org","use","abc"],"reason":"test","approved":false}`, wavieBridgeProtocol, http.StatusPreconditionRequired},
+		"no header":                      {`{"requestId":"tool-2","args":["--version"],"reason":"test","approved":true}`, "", http.StatusBadRequest},
 	} {
 		t.Run(name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/v1/execute", strings.NewReader(testCase.body))
