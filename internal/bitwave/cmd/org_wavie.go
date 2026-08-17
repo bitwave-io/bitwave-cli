@@ -24,6 +24,7 @@ Wavie gateway rather than the removed legacy /conversations API.`,
 	cmd.AddCommand(newOrgWavieMessageCmd())
 	cmd.AddCommand(newOrgWavieTranscriptCmd())
 	cmd.AddCommand(newOrgWavieInterruptCmd())
+	cmd.AddCommand(newOrgWavieChatCmd())
 	return cmd
 }
 
@@ -47,7 +48,7 @@ func newOrgWavieSessionCreateCmd() *cobra.Command {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
 			request := orgreports.CreateWavieSessionRequest{
-				Capabilities: orgreports.WavieCapabilities{ClientKind: "cli", ClientVersion: orgreports.WavieProtocolVersion, Tools: []any{}},
+				Capabilities: orgreports.WavieCapabilities{ClientKind: "cli", ClientVersion: orgreports.WavieProtocolVersion, Tools: []orgreports.WavieClientTool{}},
 				Model:        strings.TrimSpace(model),
 			}
 			preview := map[string]any{"method": "POST", "path": fmt.Sprintf("/v3/orgs/%s/wavie/sessions", orgID), "body": request}
