@@ -37,10 +37,6 @@ var defaultGLBaseURL = "https://api.bitwave.io"
 // rules as defaultGLBaseURL.
 var defaultCoreBaseURL = "https://api.bitwave.io"
 
-// defaultWavieBaseURL is the public API gateway that proxies wavie.v1 to
-// ai-svc. It is separate from the legacy core API host.
-var defaultWavieBaseURL = "https://api4.bitwave.io"
-
 // resolveIdentityEmail returns the logged-in user's email (the same value
 // `bitwave auth status` displays), or "" when no email is resolvable — e.g.
 // agent/bearer-token identities that carry no email claim. Never returns an
@@ -72,13 +68,6 @@ func resolveCoreBaseURL() string {
 		return v
 	}
 	return defaultCoreBaseURL
-}
-
-func resolveWavieBaseURL() string {
-	if v := os.Getenv("BITWAVE_BASE_URL_WAVIE"); v != "" {
-		return v
-	}
-	return defaultWavieBaseURL
 }
 
 // makeTokenResolver returns a token resolver applying the bitwave priority:

@@ -29,7 +29,6 @@ func newOrgCmd() *cobra.Command {
 	cmd.AddCommand(newOrgClearCmd())
 	cmd.AddCommand(newOrgWalletsCmd())
 	cmd.AddCommand(newOrgAccountingCmd())
-	cmd.AddCommand(newOrgWavieCmd())
 	return cmd
 }
 

@@ -71,8 +71,9 @@ type wavieBridge struct {
 
 func newWavieLocalCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "wavie",
-		Short: "Connect the local Bitwave CLI to Wavie",
+		Use:    "wavie",
+		Short:  "Connect the local Bitwave CLI to Wavie",
+		Hidden: true,
 		Long: `Connect the installed Bitwave CLI to Wavie in the Bitwave web app.
 
 The local bridge listens only on the loopback interface. Wavie can propose
@@ -198,7 +199,7 @@ func (b *wavieBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Connected: true, ProtocolVersion: wavieBridgeProtocol, CLIVersion: Version, LocalRoot: b.localRoot,
 			Tool: wavieBridgeTool{
 				Name:        wavieLocalToolName,
-				Description: "Use the locally installed Bitwave CLI whenever the user asks to inspect or change Bitwave state and no equivalent server tool is available. Infer this from ordinary user intent; never require the user to mention the CLI. For organization balances use `report balance` (not `bal`, which reads a local plain-text ledger). Common organization reports are `report balance`, `report transaction-export`, and `report actions`. The Wavie session already identifies the organization, so do not call status or help merely to rediscover context or familiar commands. Read-only commands run automatically; changes require approval. Arguments execute directly without a shell.",
+				Description: "Run the Bitwave CLI for the organization already selected by this Wavie session. Pass command arguments as an array without the `bitwave` executable name; omit `args` or pass an empty array to return `bitwave --help`. Select this tool from ordinary user intent whenever the user asks to inspect or change Bitwave data; never require them to mention the CLI. Prefer `--json` for structured results. For organization balances use `report balance`; `bal` reads a separate local plain-text ledger. Arguments execute directly without a shell. Read-only commands run automatically and commands that change data require user approval.",
 				InputSchema: wavieLocalToolSchema,
 				Safety:      "write",
 			},

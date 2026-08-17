@@ -9,6 +9,24 @@ import (
 	"testing"
 )
 
+func TestPublicCommandTreeDoesNotExposeWavieCommands(t *testing.T) {
+	root := NewRootCmd()
+	var output bytes.Buffer
+	root.SetOut(&output)
+	root.SetErr(&output)
+	root.SetArgs([]string{"--help"})
+	if err := root.Execute(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(output.String(), "wavie") {
+		t.Fatalf("root help exposes implementation-specific Wavie commands:\n%s", output.String())
+	}
+	found, _, _ := root.Find([]string{"org", "wavie"})
+	if found != nil && found.Name() == "wavie" && found.Parent() != nil && found.Parent().Name() == "org" {
+		t.Fatal("org wavie command remains registered")
+	}
+}
+
 func TestValidateLoopbackAddress(t *testing.T) {
 	for _, address := range []string{"127.0.0.1:7314", "localhost:7314", "[::1]:7314"} {
 		if err := validateLoopbackAddress(address); err != nil {
@@ -39,8 +57,11 @@ func TestWavieBridgeStatusAndCORS(t *testing.T) {
 	if !status.Connected || status.Tool.Name != wavieLocalToolName || status.Tool.Safety != "write" {
 		t.Fatalf("status = %#v", status)
 	}
-	if !strings.Contains(status.Tool.Description, "ordinary user intent") || !strings.Contains(status.Tool.Description, "never require the user to mention the CLI") {
+	if !strings.Contains(status.Tool.Description, "ordinary user intent") || !strings.Contains(status.Tool.Description, "empty array") {
 		t.Fatalf("tool description does not require intent-based routing: %q", status.Tool.Description)
+	}
+	if strings.Contains(string(status.Tool.InputSchema), `"required"`) {
+		t.Fatalf("empty tool input must be valid: %s", status.Tool.InputSchema)
 	}
 
 	blocked := httptest.NewRecorder()
@@ -71,6 +92,35 @@ func TestClassifyBitwaveArgs(t *testing.T) {
 		if risk := classifyBitwaveArgs(args); risk != "destructive" {
 			t.Fatalf("classifyBitwaveArgs(%q) = %q, want destructive", args, risk)
 		}
+	}
+}
+
+func TestNormalizeBitwaveArgsDefaultsToHelp(t *testing.T) {
+	got := normalizeBitwaveArgs(nil)
+	if len(got) != 1 || got[0] != "--help" {
+		t.Fatalf("normalizeBitwaveArgs(nil) = %q, want [--help]", got)
+	}
+	original := []string{"report", "balance"}
+	got = normalizeBitwaveArgs(original)
+	if len(got) != 2 || got[0] != "report" || got[1] != "balance" {
+		t.Fatalf("normalizeBitwaveArgs(%q) = %q", original, got)
+	}
+}
+
+func TestValidateBitwaveArgsRejectsRecursiveWavie(t *testing.T) {
+	if err := validateBitwaveArgs([]string{"org", "wavie", "chat"}); err == nil {
+		t.Fatal("expected recursive Wavie command to be rejected")
+	}
+	if err := validateBitwaveArgs([]string{"org", "transactions", "list", "--json"}); err != nil {
+		t.Fatalf("ordinary args rejected: %v", err)
+	}
+}
+
+func TestLimitedBufferCapsOutput(t *testing.T) {
+	buffer := &limitedBuffer{limit: 4}
+	n, err := buffer.Write([]byte("abcdef"))
+	if err != nil || n != 6 || buffer.String() != "abcd" || !buffer.truncated {
+		t.Fatalf("n=%d err=%v string=%q truncated=%v", n, err, buffer.String(), buffer.truncated)
 	}
 }
 
@@ -106,7 +156,7 @@ func TestWavieBridgeExecutesApprovedCommandAndCachesResult(t *testing.T) {
 
 func TestWavieBridgeBindsExecutionToSessionOrganization(t *testing.T) {
 	bridge := newWavieBridge("/usr/bin/env", t.TempDir(), nil)
-	body := `{"requestId":"tool-org","organizationId":"org-from-session","args":[],"reason":"verify org scope","approved":false}`
+	body := `{"requestId":"tool-org","organizationId":"org-from-session","args":["--"],"reason":"verify org scope","approved":true}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/execute", strings.NewReader(body))
 	req.Header.Set(wavieBridgeHeader, wavieBridgeProtocol)
 	response := httptest.NewRecorder()
