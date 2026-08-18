@@ -39,6 +39,11 @@ func configPath() (string, error) {
 // Load reads ~/.bitwave/config.json. Returns nil, ErrNoActiveOrg when no active
 // org is set.
 func Load() (*Active, error) {
+	// Embedded callers (for example Wavie) bind an invocation to an
+	// organization without mutating the user's persisted CLI selection.
+	if orgID := os.Getenv("BITWAVE_ORG_ID"); orgID != "" {
+		return &Active{OrgID: orgID}, nil
+	}
 	path, err := configPath()
 	if err != nil {
 		return nil, err

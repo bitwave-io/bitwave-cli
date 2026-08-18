@@ -8,10 +8,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
+	"sync"
+
+	bitwavecmd "github.com/bitwave-io/bitwave-cli/internal/bitwave/cmd"
 )
 
 const (
@@ -43,6 +45,19 @@ type CommandResult struct {
 	Truncated bool     `json:"truncated,omitempty"`
 }
 
+// ExecuteOptions supplies invocation-scoped context without relying on a
+// user's persisted CLI configuration. Environment changes and working-directory
+// changes are serialized and restored before ExecuteWithOptions returns.
+type ExecuteOptions struct {
+	Args             []string
+	WorkingDirectory string
+	OrganizationID   string
+	Token            string
+	AgentToken       string
+}
+
+var executeMu sync.Mutex
+
 func ValidateArgs(args []string) error {
 	for _, arg := range args {
 		if strings.ContainsRune(arg, 0) {
@@ -59,39 +74,86 @@ func NormalizeArgs(args []string) []string {
 	return append([]string(nil), args...)
 }
 
-// Execute invokes one Bitwave command using an exact executable path and argv.
-// organizationID is injected only for this child process; no process-global
-// environment or CLI context is mutated.
-func Execute(ctx context.Context, executable, cwd string, args []string, organizationID string) CommandResult {
-	args = NormalizeArgs(args)
+// ExecuteWithOptions runs one Bitwave command in process. The mutex is
+// intentional: Cobra's command package retains a small amount of flag state,
+// and invocation-scoped environment/cwd values must not bleed across agents.
+func ExecuteWithOptions(ctx context.Context, options ExecuteOptions) CommandResult {
+	executeMu.Lock()
+	defer executeMu.Unlock()
+
+	args := NormalizeArgs(options.Args)
 	stdout := &limitedBuffer{limit: maxOutput}
 	stderr := &limitedBuffer{limit: maxOutput}
-	local := exec.CommandContext(ctx, executable, args...)
-	local.Dir = cwd
-	local.Env = append(os.Environ(), "BITWAVE_QUIET=1")
-	if organizationID = strings.TrimSpace(organizationID); organizationID != "" {
-		local.Env = append(local.Env, "BITWAVE_ORG_ID="+organizationID)
+
+	restoreEnv := setInvocationEnv(map[string]string{
+		"BITWAVE_QUIET":       "1",
+		"BITWAVE_ORG_ID":      strings.TrimSpace(options.OrganizationID),
+		"BITWAVE_TOKEN":       strings.TrimSpace(options.Token),
+		"BITWAVE_AGENT_TOKEN": strings.TrimSpace(options.AgentToken),
+	})
+	defer restoreEnv()
+
+	cwd, _ := os.Getwd()
+	if options.WorkingDirectory != "" {
+		if err := os.Chdir(options.WorkingDirectory); err != nil {
+			return CommandResult{Command: append([]string{"bitwave"}, args...), Directory: options.WorkingDirectory, ExitCode: 1, Stderr: err.Error()}
+		}
+		defer func() { _ = os.Chdir(cwd) }()
 	}
-	local.Stdout = stdout
-	local.Stderr = stderr
-	err := local.Run()
+
+	root := bitwavecmd.NewRootCmd()
+	root.SetArgs(args)
+	root.SetOut(stdout)
+	root.SetErr(stderr)
+	root.SetContext(ctx)
+	_, err := root.ExecuteC()
 	exitCode := 0
 	if err != nil {
-		exitCode = -1
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			exitCode = exitErr.ExitCode()
-		} else if errors.Is(err, context.Canceled) {
+		exitCode = 1
+		if errors.Is(err, context.Canceled) {
 			exitCode = 130
 		}
+		_, _ = fmt.Fprintln(stderr, err)
 	}
+	directory, _ := os.Getwd()
 	return CommandResult{
-		Command:   append([]string{filepath.Base(executable)}, args...),
-		Directory: cwd,
+		Command:   append([]string{"bitwave"}, args...),
+		Directory: directory,
 		ExitCode:  exitCode,
 		Stdout:    stdout.String(),
 		Stderr:    stderr.String(),
 		Truncated: stdout.truncated || stderr.truncated,
+	}
+}
+
+// Execute is the compact API for callers that only need org scope.
+func Execute(ctx context.Context, args []string, organizationID string) CommandResult {
+	return ExecuteWithOptions(ctx, ExecuteOptions{Args: args, OrganizationID: organizationID})
+}
+
+func setInvocationEnv(values map[string]string) func() {
+	type previousValue struct {
+		value string
+		set   bool
+	}
+	previous := make(map[string]previousValue, len(values))
+	for key, value := range values {
+		prior, set := os.LookupEnv(key)
+		previous[key] = previousValue{value: prior, set: set}
+		if value == "" {
+			_ = os.Unsetenv(key)
+		} else {
+			_ = os.Setenv(key, value)
+		}
+	}
+	return func() {
+		for key, prior := range previous {
+			if prior.set {
+				_ = os.Setenv(key, prior.value)
+			} else {
+				_ = os.Unsetenv(key)
+			}
+		}
 	}
 }
 
