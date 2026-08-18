@@ -39,12 +39,21 @@ Local dry-runs: `goreleaser check`, `goreleaser build --snapshot --clean`,
 
 | Secret | What / how to get it |
 |---|---|
-| `NPM_TOKEN` | npm **granular access token** with *Read and write* on the `bitwave` package **and** on *all packages* in the `@bitwave-io` org — the first release *creates* the platform packages, and a token scoped to existing packages only can't create new ones. npmjs.com → Access Tokens → Generate → Granular. Set a long expiry; rotate on a calendar. |
 | `HOMEBREW_TAP_GITHUB_TOKEN` | Fine-grained GitHub PAT with *Contents: read & write* on `bitwave-io/homebrew-tap` only. The default `GITHUB_TOKEN` can't push to other repos. |
 
-Without `NPM_TOKEN` the npm step fails (release still completes on GitHub);
-without `HOMEBREW_TAP_GITHUB_TOKEN` the cask push fails. Set both before the
-first tag.
+Without `HOMEBREW_TAP_GITHUB_TOKEN` the cask push fails (release still
+completes on GitHub).
+
+npm needs **no secret**: the workflow uses [trusted publishing
+(OIDC)](https://docs.npmjs.com/trusted-publishers) — the job exchanges a
+GitHub OIDC token for publish rights (`permissions: id-token: write` in
+`release.yml`). Each published package (`bitwave` plus every
+`@bitwave-io/bitwave-<os>-<arch>`) must list this repo's `release.yml` as a
+**GitHub Actions** trusted publisher on npmjs.com. Two gotchas: passing
+`registry-url` to setup-node plants a placeholder token that pre-empts OIDC
+(leave it off), and configuring the trusted publisher as "GitLab CI/CD"
+instead of "GitHub Actions" makes the token exchange 404 (surfaces as
+`ENEEDAUTH`).
 
 ## Optional secrets — macOS signing + notarization
 
@@ -78,7 +87,8 @@ runner (no macOS runner needed). Presence of `MACOS_SIGN_P12` is the switch.
 
 - [ ] Create the tap repo: `gh repo create bitwave-io/homebrew-tap --public`
       (empty is fine; goreleaser writes `Casks/bitwave.rb`).
-- [ ] Set `NPM_TOKEN` and `HOMEBREW_TAP_GITHUB_TOKEN` secrets.
+- [ ] Set the `HOMEBREW_TAP_GITHUB_TOKEN` secret.
+- [ ] Configure the npm trusted publishers (see above) for all six packages.
 - [ ] `npm install -g bitwave` currently serves the v0.0.2 name-reservation
       launcher; the first release replaces it with the real thing.
 
