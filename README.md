@@ -95,21 +95,12 @@ sudo install -m 755 bitwave /usr/local/bin/bitwave
 
 You'll need Go 1.25+.
 
-### Wavie connection
+### Embedding the CLI
 
-Supported installers register a loopback-only background service alongside the
-CLI. When the Bitwave web app and the CLI are both installed, Wavie detects the
-CLI automatically—there is no bridge command for the user to start and no
-extra port to configure. Wavie receives one generic, explicitly client-side
-Bitwave CLI tool. An empty
-tool invocation returns `bitwave --help`; other invocations pass an argument
-array directly to the CLI without a shell. Commands that change data are shown
-in the client for approval before they run locally.
-
-The automatic service can be disabled for managed environments with
-`BITWAVE_NO_CLIENT_TOOLS_SERVICE=1`.
-
----
+Agent runtimes can import `github.com/bitwave-io/bitwave-cli/sdk` and expose its
+single `run_bitwave_cli` tool. The SDK accepts a structured argument array,
+defaults an empty invocation to `bitwave --help`, and executes without a shell.
+It does not install or run a local HTTP bridge.
 
 ## Quickstart — local workspace
 

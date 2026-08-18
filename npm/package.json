@@ -30,11 +30,7 @@
   "bin": {
     "bitwave": "bin/bitwave"
   },
-  "scripts": {
-    "postinstall": "node postinstall.cjs"
-  },
   "files": [
-    "bin/",
-    "postinstall.cjs"
+    "bin/"
   ]
 }

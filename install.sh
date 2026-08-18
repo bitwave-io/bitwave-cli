@@ -71,10 +71,3 @@ case ":$PATH:" in
   *) printf 'note: %s is not on your PATH — add:\n  export PATH="%s:$PATH"\n' "$INSTALL_DIR" "$INSTALL_DIR" ;;
 esac
 "$INSTALL_DIR/bitwave" version || true
-
-# Approved clients discover the CLI through a loopback-only per-user transport.
-# Register it during installation so users do not need to start another process.
-# A service-manager failure must not make the CLI unusable.
-if ! "$INSTALL_DIR/bitwave" --quiet client-tools service install; then
-  printf 'note: the local client-tool service could not be started; run:\n  bitwave client-tools service install\n' >&2
-fi

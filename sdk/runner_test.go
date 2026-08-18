@@ -20,8 +20,8 @@ func TestExecuteBindsOrganizationToChild(t *testing.T) {
 	}
 }
 
-func TestValidateArgsRejectsRecursiveClientTools(t *testing.T) {
-	if err := ValidateArgs([]string{"client-tools", "serve"}); err == nil {
-		t.Fatal("expected recursive client-tool command to be rejected")
+func TestValidateArgsRejectsNULBytes(t *testing.T) {
+	if err := ValidateArgs([]string{"report", "balance\x00unsafe"}); err == nil {
+		t.Fatal("expected NUL byte to be rejected")
 	}
 }

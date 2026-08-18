@@ -1,6 +1,6 @@
 // Package sdk exposes the Bitwave CLI as a single structured tool for agent
-// harnesses. It executes the Bitwave binary directly with argv; it never
-// evaluates a shell command.
+// harnesses. Consumers import this package and invoke the CLI with argv; no
+// HTTP bridge or callback service is involved.
 package sdk
 
 import (
@@ -15,11 +15,10 @@ import (
 )
 
 const (
-	ToolName              = "run_bitwave_cli"
-	ToolProvider          = "bitwave-cli"
-	ToolExecutionLocation = "client"
-	ToolDescription       = "Run the Bitwave CLI on the user's device for the organization already selected by the agent session. Pass command arguments as an array without the `bitwave` executable name; omit `args` or pass an empty array to return `bitwave --help`. Select this tool from ordinary user intent whenever the user asks to inspect or change Bitwave data; never require them to mention the CLI. Prefer `--json` for structured results. For organization balances use `report balance`; `bal` reads a separate local plain-text ledger. Arguments execute directly without a shell. Read-only commands may run automatically and commands that change data require client-side user approval."
-	maxOutput             = 1 << 20
+	ToolName        = "run_bitwave_cli"
+	ToolProvider    = "bitwave-cli"
+	ToolDescription = "Run the Bitwave CLI with structured parameters. Pass command arguments as an array without the `bitwave` executable name; omit `args` or pass an empty array to return `bitwave --help`. Select this tool from ordinary user intent whenever the user asks to inspect or change Bitwave data; never require them to mention the CLI. Prefer `--json` for structured results. For organization balances use `report balance`; `bal` reads a separate local plain-text ledger. Arguments execute directly without a shell."
+	maxOutput       = 1 << 20
 )
 
 var ToolInputSchema = json.RawMessage(`{
@@ -48,10 +47,6 @@ func ValidateArgs(args []string) error {
 	for _, arg := range args {
 		if strings.ContainsRune(arg, 0) {
 			return errors.New("refusing a Bitwave argument containing a NUL byte")
-		}
-		command := strings.ToLower(strings.TrimSpace(arg))
-		if command == "client-tools" || command == "wavie" {
-			return errors.New("refusing a recursive Bitwave client-tool command")
 		}
 	}
 	return nil
