@@ -11,7 +11,7 @@ import (
 	bitwavecli "github.com/bitwave-io/bitwave-cli/sdk"
 )
 
-func TestPublicCommandTreeDoesNotExposeWavieCommands(t *testing.T) {
+func TestPublicCommandTreeDoesNotExposeClientToolCommands(t *testing.T) {
 	root := NewRootCmd()
 	var output bytes.Buffer
 	root.SetOut(&output)
@@ -20,12 +20,12 @@ func TestPublicCommandTreeDoesNotExposeWavieCommands(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(output.String(), "wavie") {
-		t.Fatalf("root help exposes implementation-specific Wavie commands:\n%s", output.String())
+	if strings.Contains(output.String(), "client-tools") {
+		t.Fatalf("root help exposes implementation-specific client-tool commands:\n%s", output.String())
 	}
-	found, _, _ := root.Find([]string{"org", "wavie"})
-	if found != nil && found.Name() == "wavie" && found.Parent() != nil && found.Parent().Name() == "org" {
-		t.Fatal("org wavie command remains registered")
+	found, _, _ := root.Find([]string{"org", "client-tools"})
+	if found != nil && found.Name() == "client-tools" && found.Parent() != nil && found.Parent().Name() == "org" {
+		t.Fatal("org client-tools command remains registered")
 	}
 }
 
@@ -40,8 +40,8 @@ func TestValidateLoopbackAddress(t *testing.T) {
 	}
 }
 
-func TestWavieBridgeStatusAndCORS(t *testing.T) {
-	bridge := newWavieBridge("/bin/echo", t.TempDir(), []string{"https://app3.bitwave.io"})
+func TestClientToolBridgeStatusAndCORS(t *testing.T) {
+	bridge := newClientToolBridge("/bin/echo", t.TempDir(), []string{"https://app3.bitwave.io"})
 	req := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
 	req.Header.Set("Origin", "https://app3.bitwave.io")
 	response := httptest.NewRecorder()
@@ -52,12 +52,15 @@ func TestWavieBridgeStatusAndCORS(t *testing.T) {
 	if response.Header().Get("Access-Control-Allow-Origin") != "https://app3.bitwave.io" {
 		t.Fatalf("allow origin = %q", response.Header().Get("Access-Control-Allow-Origin"))
 	}
-	var status wavieBridgeStatus
+	var status clientToolBridgeStatus
 	if err := json.NewDecoder(response.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
 	if !status.Connected || status.Tool.Name != bitwavecli.ToolName || status.Tool.Safety != "write" {
 		t.Fatalf("status = %#v", status)
+	}
+	if status.Tool.Provider != bitwavecli.ToolProvider || status.Tool.ExecutionLocation != bitwavecli.ToolExecutionLocation {
+		t.Fatalf("tool location metadata = %#v", status.Tool)
 	}
 	if !strings.Contains(status.Tool.Description, "ordinary user intent") || !strings.Contains(status.Tool.Description, "empty array") {
 		t.Fatalf("tool description does not require intent-based routing: %q", status.Tool.Description)
@@ -109,21 +112,21 @@ func TestNormalizeBitwaveArgsDefaultsToHelp(t *testing.T) {
 	}
 }
 
-func TestValidateBitwaveArgsRejectsRecursiveWavie(t *testing.T) {
-	if err := bitwavecli.ValidateArgs([]string{"org", "wavie", "chat"}); err == nil {
-		t.Fatal("expected recursive Wavie command to be rejected")
+func TestValidateBitwaveArgsRejectsRecursiveClientTools(t *testing.T) {
+	if err := bitwavecli.ValidateArgs([]string{"client-tools", "serve"}); err == nil {
+		t.Fatal("expected recursive client-tool command to be rejected")
 	}
 	if err := bitwavecli.ValidateArgs([]string{"org", "transactions", "list", "--json"}); err != nil {
 		t.Fatalf("ordinary args rejected: %v", err)
 	}
 }
 
-func TestWavieBridgeExecutesApprovedCommandAndCachesResult(t *testing.T) {
-	bridge := newWavieBridge("/bin/echo", t.TempDir(), nil)
+func TestClientToolBridgeExecutesApprovedCommandAndCachesResult(t *testing.T) {
+	bridge := newClientToolBridge("/bin/echo", t.TempDir(), nil)
 	body := `{"requestId":"tool-1","args":["hello","world"],"reason":"read version","approved":true}`
 	execute := func() bitwavecli.CommandResult {
 		req := httptest.NewRequest(http.MethodPost, "/v1/execute", strings.NewReader(body))
-		req.Header.Set(wavieBridgeHeader, wavieBridgeProtocol)
+		req.Header.Set(clientToolBridgeHeader, clientToolBridgeProtocol)
 		response := httptest.NewRecorder()
 		bridge.ServeHTTP(response, req)
 		if response.Code != http.StatusOK {
@@ -148,11 +151,11 @@ func TestWavieBridgeExecutesApprovedCommandAndCachesResult(t *testing.T) {
 	}
 }
 
-func TestWavieBridgeBindsExecutionToSessionOrganization(t *testing.T) {
-	bridge := newWavieBridge("/usr/bin/env", t.TempDir(), nil)
+func TestClientToolBridgeBindsExecutionToSessionOrganization(t *testing.T) {
+	bridge := newClientToolBridge("/usr/bin/env", t.TempDir(), nil)
 	body := `{"requestId":"tool-org","organizationId":"org-from-session","args":["--"],"reason":"verify org scope","approved":true}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/execute", strings.NewReader(body))
-	req.Header.Set(wavieBridgeHeader, wavieBridgeProtocol)
+	req.Header.Set(clientToolBridgeHeader, clientToolBridgeProtocol)
 	response := httptest.NewRecorder()
 	bridge.ServeHTTP(response, req)
 	if response.Code != http.StatusOK {
@@ -167,21 +170,21 @@ func TestWavieBridgeBindsExecutionToSessionOrganization(t *testing.T) {
 	}
 }
 
-func TestWavieBridgeAutoRunsReadsAndRequiresApprovalForWrites(t *testing.T) {
-	bridge := newWavieBridge("/path/that/does/not/exist", t.TempDir(), nil)
+func TestClientToolBridgeAutoRunsReadsAndRequiresApprovalForWrites(t *testing.T) {
+	bridge := newClientToolBridge("/path/that/does/not/exist", t.TempDir(), nil)
 	for name, testCase := range map[string]struct {
 		body     string
 		header   string
 		expected int
 	}{
-		"read without approval executes": {`{"requestId":"tool-1","args":["--version"],"reason":"test","approved":false}`, wavieBridgeProtocol, http.StatusOK},
-		"write without approval":         {`{"requestId":"tool-3","args":["org","use","abc"],"reason":"test","approved":false}`, wavieBridgeProtocol, http.StatusPreconditionRequired},
+		"read without approval executes": {`{"requestId":"tool-1","args":["--version"],"reason":"test","approved":false}`, clientToolBridgeProtocol, http.StatusOK},
+		"write without approval":         {`{"requestId":"tool-3","args":["org","use","abc"],"reason":"test","approved":false}`, clientToolBridgeProtocol, http.StatusPreconditionRequired},
 		"no header":                      {`{"requestId":"tool-2","args":["--version"],"reason":"test","approved":true}`, "", http.StatusBadRequest},
 	} {
 		t.Run(name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/v1/execute", strings.NewReader(testCase.body))
 			if testCase.header != "" {
-				req.Header.Set(wavieBridgeHeader, testCase.header)
+				req.Header.Set(clientToolBridgeHeader, testCase.header)
 			}
 			response := httptest.NewRecorder()
 			bridge.ServeHTTP(response, req)

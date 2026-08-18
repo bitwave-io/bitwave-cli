@@ -18,26 +18,26 @@ import (
 )
 
 const (
-	wavieServiceLabel       = "io.bitwave.cli.wavie"
-	wavieLinuxServiceName   = "bitwave-wavie.service"
-	wavieWindowsTaskName    = "Bitwave Wavie Bridge"
-	wavieServiceDescription = "Bitwave Wavie local CLI bridge"
-	wavieServiceAttemptFile = "wavie-service-attempt"
-	wavieServiceRetryAfter  = 24 * time.Hour
+	clientToolServiceLabel       = "io.bitwave.cli.client-tools"
+	clientToolLinuxServiceName   = "bitwave-client-tools.service"
+	clientToolWindowsTaskName    = "Bitwave Client Tools"
+	clientToolServiceDescription = "Bitwave local client-tool transport"
+	clientToolServiceAttemptFile = "client-tools-service-attempt"
+	clientToolServiceRetryAfter  = 24 * time.Hour
 )
 
-var suppressWavieServiceMaintenance bool
+var suppressClientToolServiceMaintenance bool
 
-type wavieServicePaths struct {
+type clientToolServicePaths struct {
 	definition string
 	log        string
 }
 
-func newWavieServiceCmd() *cobra.Command {
+func newClientToolServiceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "service",
-		Short: "Manage Wavie's automatic local CLI connection",
-		Long: `Manage the per-user background service that connects Wavie to this CLI.
+		Short: "Manage the local Bitwave client-tool transport",
+		Long: `Manage the per-user service that exposes the CLI to approved local clients.
 
 Normal users do not need to run these commands. Supported installers register
 and start the service automatically; these commands are available for support,
@@ -46,22 +46,22 @@ that change Bitwave state require approval in the web app. Read-only commands
 run automatically.`,
 	}
 	cmd.AddCommand(
-		newWavieServiceActionCmd("install", "Install and start the Wavie background service", installWavieService),
-		newWavieServiceActionCmd("start", "Start the Wavie background service", startWavieService),
-		newWavieServiceActionCmd("stop", "Stop the Wavie background service", stopWavieService),
-		newWavieServiceActionCmd("uninstall", "Stop and remove the Wavie background service", uninstallWavieService),
-		newWavieServiceStatusCmd(),
+		newClientToolServiceActionCmd("install", "Install and start the client-tool service", installClientToolService),
+		newClientToolServiceActionCmd("start", "Start the client-tool service", startClientToolService),
+		newClientToolServiceActionCmd("stop", "Stop the client-tool service", stopClientToolService),
+		newClientToolServiceActionCmd("uninstall", "Stop and remove the client-tool service", uninstallClientToolService),
+		newClientToolServiceStatusCmd(),
 	)
 	return cmd
 }
 
-func newWavieServiceActionCmd(use, short string, action func(string, string) error) *cobra.Command {
+func newClientToolServiceActionCmd(use, short string, action func(string, string) error) *cobra.Command {
 	return &cobra.Command{
 		Use:   use,
 		Short: short,
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			suppressWavieServiceMaintenance = true
+			suppressClientToolServiceMaintenance = true
 			executable, err := os.Executable()
 			if err != nil {
 				return fmt.Errorf("resolve Bitwave executable: %w", err)
@@ -73,22 +73,22 @@ func newWavieServiceActionCmd(use, short string, action func(string, string) err
 			if err := action(executable, home); err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Wavie local CLI service %s.\n", servicePastTense(use))
+			fmt.Fprintf(cmd.OutOrStdout(), "Bitwave client-tool service %s.\n", servicePastTense(use))
 			return nil
 		},
 	}
 }
 
-// MaybeEnsureWavieService makes non-package installation paths, including
-// `go install`, converge on the same zero-setup Wavie experience. Packaged
+// MaybeEnsureClientToolService makes non-package installation paths, including
+// `go install`, converge on the same zero-setup client-tool experience. Packaged
 // installers register the service immediately; this is the best-effort safety
 // net after the first invocation of a release binary. It never delays the
 // command the user just ran.
-func MaybeEnsureWavieService() {
-	if suppressWavieServiceMaintenance || wavieBridgeIsRunning() {
+func MaybeEnsureClientToolService() {
+	if suppressClientToolServiceMaintenance || clientToolBridgeIsRunning() {
 		return
 	}
-	if strings.Contains(strings.ToLower(Version), "dev") || os.Getenv("BITWAVE_NO_WAVIE_SERVICE") == "1" {
+	if strings.Contains(strings.ToLower(Version), "dev") || os.Getenv("BITWAVE_NO_CLIENT_TOOLS_SERVICE") == "1" {
 		return
 	}
 	executable, err := os.Executable()
@@ -96,16 +96,16 @@ func MaybeEnsureWavieService() {
 		return
 	}
 	home, err := os.UserHomeDir()
-	if err != nil || !shouldAttemptWavieService(home, time.Now()) {
+	if err != nil || !shouldAttemptClientToolService(home, time.Now()) {
 		return
 	}
-	_ = installWavieService(executable, home)
+	_ = installClientToolService(executable, home)
 }
 
-func shouldAttemptWavieService(home string, now time.Time) bool {
+func shouldAttemptClientToolService(home string, now time.Time) bool {
 	stateDirectory := filepath.Join(home, ".bitwave")
-	marker := filepath.Join(stateDirectory, wavieServiceAttemptFile)
-	if info, err := os.Stat(marker); err == nil && now.Sub(info.ModTime()) < wavieServiceRetryAfter {
+	marker := filepath.Join(stateDirectory, clientToolServiceAttemptFile)
+	if info, err := os.Stat(marker); err == nil && now.Sub(info.ModTime()) < clientToolServiceRetryAfter {
 		return false
 	}
 	if err := os.MkdirAll(stateDirectory, 0o700); err != nil {
@@ -129,30 +129,30 @@ func servicePastTense(action string) string {
 	}
 }
 
-func newWavieServiceStatusCmd() *cobra.Command {
+func newClientToolServiceStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Check whether Wavie's local CLI connection is running",
+		Short: "Check whether the local client-tool service is running",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			suppressWavieServiceMaintenance = true
-			if !wavieBridgeIsRunning() {
-				return errors.New("Wavie local CLI service is not running")
+			suppressClientToolServiceMaintenance = true
+			if !clientToolBridgeIsRunning() {
+				return errors.New("Bitwave client-tool service is not running")
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Wavie local CLI connected at http://%s\n", defaultWavieBridgeAddress)
+			fmt.Fprintf(cmd.OutOrStdout(), "Bitwave client tools available at http://%s\n", defaultClientToolBridgeAddress)
 			return nil
 		},
 	}
 }
 
-func installWavieService(executable, home string) error {
-	paths, err := wavieServiceFilePaths(runtime.GOOS, home)
+func installClientToolService(executable, home string) error {
+	paths, err := clientToolServiceFilePaths(runtime.GOOS, home)
 	if err != nil {
 		return err
 	}
 	if paths.log != "" {
 		if err := os.MkdirAll(filepath.Dir(paths.log), 0o700); err != nil {
-			return fmt.Errorf("create Wavie log directory: %w", err)
+			return fmt.Errorf("create client-tool log directory: %w", err)
 		}
 	}
 
@@ -162,7 +162,7 @@ func installWavieService(executable, home string) error {
 			return err
 		}
 		domain := fmt.Sprintf("gui/%d", currentUserID())
-		_ = runServiceCommand("launchctl", "bootout", domain+"/"+wavieServiceLabel)
+		_ = runServiceCommand("launchctl", "bootout", domain+"/"+clientToolServiceLabel)
 		return runServiceCommand("launchctl", "bootstrap", domain, paths.definition)
 	case "linux":
 		if err := writeServiceDefinition(paths.definition, renderSystemdUserService(executable, home)); err != nil {
@@ -171,25 +171,25 @@ func installWavieService(executable, home string) error {
 		if err := runServiceCommand("systemctl", "--user", "daemon-reload"); err != nil {
 			return err
 		}
-		return runServiceCommand("systemctl", "--user", "enable", "--now", wavieLinuxServiceName)
+		return runServiceCommand("systemctl", "--user", "enable", "--now", clientToolLinuxServiceName)
 	case "windows":
 		command, err := windowsTaskCommand(executable)
 		if err != nil {
 			return err
 		}
-		if err := runServiceCommand("schtasks.exe", "/Create", "/F", "/SC", "ONLOGON", "/TN", wavieWindowsTaskName, "/TR", command); err != nil {
+		if err := runServiceCommand("schtasks.exe", "/Create", "/F", "/SC", "ONLOGON", "/TN", clientToolWindowsTaskName, "/TR", command); err != nil {
 			return err
 		}
-		return runServiceCommand("schtasks.exe", "/Run", "/TN", wavieWindowsTaskName)
+		return runServiceCommand("schtasks.exe", "/Run", "/TN", clientToolWindowsTaskName)
 	default:
-		return fmt.Errorf("automatic Wavie connection is not supported on %s", runtime.GOOS)
+		return fmt.Errorf("automatic client-tool service is not supported on %s", runtime.GOOS)
 	}
 }
 
-func startWavieService(_, home string) error {
+func startClientToolService(_, home string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		paths, err := wavieServiceFilePaths(runtime.GOOS, home)
+		paths, err := clientToolServiceFilePaths(runtime.GOOS, home)
 		if err != nil {
 			return err
 		}
@@ -197,83 +197,83 @@ func startWavieService(_, home string) error {
 		if err := runServiceCommand("launchctl", "bootstrap", domain, paths.definition); err == nil {
 			return nil
 		}
-		return runServiceCommand("launchctl", "kickstart", "-k", domain+"/"+wavieServiceLabel)
+		return runServiceCommand("launchctl", "kickstart", "-k", domain+"/"+clientToolServiceLabel)
 	case "linux":
-		return runServiceCommand("systemctl", "--user", "start", wavieLinuxServiceName)
+		return runServiceCommand("systemctl", "--user", "start", clientToolLinuxServiceName)
 	case "windows":
-		return runServiceCommand("schtasks.exe", "/Run", "/TN", wavieWindowsTaskName)
+		return runServiceCommand("schtasks.exe", "/Run", "/TN", clientToolWindowsTaskName)
 	default:
-		return fmt.Errorf("automatic Wavie connection is not supported on %s", runtime.GOOS)
+		return fmt.Errorf("automatic client-tool service is not supported on %s", runtime.GOOS)
 	}
 }
 
-func stopWavieService(_, _ string) error {
+func stopClientToolService(_, _ string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		return runServiceCommand("launchctl", "bootout", fmt.Sprintf("gui/%d/%s", currentUserID(), wavieServiceLabel))
+		return runServiceCommand("launchctl", "bootout", fmt.Sprintf("gui/%d/%s", currentUserID(), clientToolServiceLabel))
 	case "linux":
-		return runServiceCommand("systemctl", "--user", "stop", wavieLinuxServiceName)
+		return runServiceCommand("systemctl", "--user", "stop", clientToolLinuxServiceName)
 	case "windows":
-		return runServiceCommand("schtasks.exe", "/End", "/TN", wavieWindowsTaskName)
+		return runServiceCommand("schtasks.exe", "/End", "/TN", clientToolWindowsTaskName)
 	default:
-		return fmt.Errorf("automatic Wavie connection is not supported on %s", runtime.GOOS)
+		return fmt.Errorf("automatic client-tool service is not supported on %s", runtime.GOOS)
 	}
 }
 
-func uninstallWavieService(_, home string) error {
-	paths, err := wavieServiceFilePaths(runtime.GOOS, home)
+func uninstallClientToolService(_, home string) error {
+	paths, err := clientToolServiceFilePaths(runtime.GOOS, home)
 	if err != nil {
 		return err
 	}
 	switch runtime.GOOS {
 	case "darwin":
 		domain := fmt.Sprintf("gui/%d", currentUserID())
-		_ = runServiceCommand("launchctl", "bootout", domain+"/"+wavieServiceLabel)
+		_ = runServiceCommand("launchctl", "bootout", domain+"/"+clientToolServiceLabel)
 		return removeServiceDefinition(paths.definition)
 	case "linux":
-		_ = runServiceCommand("systemctl", "--user", "disable", "--now", wavieLinuxServiceName)
+		_ = runServiceCommand("systemctl", "--user", "disable", "--now", clientToolLinuxServiceName)
 		if err := removeServiceDefinition(paths.definition); err != nil {
 			return err
 		}
 		return runServiceCommand("systemctl", "--user", "daemon-reload")
 	case "windows":
-		_ = runServiceCommand("schtasks.exe", "/End", "/TN", wavieWindowsTaskName)
-		return runServiceCommand("schtasks.exe", "/Delete", "/F", "/TN", wavieWindowsTaskName)
+		_ = runServiceCommand("schtasks.exe", "/End", "/TN", clientToolWindowsTaskName)
+		return runServiceCommand("schtasks.exe", "/Delete", "/F", "/TN", clientToolWindowsTaskName)
 	default:
-		return fmt.Errorf("automatic Wavie connection is not supported on %s", runtime.GOOS)
+		return fmt.Errorf("automatic client-tool service is not supported on %s", runtime.GOOS)
 	}
 }
 
-func wavieServiceFilePaths(goos, home string) (wavieServicePaths, error) {
+func clientToolServiceFilePaths(goos, home string) (clientToolServicePaths, error) {
 	if strings.TrimSpace(home) == "" {
-		return wavieServicePaths{}, errors.New("home directory is required")
+		return clientToolServicePaths{}, errors.New("home directory is required")
 	}
 	switch goos {
 	case "darwin":
-		return wavieServicePaths{
-			definition: filepath.Join(home, "Library", "LaunchAgents", wavieServiceLabel+".plist"),
-			log:        filepath.Join(home, ".bitwave", "logs", "wavie-bridge.log"),
+		return clientToolServicePaths{
+			definition: filepath.Join(home, "Library", "LaunchAgents", clientToolServiceLabel+".plist"),
+			log:        filepath.Join(home, ".bitwave", "logs", "client-tools.log"),
 		}, nil
 	case "linux":
-		return wavieServicePaths{definition: filepath.Join(home, ".config", "systemd", "user", wavieLinuxServiceName)}, nil
+		return clientToolServicePaths{definition: filepath.Join(home, ".config", "systemd", "user", clientToolLinuxServiceName)}, nil
 	case "windows":
-		return wavieServicePaths{}, nil
+		return clientToolServicePaths{}, nil
 	default:
-		return wavieServicePaths{}, fmt.Errorf("automatic Wavie connection is not supported on %s", goos)
+		return clientToolServicePaths{}, fmt.Errorf("automatic client-tool service is not supported on %s", goos)
 	}
 }
 
 func writeServiceDefinition(path, contents string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create Wavie service directory: %w", err)
+		return fmt.Errorf("create client-tool service directory: %w", err)
 	}
 	temporary := path + ".tmp"
 	if err := os.WriteFile(temporary, []byte(contents), 0o600); err != nil {
-		return fmt.Errorf("write Wavie service definition: %w", err)
+		return fmt.Errorf("write client-tool service definition: %w", err)
 	}
 	if err := os.Rename(temporary, path); err != nil {
 		_ = os.Remove(temporary)
-		return fmt.Errorf("install Wavie service definition: %w", err)
+		return fmt.Errorf("install client-tool service definition: %w", err)
 	}
 	return nil
 }
@@ -283,7 +283,7 @@ func removeServiceDefinition(path string) error {
 		return nil
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("remove Wavie service definition: %w", err)
+		return fmt.Errorf("remove client-tool service definition: %w", err)
 	}
 	return nil
 }
@@ -298,8 +298,8 @@ func renderLaunchAgent(executable, home, logPath string) string {
   <array>
     <string>%s</string>
     <string>--quiet</string>
-    <string>wavie</string>
-    <string>connect</string>
+    <string>client-tools</string>
+    <string>serve</string>
     <string>--service</string>
   </array>
   <key>WorkingDirectory</key><string>%s</string>
@@ -310,7 +310,7 @@ func renderLaunchAgent(executable, home, logPath string) string {
   <key>StandardErrorPath</key><string>%s</string>
 </dict>
 </plist>
-`, xmlText(wavieServiceLabel), xmlText(executable), xmlText(home), xmlText(logPath), xmlText(logPath))
+`, xmlText(clientToolServiceLabel), xmlText(executable), xmlText(home), xmlText(logPath), xmlText(logPath))
 }
 
 func renderSystemdUserService(executable, home string) string {
@@ -319,14 +319,14 @@ Description=%s
 
 [Service]
 Type=simple
-ExecStart=%s --quiet wavie connect --service
+ExecStart=%s --quiet client-tools serve --service
 WorkingDirectory=%s
 Restart=on-failure
 RestartSec=10
 
 [Install]
 WantedBy=default.target
-`, wavieServiceDescription, systemdQuote(executable), systemdQuote(home))
+`, clientToolServiceDescription, systemdQuote(executable), systemdQuote(home))
 }
 
 func xmlText(value string) string {
@@ -343,7 +343,7 @@ func windowsTaskCommand(executable string) (string, error) {
 	if strings.Contains(executable, `"`) {
 		return "", errors.New("Bitwave executable path contains an unsupported quote character")
 	}
-	return fmt.Sprintf(`"%s" --quiet wavie connect --service`, executable), nil
+	return fmt.Sprintf(`"%s" --quiet client-tools serve --service`, executable), nil
 }
 
 func runServiceCommand(name string, args ...string) error {
@@ -359,8 +359,8 @@ func runServiceCommand(name string, args ...string) error {
 	return fmt.Errorf("%s: %w: %s", name, err, detail)
 }
 
-func wavieBridgeIsRunning() bool {
-	connection, err := net.DialTimeout("tcp", defaultWavieBridgeAddress, 250*time.Millisecond)
+func clientToolBridgeIsRunning() bool {
+	connection, err := net.DialTimeout("tcp", defaultClientToolBridgeAddress, 250*time.Millisecond)
 	if err != nil {
 		return false
 	}

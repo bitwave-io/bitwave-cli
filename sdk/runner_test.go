@@ -20,8 +20,8 @@ func TestExecuteBindsOrganizationToChild(t *testing.T) {
 	}
 }
 
-func TestValidateArgsRejectsRecursiveWavie(t *testing.T) {
-	if err := ValidateArgs([]string{"org", "wavie", "chat"}); err == nil {
-		t.Fatal("expected recursive Wavie command to be rejected")
+func TestValidateArgsRejectsRecursiveClientTools(t *testing.T) {
+	if err := ValidateArgs([]string{"client-tools", "serve"}); err == nil {
+		t.Fatal("expected recursive client-tool command to be rejected")
 	}
 }

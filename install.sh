@@ -72,9 +72,9 @@ case ":$PATH:" in
 esac
 "$INSTALL_DIR/bitwave" version || true
 
-# Wavie discovers the CLI through a loopback-only per-user bridge. Register it
-# during installation so users do not need to start a terminal process before
-# opening Wavie. A service-manager failure must not make the CLI unusable.
-if ! "$INSTALL_DIR/bitwave" --quiet wavie service install; then
-  printf 'note: Wavie automatic CLI connection could not be started; run:\n  bitwave wavie service install\n' >&2
+# Approved clients discover the CLI through a loopback-only per-user transport.
+# Register it during installation so users do not need to start another process.
+# A service-manager failure must not make the CLI unusable.
+if ! "$INSTALL_DIR/bitwave" --quiet client-tools service install; then
+  printf 'note: the local client-tool service could not be started; run:\n  bitwave client-tools service install\n' >&2
 fi

@@ -16,13 +16,13 @@ import (
 )
 
 const (
-	defaultWavieBridgeAddress = "127.0.0.1:7314"
-	wavieBridgeProtocol       = "wavie.v1"
-	wavieBridgeHeader         = "X-Bitwave-Local-Bridge"
-	maxBridgeResults          = 256
+	defaultClientToolBridgeAddress = "127.0.0.1:7314"
+	clientToolBridgeProtocol       = "bitwave.client-tools.v1"
+	clientToolBridgeHeader         = "X-Bitwave-Client-Tools"
+	maxBridgeResults               = 256
 )
 
-var defaultWavieBridgeOrigins = []string{
+var defaultClientToolBridgeOrigins = []string{
 	"https://app3.bitwave.io",
 	"https://staging-app3.bitwave.io",
 	"https://bitwave-staging3.web.app",
@@ -31,22 +31,24 @@ var defaultWavieBridgeOrigins = []string{
 	"http://127.0.0.1:5173",
 }
 
-type wavieBridgeStatus struct {
-	Connected       bool            `json:"connected"`
-	ProtocolVersion string          `json:"protocolVersion"`
-	CLIVersion      string          `json:"cliVersion"`
-	LocalRoot       string          `json:"localRoot"`
-	Tool            wavieBridgeTool `json:"tool"`
+type clientToolBridgeStatus struct {
+	Connected       bool                 `json:"connected"`
+	ProtocolVersion string               `json:"protocolVersion"`
+	CLIVersion      string               `json:"cliVersion"`
+	LocalRoot       string               `json:"localRoot"`
+	Tool            clientToolBridgeTool `json:"tool"`
 }
 
-type wavieBridgeTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"`
-	Safety      string          `json:"safety"`
+type clientToolBridgeTool struct {
+	Name              string          `json:"name"`
+	Provider          string          `json:"provider"`
+	ExecutionLocation string          `json:"executionLocation"`
+	Description       string          `json:"description"`
+	InputSchema       json.RawMessage `json:"inputSchema"`
+	Safety            string          `json:"safety"`
 }
 
-type wavieBridgeExecuteRequest struct {
+type clientToolBridgeExecuteRequest struct {
 	RequestID      string   `json:"requestId"`
 	OrganizationID string   `json:"organizationId,omitempty"`
 	Args           []string `json:"args"`
@@ -54,12 +56,12 @@ type wavieBridgeExecuteRequest struct {
 	Approved       bool     `json:"approved"`
 }
 
-type wavieBridgeApprovalRequired struct {
+type clientToolBridgeApprovalRequired struct {
 	RequiresApproval bool   `json:"requiresApproval"`
 	Risk             string `json:"risk"`
 }
 
-type wavieBridge struct {
+type clientToolBridge struct {
 	executable string
 	localRoot  string
 	origins    map[string]struct{}
@@ -70,32 +72,32 @@ type wavieBridge struct {
 	resultOrder []string
 }
 
-func newWavieLocalCmd() *cobra.Command {
+func newClientToolsCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:    "wavie",
-		Short:  "Connect the local Bitwave CLI to Wavie",
+		Use:    "client-tools",
+		Short:  "Expose the Bitwave CLI to approved local clients",
 		Hidden: true,
-		Long: `Connect the installed Bitwave CLI to Wavie in the Bitwave web app.
+		Long: `Expose the installed Bitwave CLI as one structured client-side tool.
 
-The local bridge listens only on the loopback interface. Wavie can propose
-structured Bitwave CLI commands. Read-only commands run automatically; changes
-must be approved in the web app. No shell interpreter is exposed.`,
+The transport listens only on the loopback interface. Approved clients can
+invoke run_bitwave_cli with an argument array. Read-only commands may run
+automatically; changes require client-side approval. No shell is exposed.`,
 	}
-	cmd.AddCommand(newWavieConnectCmd())
-	cmd.AddCommand(newWavieServiceCmd())
+	cmd.AddCommand(newClientToolsServeCmd())
+	cmd.AddCommand(newClientToolServiceCmd())
 	return cmd
 }
 
-func newWavieConnectCmd() *cobra.Command {
+func newClientToolsServeCmd() *cobra.Command {
 	var listenAddress string
 	var extraOrigins []string
 	var serviceMode bool
 	cmd := &cobra.Command{
-		Use:   "connect",
-		Short: "Run the local bridge used by the Wavie web chat",
+		Use:   "serve",
+		Short: "Run the local Bitwave client-tool transport",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			suppressWavieServiceMaintenance = true
+			suppressClientToolServiceMaintenance = true
 			if err := validateLoopbackAddress(listenAddress); err != nil {
 				return err
 			}
@@ -103,16 +105,16 @@ func newWavieConnectCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("resolve Bitwave executable: %w", err)
 			}
-			localRoot, err := wavieBridgeWorkingDirectory(serviceMode)
+			localRoot, err := clientToolBridgeWorkingDirectory(serviceMode)
 			if err != nil {
 				return err
 			}
-			origins := append([]string{}, defaultWavieBridgeOrigins...)
+			origins := append([]string{}, defaultClientToolBridgeOrigins...)
 			origins = append(origins, extraOrigins...)
-			bridge := newWavieBridge(executable, localRoot, origins)
+			bridge := newClientToolBridge(executable, localRoot, origins)
 			listener, err := net.Listen("tcp", listenAddress)
 			if err != nil {
-				return fmt.Errorf("start Wavie local bridge on %s: %w", listenAddress, err)
+				return fmt.Errorf("start local client-tool transport on %s: %w", listenAddress, err)
 			}
 			defer func() { _ = listener.Close() }()
 
@@ -123,8 +125,8 @@ func newWavieConnectCmd() *cobra.Command {
 				IdleTimeout:       60 * time.Second,
 			}
 			if !serviceMode {
-				fmt.Fprintf(cmd.OutOrStdout(), "Wavie local CLI connected at http://%s\n", listener.Addr().String())
-				fmt.Fprintln(cmd.OutOrStdout(), "Keep this process running while using Wavie. Commands still require approval in the Bitwave web app.")
+				fmt.Fprintf(cmd.OutOrStdout(), "Bitwave client tools available at http://%s\n", listener.Addr().String())
+				fmt.Fprintln(cmd.OutOrStdout(), "Keep this process running while using an approved client. Changes still require client-side approval.")
 			}
 			if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				return err
@@ -132,14 +134,14 @@ func newWavieConnectCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&listenAddress, "listen", defaultWavieBridgeAddress, "Loopback address for the local Wavie bridge")
+	cmd.Flags().StringVar(&listenAddress, "listen", defaultClientToolBridgeAddress, "Loopback address for the local client-tool transport")
 	cmd.Flags().StringSliceVar(&extraOrigins, "allow-origin", nil, "Additional exact web origin allowed to call the bridge")
 	cmd.Flags().BoolVar(&serviceMode, "service", false, "Run as the automatically managed background service")
 	_ = cmd.Flags().MarkHidden("service")
 	return cmd
 }
 
-func wavieBridgeWorkingDirectory(serviceMode bool) (string, error) {
+func clientToolBridgeWorkingDirectory(serviceMode bool) (string, error) {
 	if serviceMode {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -157,26 +159,26 @@ func wavieBridgeWorkingDirectory(serviceMode bool) (string, error) {
 func validateLoopbackAddress(address string) error {
 	host, _, err := net.SplitHostPort(strings.TrimSpace(address))
 	if err != nil {
-		return fmt.Errorf("invalid Wavie bridge address %q: %w", address, err)
+		return fmt.Errorf("invalid client-tool transport address %q: %w", address, err)
 	}
 	if strings.EqualFold(host, "localhost") {
 		return nil
 	}
 	ip := net.ParseIP(host)
 	if ip == nil || !ip.IsLoopback() {
-		return fmt.Errorf("refusing non-loopback Wavie bridge address %q", address)
+		return fmt.Errorf("refusing non-loopback client-tool transport address %q", address)
 	}
 	return nil
 }
 
-func newWavieBridge(executable, localRoot string, origins []string) *wavieBridge {
+func newClientToolBridge(executable, localRoot string, origins []string) *clientToolBridge {
 	allowed := make(map[string]struct{}, len(origins))
 	for _, origin := range origins {
 		if trimmed := strings.TrimRight(strings.TrimSpace(origin), "/"); trimmed != "" {
 			allowed[trimmed] = struct{}{}
 		}
 	}
-	return &wavieBridge{
+	return &clientToolBridge{
 		executable: executable,
 		localRoot:  localRoot,
 		origins:    allowed,
@@ -185,9 +187,9 @@ func newWavieBridge(executable, localRoot string, origins []string) *wavieBridge
 	}
 }
 
-func (b *wavieBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (b *clientToolBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !b.allowOrigin(w, r) {
-		http.Error(w, "origin is not allowed by the Wavie local bridge", http.StatusForbidden)
+		http.Error(w, "origin is not allowed by the local client-tool transport", http.StatusForbidden)
 		return
 	}
 	if r.Method == http.MethodOptions {
@@ -196,13 +198,15 @@ func (b *wavieBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/status":
-		b.writeJSON(w, http.StatusOK, wavieBridgeStatus{
-			Connected: true, ProtocolVersion: wavieBridgeProtocol, CLIVersion: Version, LocalRoot: b.localRoot,
-			Tool: wavieBridgeTool{
-				Name:        bitwavecli.ToolName,
-				Description: bitwavecli.ToolDescription,
-				InputSchema: bitwavecli.ToolInputSchema,
-				Safety:      "write",
+		b.writeJSON(w, http.StatusOK, clientToolBridgeStatus{
+			Connected: true, ProtocolVersion: clientToolBridgeProtocol, CLIVersion: Version, LocalRoot: b.localRoot,
+			Tool: clientToolBridgeTool{
+				Name:              bitwavecli.ToolName,
+				Provider:          bitwavecli.ToolProvider,
+				ExecutionLocation: bitwavecli.ToolExecutionLocation,
+				Description:       bitwavecli.ToolDescription,
+				InputSchema:       bitwavecli.ToolInputSchema,
+				Safety:            "write",
 			},
 		})
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/execute":
@@ -212,7 +216,7 @@ func (b *wavieBridge) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (b *wavieBridge) allowOrigin(w http.ResponseWriter, r *http.Request) bool {
+func (b *clientToolBridge) allowOrigin(w http.ResponseWriter, r *http.Request) bool {
 	origin := strings.TrimRight(strings.TrimSpace(r.Header.Get("Origin")), "/")
 	if origin == "" {
 		return true
@@ -223,19 +227,19 @@ func (b *wavieBridge) allowOrigin(w http.ResponseWriter, r *http.Request) bool {
 	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Vary", "Origin")
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, "+wavieBridgeHeader)
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, "+clientToolBridgeHeader)
 	w.Header().Set("Access-Control-Allow-Private-Network", "true")
 	return true
 }
 
-func (b *wavieBridge) execute(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get(wavieBridgeHeader) != wavieBridgeProtocol {
-		http.Error(w, "missing or invalid Wavie local bridge protocol header", http.StatusBadRequest)
+func (b *clientToolBridge) execute(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get(clientToolBridgeHeader) != clientToolBridgeProtocol {
+		http.Error(w, "missing or invalid client-tool protocol header", http.StatusBadRequest)
 		return
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	defer func() { _ = r.Body.Close() }()
-	var input wavieBridgeExecuteRequest
+	var input clientToolBridgeExecuteRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&input); err != nil {
@@ -254,7 +258,7 @@ func (b *wavieBridge) execute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if risk := classifyBitwaveArgs(input.Args); risk != "read" && !input.Approved {
-		b.writeJSON(w, http.StatusPreconditionRequired, wavieBridgeApprovalRequired{
+		b.writeJSON(w, http.StatusPreconditionRequired, clientToolBridgeApprovalRequired{
 			RequiresApproval: true,
 			Risk:             risk,
 		})
@@ -358,14 +362,14 @@ func isHighRiskCommand(words []string) bool {
 	return len(words) > 1 && words[0] == "wallets" && words[1] == "send"
 }
 
-func (b *wavieBridge) cachedResult(requestID string) (bitwavecli.CommandResult, bool) {
+func (b *clientToolBridge) cachedResult(requestID string) (bitwavecli.CommandResult, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	result, ok := b.results[requestID]
 	return result, ok
 }
 
-func (b *wavieBridge) cacheResult(requestID string, result bitwavecli.CommandResult) {
+func (b *clientToolBridge) cacheResult(requestID string, result bitwavecli.CommandResult) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, exists := b.results[requestID]; exists {
@@ -380,7 +384,7 @@ func (b *wavieBridge) cacheResult(requestID string, result bitwavecli.CommandRes
 	}
 }
 
-func (b *wavieBridge) writeJSON(w http.ResponseWriter, status int, value any) {
+func (b *clientToolBridge) writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)

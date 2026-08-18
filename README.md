@@ -100,13 +100,14 @@ You'll need Go 1.25+.
 Supported installers register a loopback-only background service alongside the
 CLI. When the Bitwave web app and the CLI are both installed, Wavie detects the
 CLI automatically—there is no bridge command for the user to start and no
-extra port to configure. Wavie receives one generic Bitwave CLI tool. An empty
+extra port to configure. Wavie receives one generic, explicitly client-side
+Bitwave CLI tool. An empty
 tool invocation returns `bitwave --help`; other invocations pass an argument
 array directly to the CLI without a shell. Commands that change data are shown
-in Wavie for approval before they run locally.
+in the client for approval before they run locally.
 
 The automatic service can be disabled for managed environments with
-`BITWAVE_NO_WAVIE_SERVICE=1`.
+`BITWAVE_NO_CLIENT_TOOLS_SERVICE=1`.
 
 ---
 

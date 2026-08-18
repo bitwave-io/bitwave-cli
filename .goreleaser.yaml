@@ -83,7 +83,7 @@ homebrew_casks:
     hooks:
       pre:
         uninstall: |
-          system_command "#{staged_path}/bitwave", args: ["--quiet", "wavie", "service", "uninstall"]
+          system_command "#{staged_path}/bitwave", args: ["--quiet", "client-tools", "service", "uninstall"]
       post:
         install: |
-          system_command "#{staged_path}/bitwave", args: ["--quiet", "wavie", "service", "install"]
+          system_command "#{staged_path}/bitwave", args: ["--quiet", "client-tools", "service", "install"]

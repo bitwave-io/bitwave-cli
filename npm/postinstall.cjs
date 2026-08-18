@@ -1,8 +1,8 @@
 "use strict";
 
-// Best-effort registration of Wavie's loopback-only local CLI bridge. Package
+// Best-effort registration of the loopback-only client-tool transport. Package
 // managers that disable lifecycle scripts still install a fully working CLI;
-// support can recover with `bitwave wavie service install`.
+// support can recover with `bitwave client-tools service install`.
 const { spawnSync } = require("child_process");
 
 const packages = {
@@ -20,11 +20,11 @@ try {
   const binary = require.resolve(packageName);
   const result = spawnSync(
     binary,
-    ["--quiet", "wavie", "service", "install"],
+    ["--quiet", "client-tools", "service", "install"],
     { stdio: "ignore", windowsHide: true }
   );
   if (result.status !== 0) {
-    console.warn("bitwave: Wavie automatic connection was not started; the CLI is still installed.");
+    console.warn("bitwave: the local client-tool service was not started; the CLI is still installed.");
   }
 } catch (_) {
   // Optional platform packages can be unavailable during lifecycle execution.
