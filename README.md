@@ -95,7 +95,12 @@ sudo install -m 755 bitwave /usr/local/bin/bitwave
 
 You'll need Go 1.25+.
 
----
+### Embedding the CLI
+
+Agent runtimes can import `github.com/bitwave-io/bitwave-cli/sdk` and expose its
+single `run_bitwave_cli` tool. The SDK accepts a structured argument array,
+defaults an empty invocation to `bitwave --help`, and executes without a shell.
+It does not install or run a local HTTP bridge.
 
 ## Quickstart — local workspace
 
