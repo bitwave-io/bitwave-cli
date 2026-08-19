@@ -188,11 +188,10 @@ backed by Bitwave's **workspace ledger service** — a cloud-hosted version of
 the same plain-text journal/entry model.
 
 > **Note — this is not the Bitwave platform.** Cloud mode syncs your
-> workspace's journals to Bitwave's workspace ledger. It is a separate
-> surface from the [Bitwave](https://bitwave.io) platform itself
-> (transactions, categorization, inventory, close reports), which uses a
-> client id / client key model. Platform integration is not part of cloud
-> mode; see `docs/PLATFORM-INTEGRATION.md` for the distinction.
+> workspace's journals to Bitwave's workspace ledger. The CLI also supports
+> the separate [Bitwave](https://bitwave.io) organization platform surface
+> (transactions, categorization, inventory, and reports); see
+> `docs/PLATFORM-INTEGRATION.md` for the credential and data-model distinction.
 
 ```sh
 # Sign in (PKCE browser flow).
@@ -213,6 +212,26 @@ $ bitwave je new --date 2026-05-29 --payee "AWS" \
     --posting "Assets:Checking -$42.18"
 $ bitwave bal
 ```
+
+## Organization platform
+
+Organization commands do not require a local `.bitwave.toml` workspace. Select
+an organization, then use the platform command families directly:
+
+```sh
+$ bitwave org info
+$ bitwave org users
+$ bitwave org wallets list --disabled-only --json
+$ bitwave org tokens spam --json
+$ bitwave transaction count --from 2026-01-01 --to 2026-06-30
+$ bitwave transaction negatives "Treasury" ETH --out eth-running-balance.csv
+$ bitwave pricing history --coin ETH --from 2026-06-01 --to 2026-06-30
+$ bitwave report balance-compare --inventory-view "Primary FIFO" --as-of 2026-06-30
+```
+
+Use `bitwave help` for the whole CLI, `bitwave help <command>` for one command
+family, and `bitwave info --json` for a machine-readable catalog of every
+registered command and flag.
 
 To migrate an existing local workspace to cloud:
 

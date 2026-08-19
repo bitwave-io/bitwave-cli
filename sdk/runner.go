@@ -19,7 +19,7 @@ import (
 const (
 	ToolName        = "run_bitwave_cli"
 	ToolProvider    = "bitwave-cli"
-	ToolDescription = "Run the Bitwave CLI with structured parameters. Pass command arguments as an array without the `bitwave` executable name; omit `args` or pass an empty array to return `bitwave --help`. Select this tool from ordinary user intent whenever the user asks to inspect or change Bitwave data; never require them to mention the CLI. Prefer `--json` for structured results. For organization balances use `report balance`; `bal` reads a separate local plain-text ledger. Arguments execute directly without a shell."
+	ToolDescription = "Run the complete Bitwave CLI with structured parameters. Pass command arguments as an array without the `bitwave` executable name; omit `args` or pass an empty array to return whole-CLI help. Use `info --json` to discover the full live command tree. Select this tool from ordinary user intent whenever the user asks to inspect or change Bitwave data; never require them to mention the CLI. Prefer `--json` for structured results. Organization platform workflows include users, wallets, tokens, transactions, rules, accounting, inventory, pricing, reports, diagnostics, and authenticated API requests. For organization balances use `report balance`; `bal` reads a separate local plain-text ledger. Arguments execute directly without a shell."
 	maxOutput       = 1 << 20
 )
 

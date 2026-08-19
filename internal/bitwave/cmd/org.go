@@ -27,6 +27,10 @@ func newOrgCmd() *cobra.Command {
 	cmd.AddCommand(newOrgUseCmd())
 	cmd.AddCommand(newOrgCreateCmd())
 	cmd.AddCommand(newOrgClearCmd())
+	cmd.AddCommand(newOrgInfoCmd())
+	cmd.AddCommand(newOrgUsersCmd())
+	cmd.AddCommand(newOrgTokensCmd())
+	cmd.AddCommand(newOrgConnectionsCmd())
 	cmd.AddCommand(newOrgWalletsCmd())
 	cmd.AddCommand(newOrgAccountingCmd())
 	return cmd
@@ -34,8 +38,9 @@ func newOrgCmd() *cobra.Command {
 
 func newOrgCurrentCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "current",
-		Short: "Print the active org id and name",
+		Use:     "current",
+		Aliases: []string{"id"},
+		Short:   "Print the active org id and name",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			a, err := orgctx.Load()
 			if err != nil {

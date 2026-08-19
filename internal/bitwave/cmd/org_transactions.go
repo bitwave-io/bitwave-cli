@@ -52,6 +52,8 @@ method, path, and JSON body without sending a mutation.`,
 	cmd.AddCommand(newTransactionStateCmd("unignore", orgreports.TransactionStateUnignore))
 	cmd.AddCommand(newGetOrgTransactionCmd())
 	cmd.AddCommand(newSearchOrgTransactionsCmd())
+	cmd.AddCommand(newTransactionCountCmd())
+	cmd.AddCommand(newTransactionNegativesCmd())
 	cmd.AddCommand(newTransactionSummaryCmd())
 	cmd.AddCommand(newCreateOrgTransactionCmd())
 	cmd.AddCommand(newCategorizeTransactionCmd())
