@@ -92,7 +92,7 @@ func newTransactionExportCmd() *cobra.Command {
 	var f transactionExportFlags
 	cmd := &cobra.Command{
 		Use:     "transaction-export",
-		Aliases: []string{"transactions-export", "txn-export"},
+		Aliases: []string{"transactions-export", "txn-export", "export-txns"},
 		Short:   "Download Bitwave's Transaction Export as CSV",
 		Long: `Exports organization transactions through Bitwave's transaction-export endpoint.
 

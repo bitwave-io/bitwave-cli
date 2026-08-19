@@ -58,13 +58,16 @@ func NewRootCmd() *cobra.Command {
 complete, auditable, double-entry books through one CLI. Everything runs
 locally against plain-text journal files (compatible with hledger, ledger,
 and beancount), and any workspace can be shared or persisted in the
-Bitwave cloud when more than one person — or agent — needs it.
+Bitwave cloud when more than one person — or agent — needs it. The same CLI
+also drives Bitwave organization data: wallets, transactions, categorization,
+rules, accounting setup, inventory calculations, reports, token analysis,
+and authenticated API requests.
 
-Every bitwave command operates on a workspace — a directory containing a
-.bitwave.toml marker plus one or more .journal files. Run ` + "`bitwave init`" + ` in the
-directory you want the workspace to live in BEFORE any other command. bitwave
-walks up from the cwd to find the workspace marker, so you can run
-commands from any subdirectory once it exists.
+Local-ledger commands operate on a workspace — a directory containing a
+.bitwave.toml marker plus one or more .journal files. Run ` + "`bitwave init`" + ` before
+using those commands. Organization-platform commands do not require a local
+workspace. bitwave walks up from the cwd to find a workspace marker when a
+local or cloud-ledger command needs one.
 
 Modes:
   - Local (default): files live on disk. No auth needed. ` + "`bitwave share`" + ` also
@@ -72,12 +75,14 @@ Modes:
     to adopt the workspace).
   - Cloud (` + "`bitwave init --cloud`" + `): backed by Bitwave's workspace ledger
     service under your org. Requires ` + "`bitwave auth login`" + ` and
-    ` + "`bitwave org use`" + `. Note: this is the workspace ledger, NOT the
-    Bitwave platform API (transactions, categorization, inventory, close) —
-    that is a separate surface with client id/key auth, not yet driven by
-    this CLI.
+    ` + "`bitwave org use`" + `.
+  - Organization platform: ` + "`bitwave org`" + `, ` + "`bitwave transaction`" + `,
+    ` + "`bitwave rule`" + `, ` + "`bitwave inventory`" + `, ` + "`bitwave report`" + `,
+    ` + "`bitwave pricing`" + `, and ` + "`bitwave api`" + ` operate on product data.
+    They require an active organization and platform-compatible credentials,
+    but do not require a local workspace.
 
-Auth (used by cloud-mode commands; priority order):
+Auth (used by cloud and organization-platform commands; priority order):
   - BITWAVE_AGENT_TOKEN env  Well-known agent identity
   - bitwave auth login           Human PKCE browser flow
   - bitwave auth delegate        Request delegated access from a user
@@ -105,6 +110,12 @@ Quickstart — raw double-entry journal:
       --posting "Assets:Cash 1000 USD" \
       --posting "Income:Salary -1000 USD"
   bitwave bal
+
+Discovery:
+  bitwave help                  Whole-CLI command help
+  bitwave help <command>        Help for one command family
+  bitwave info                  Complete command catalog
+  bitwave info --json           Machine-readable command catalog
 
 Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + examples.`,
 		Version:       Version,
@@ -173,11 +184,13 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 	addInGroup(groupReports, newCSVCmd())
 	addInGroup(groupReports, newStatsCmd())
 	addInGroup(groupReports, newOrgReportCmd())
+	addInGroup(groupReports, newPricingCmd())
 
 	addInGroup(groupWorkflows, newMigrateCmd())
 	addInGroup(groupWorkflows, newOrgTransactionsCmd())
 	addInGroup(groupWorkflows, newOrgRulesCmd())
 	addInGroup(groupWorkflows, newOrgInventoryCmd())
+	addInGroup(groupWorkflows, newLookupCmd())
 	addInGroup(groupWorkflows, newAPICmd())
 	// Period-close is parked until the orchestrator is ported into this CLI;
 	// re-register to bring `bitwave close` back (see close.go).
@@ -186,6 +199,8 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 	addInGroup(groupWorkflows, newSharesCmd())
 
 	addInGroup(groupCLI, newStatusCmd())
+	addInGroup(groupCLI, newInfoCmd())
+	addInGroup(groupCLI, newLastErrorCmd())
 	addInGroup(groupCLI, newVersionCmd())
 	addInGroup(groupCLI, newUpgradeCmd())
 	addInGroup(groupCLI, newTelemetryCmd())

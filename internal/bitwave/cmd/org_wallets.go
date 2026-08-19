@@ -85,26 +85,56 @@ use the same accountBasedBlockchain creation contract as Bitwave Add Source.
 After creation, data typically appears within 15 minutes but can take up to 24
 hours depending on transaction history volume and network load.`,
 	}
-	cmd.AddCommand(newOrgWalletsListCmd(), newOrgWalletsNetworksCmd(), newOrgWalletsAddCmd(), newOrgWalletsRollupCmd(), newOrgWalletResyncCmd())
+	walletExport := newTransactionExportCmd()
+	walletExport.Use = "export"
+	walletExport.Aliases = []string{"transactions-export", "txn-export"}
+	walletExport.Short = "Export transactions for one or more wallets as CSV"
+	walletExport.Long = `Export organization transactions using wallet, date, asset, and ignored-status filters.
+
+This is the wallet-oriented route to the same validated export engine as
+` + "`bitwave report transaction-export`" + `. Pass --ignored Ignored to include only
+ignored transactions, or the API's supported ignored-status values as needed.`
+	walletExport.Example = `  bitwave org wallets export --wallet "Treasury" --from 2026-01-01 --to 2026-06-30 --asset ETH --out treasury-eth.csv
+  bitwave org wallets export --wallet wallet-id --all-dates --ignored Ignored --out ignored.csv`
+	cmd.AddCommand(
+		newOrgWalletsListCmd(), newOrgWalletsNetworksCmd(), newOrgWalletsAddCmd(),
+		newOrgWalletStatusCmd("enable", false), newOrgWalletStatusCmd("disable", true),
+		walletExport, newOrgWalletsRollupCmd(), newOrgWalletResyncCmd(),
+	)
 	return cmd
 }
 
 func newOrgWalletsListCmd() *cobra.Command {
 	var orgID string
 	var jsonOutput bool
+	var disabledOnly, enabledOnly bool
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List organization wallets with network, address, and subsidiary",
+		Short: "List organization wallets, including disabled and sync settings",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if disabledOnly && enabledOnly {
+				return errors.New("--disabled-only and --enabled-only cannot be combined")
+			}
 			resolvedOrg, err := resolveReportOrg(orgID)
 			if err != nil {
 				return err
 			}
 			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrg))
-			wallets, err := client.Wallets(cmd.Context(), resolvedOrg)
+			wallets, err := client.DetailedOrgWallets(cmd.Context(), resolvedOrg)
 			if err != nil {
 				return fmt.Errorf("list organization wallets: %w", err)
 			}
+			filtered := wallets[:0]
+			for _, wallet := range wallets {
+				if disabledOnly && !wallet.Disabled {
+					continue
+				}
+				if enabledOnly && wallet.Disabled {
+					continue
+				}
+				filtered = append(filtered, wallet)
+			}
+			wallets = filtered
 			if jsonOutput {
 				return writeJSON(cmd.OutOrStdout(), map[string]any{"schemaVersion": "1", "organization": resolvedOrg, "wallets": wallets})
 			}
@@ -117,14 +147,102 @@ func newOrgWalletsListCmd() *cobra.Command {
 				if address == "" && len(wallet.Addresses) > 0 {
 					address = strings.Join(wallet.Addresses, ",")
 				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\t%s\n", wallet.ID, wallet.Name, wallet.NetworkID, address, wallet.SubsidiaryID)
+				fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\t%s\t%s\tdisabled=%t\tcreatedSEC=%d\tsyncStartSEC=%d\n", wallet.ID, wallet.Name, wallet.NetworkID, address, wallet.SubsidiaryID, wallet.Disabled, wallet.CreatedSEC, wallet.Flags.SyncStartDateSEC)
 			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
+	cmd.Flags().BoolVar(&disabledOnly, "disabled-only", false, "Return only disabled wallets")
+	cmd.Flags().BoolVar(&enabledOnly, "enabled-only", false, "Return only enabled wallets")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Emit machine-readable JSON")
 	return cmd
+}
+
+func newOrgWalletStatusCmd(name string, disabled bool) *cobra.Command {
+	var f transactionMutationFlags
+	cmd := &cobra.Command{
+		Use:   name + " WALLET_ID_OR_NAME [WALLET_ID_OR_NAME...]",
+		Short: strings.ToUpper(name[:1]) + name[1:] + " one or more organization wallets",
+		Args:  cobra.MinimumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			operation := name + "-organization-wallets"
+			orgID, err := resolveReportOrg(f.orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(orgID))
+			wallets, err := client.DetailedOrgWallets(cmd.Context(), orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("list wallets: %w", err))
+			}
+			selected := make([]orgreports.DetailedOrgWallet, 0, len(args))
+			seen := map[string]bool{}
+			for _, ref := range uniqueNonEmpty(args) {
+				wallet, resolveErr := resolveDetailedOrgWallet(ref, wallets)
+				if resolveErr != nil {
+					return mutationError(cmd, operation, f.jsonOutput, resolveErr)
+				}
+				if !seen[wallet.ID] {
+					seen[wallet.ID] = true
+					selected = append(selected, *wallet)
+				}
+			}
+			preview := map[string]any{"disabled": disabled, "wallets": selected}
+			if f.dryRun {
+				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
+			}
+			if !f.yes {
+				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change wallet status without --yes (use --dry-run to preview)"))
+			}
+			updated := make([]string, 0, len(selected))
+			failed := make([]map[string]string, 0)
+			for _, wallet := range selected {
+				if wallet.Disabled == disabled {
+					updated = append(updated, wallet.ID)
+					continue
+				}
+				if updateErr := client.SetOrgWalletDisabled(cmd.Context(), orgID, wallet.ID, wallet.Name, disabled); updateErr != nil {
+					failed = append(failed, map[string]string{"walletId": wallet.ID, "name": wallet.Name, "error": updateErr.Error()})
+					continue
+				}
+				updated = append(updated, wallet.ID)
+			}
+			status := "success"
+			if len(failed) > 0 {
+				status = "partial_failure"
+			}
+			envelope := mutationEnvelope{SchemaVersion: "1", Status: status, Operation: operation, Organization: orgID, Result: map[string]any{"updated": updated, "failed": failed, "disabled": disabled}}
+			if len(failed) > 0 {
+				_ = writeJSON(cmd.OutOrStdout(), envelope)
+				return fmt.Errorf("%s: %d updated, %d failed", operation, len(updated), len(failed))
+			}
+			return outputMutation(cmd, f.jsonOutput, envelope, fmt.Sprintf("%s: %d wallet(s)\n", operation, len(updated)))
+		},
+	}
+	addMutationFlags(cmd, &f)
+	return cmd
+}
+
+func resolveDetailedOrgWallet(ref string, wallets []orgreports.DetailedOrgWallet) (*orgreports.DetailedOrgWallet, error) {
+	for index := range wallets {
+		if wallets[index].ID == ref {
+			return &wallets[index], nil
+		}
+	}
+	matches := make([]int, 0)
+	for index := range wallets {
+		if strings.EqualFold(wallets[index].Name, ref) {
+			matches = append(matches, index)
+		}
+	}
+	if len(matches) == 1 {
+		return &wallets[matches[0]], nil
+	}
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("wallet name %q is ambiguous; pass a wallet ID", ref)
+	}
+	return nil, fmt.Errorf("wallet %q not found; run `bitwave org wallets list --json`", ref)
 }
 
 func newOrgWalletsNetworksCmd() *cobra.Command {
