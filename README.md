@@ -409,6 +409,11 @@ The ongoing mapping between customer-facing web application capabilities and
 organization-mode CLI commands is tracked in
 [Bitwave web application parity](docs/UI_PARITY.md).
 
+Organization administrators can inspect the complete Admin command catalog
+with `bitwave org admin capabilities --json`. See
+[Organization administration](docs/ORGANIZATION_ADMIN.md) for safety,
+structured input, feature-gated commands, and NetSuite provider settings.
+
 ---
 
 ## Expense reports

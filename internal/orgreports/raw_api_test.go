@@ -44,14 +44,16 @@ func TestRawRequestUsesKnownServiceAndAuthentication(t *testing.T) {
 func TestRawEndpointSelectsServiceOrigins(t *testing.T) {
 	client := New("https://api.bitwave.io", func() (string, error) { return "", nil })
 	tests := map[string]string{
-		APIServiceCore:    "https://api.bitwave.io/v3/orgs/one",
-		APIServiceApp:     "https://api-app.bitwave.io/graphql",
-		APIServiceReports: "https://api4.bitwave.io/graphql-reports",
+		APIServiceCore:     "https://api.bitwave.io/v3/orgs/one",
+		APIServiceApp:      "https://api-app.bitwave.io/graphql",
+		APIServicePlatform: "https://api4.bitwave.io/orgs/one",
+		APIServiceReports:  "https://api4.bitwave.io/graphql-reports",
 	}
 	paths := map[string]string{
-		APIServiceCore:    "/v3/orgs/one",
-		APIServiceApp:     "/graphql",
-		APIServiceReports: "/graphql-reports",
+		APIServiceCore:     "/v3/orgs/one",
+		APIServiceApp:      "/graphql",
+		APIServicePlatform: "/orgs/one",
+		APIServiceReports:  "/graphql-reports",
 	}
 	for service, want := range tests {
 		got, err := client.RawEndpoint(service, paths[service])
@@ -76,7 +78,7 @@ func TestRawEndpointRejectsArbitraryHost(t *testing.T) {
 
 func TestRawEndpointPreservesSelfHostedBasePath(t *testing.T) {
 	client := New("http://localhost:8080/api", func() (string, error) { return "", nil })
-	for _, service := range []string{APIServiceCore, APIServiceApp, APIServiceReports} {
+	for _, service := range []string{APIServiceCore, APIServiceApp, APIServicePlatform, APIServiceReports} {
 		got, err := client.RawEndpoint(service, "/widgets")
 		if err != nil {
 			t.Fatal(err)
