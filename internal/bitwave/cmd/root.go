@@ -176,6 +176,7 @@ Tip: run ` + "`bitwave <command> --help`" + ` on any subcommand to see flags + e
 
 	addInGroup(groupWorkflows, newMigrateCmd())
 	addInGroup(groupWorkflows, newOrgTransactionsCmd())
+	addInGroup(groupWorkflows, newOrgInvoicesCmd())
 	addInGroup(groupWorkflows, newOrgRulesCmd())
 	addInGroup(groupWorkflows, newOrgInventoryCmd())
 	addInGroup(groupWorkflows, newAPICmd())

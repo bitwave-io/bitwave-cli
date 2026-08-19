@@ -245,6 +245,20 @@ func (c *Client) Transaction(ctx context.Context, orgID, transactionID string) (
 	return json.RawMessage(data), nil
 }
 
+// TransactionWithAccountingDetails uses the legacy read representation because
+// the v3 transaction endpoint intentionally omits saved accounting details.
+func (c *Client) TransactionWithAccountingDetails(ctx context.Context, orgID, transactionID string) (json.RawMessage, error) {
+	path := "/txns/" + url.PathEscape(orgID) + "/" + url.PathEscape(transactionID)
+	data, err := c.do(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(data) {
+		return nil, fmt.Errorf("transaction accounting-details response was not valid JSON")
+	}
+	return json.RawMessage(data), nil
+}
+
 func (c *Client) BulkTransactionStateStatus(ctx context.Context, orgID, workflowID string) (*BulkStateResponse, error) {
 	var response BulkStateResponse
 	path := "/v3/orgs/" + url.PathEscape(orgID) + "/transactions/bulk-state/" + url.PathEscape(workflowID)

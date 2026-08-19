@@ -112,3 +112,17 @@ func TestCompactTransactionsBoundsLines(t *testing.T) {
 		t.Fatalf("result = %#v", result)
 	}
 }
+
+func TestCompactTransactionAccountingDetailsOmitsLegacyNoise(t *testing.T) {
+	view, err := compactTransactionAccountingDetails(json.RawMessage(`{"id":"txn-1","categorizationStatus":"Categorized","hasMatchedInvoices":false,"memo":"invoice test","accountingDetails":[{"invoice":{"invoices":[{"invoiceId":"inv-1"}]}}],"org":{"name":"must not leak into compact output"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"invoiceId":"inv-1"`) || strings.Contains(string(encoded), "must not leak") {
+		t.Fatalf("view = %s", encoded)
+	}
+}
