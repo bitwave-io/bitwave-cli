@@ -9,10 +9,20 @@ import (
 	"strings"
 )
 
+// RawResponse preserves response metadata needed by first-class administrative
+// commands. In particular, core-svc uses ETags to protect organization and
+// identity settings from lost updates.
+type RawResponse struct {
+	StatusCode int
+	Header     http.Header
+	Body       []byte
+}
+
 const (
-	APIServiceCore    = "core"
-	APIServiceApp     = "app"
-	APIServiceReports = "reports"
+	APIServiceCore     = "core"
+	APIServiceApp      = "app"
+	APIServicePlatform = "platform"
+	APIServiceReports  = "reports"
 )
 
 // RawRequest sends an authenticated request to one of Bitwave's known API
@@ -42,6 +52,19 @@ func (c *Client) RawRequestBytes(ctx context.Context, service, method, path stri
 		method = http.MethodGet
 	}
 	return c.doEndpointBytes(ctx, method, endpoint, body, true, headers)
+}
+
+// RawRequestDetailed is RawRequestBytes with status and response headers.
+func (c *Client) RawRequestDetailed(ctx context.Context, service, method, path string, body []byte, headers http.Header) (*RawResponse, error) {
+	endpoint, err := c.RawEndpoint(service, path)
+	if err != nil {
+		return nil, err
+	}
+	method = strings.ToUpper(strings.TrimSpace(method))
+	if method == "" {
+		method = http.MethodGet
+	}
+	return c.doEndpointBytesDetailed(ctx, method, endpoint, body, true, headers)
 }
 
 // RawEndpoint resolves a relative API path against a fixed Bitwave service.
@@ -79,10 +102,12 @@ func (c *Client) rawServiceBase(service string) (string, error) {
 		return validateRawServiceBase(c.BaseURL, service)
 	case APIServiceApp:
 		endpoint = c.RulesMutationURL
+	case APIServicePlatform:
+		endpoint = c.RulesQueryURL
 	case APIServiceReports:
 		endpoint = c.RulesQueryURL
 	default:
-		return "", fmt.Errorf("unsupported API service %q (use core, app, or reports)", service)
+		return "", fmt.Errorf("unsupported API service %q (use core, app, platform, or reports)", service)
 	}
 	parsed, err := url.Parse(endpoint)
 	if err != nil || parsed.Scheme == "" || parsed.Host == "" {

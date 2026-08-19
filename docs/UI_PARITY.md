@@ -30,11 +30,11 @@ where the backend supports them.
 |---|---|---|---|
 | Authentication | Sign in/out, account context | OAuth login, cached refreshable org sessions | Partial |
 | Organizations | Select, create, inspect settings | List, use, current, create, clear | Partial |
-| Users and invitations | Invite, list, update, remove users | None | Missing |
-| Roles and permissions | Organization roles, wallet roles | None | Missing |
-| API access | API credentials and access settings | Token consumption only | Missing |
+| Users and invitations | Invite, list, update, remove users | Admin list/get/invite/update/remove and invitation cancellation | Supported |
+| Roles and permissions | Organization roles, wallet roles | Organization role list/get/create/update; wallet settings expose role assignment | Supported |
+| API access | API credentials and access settings | List/create/delete organization API keys | Supported |
 | Audit log | Organization audit events | None | Missing |
-| Subsidiaries | List and manage subsidiaries | Discovery for report filters only | Partial |
+| Subsidiaries | List and manage subsidiaries | Full hierarchy list/get/create/update/move/delete/restore | Supported |
 | Wallets and sources | List, add, update, delete, roles, sync configuration | List, network discovery, add/batch add, Babel rollup get/set | Partial |
 | Portfolio and dashboards | Portfolio, accounting, NFT and transaction summaries | Report/filter data only | Partial |
 | Transactions | Search, drilldown, create, ignore, categorize, combine/split, reconcile and related actions | Search/get, simple/trade/transfer create, ignore/unignore, categorize/bulk categorize | Partial |
@@ -42,7 +42,7 @@ where the backend supports them.
 | Rules | List, create, edit, enable/disable, validate and execute | List/get/create/update/enable/disable/delete/validate/run/bulk-run | Supported |
 | Categories | List/export/create, enable/disable, disable all | List, create/import, enable/disable and disable all; CSV export missing | Partial |
 | Contacts | List/export/create, enable/disable, defaults, connection and address mappings | List, create, complete-input update, enable/disable and disable all; CSV export missing | Partial |
-| Accounting connections | List, configure, synchronize and manage providers | List and create manual connection | Partial |
+| Accounting connections | List, configure, synchronize and manage providers | Full Admin lifecycle plus complete NetSuite provider settings | Supported |
 | Imports and data load | Transaction import, data import workflows and reports | None | Missing |
 | Data platform | Explore, sources, feeds, executions, schemas, transforms, rollups and reconciliation | Wallet Babel rollup configuration only | Partial |
 | Pricing | History, rules, rate tables, contexts and routes | None | Missing |
@@ -56,8 +56,12 @@ where the backend supports them.
 | Invoices, bills and customers | AR/AP records and categorization support | Invoice-aware categorization payloads only | Partial |
 | Crypto bills and payments | Bills and bulk payment workflows | None | Missing |
 | Marketplace and onramp | Discover/install integrations and onboarding flows | None | Missing |
-| SSO and SCIM | Enterprise identity configuration | None | Missing |
-| System jobs | Inspect background jobs | Rule/inventory-specific status only | Partial |
+| SSO and SCIM | Enterprise identity configuration | SSO read/update and SCIM status/generate/disable | Supported |
+| System jobs | Inspect and run background jobs | List/status plus every named Admin bulk action and generic runner | Supported |
+
+The complete Administration command catalog is documented in
+[Organization administration](ORGANIZATION_ADMIN.md) and is discoverable with
+`bitwave org admin capabilities --json`.
 
 ## Delivery order
 
