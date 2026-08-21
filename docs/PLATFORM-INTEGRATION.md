@@ -75,6 +75,25 @@ The daily-close triage query is
 `GET /txns/{orgId}?categorizationStatus=uncategorized` — first-class on the
 platform, impossible today in the gl-svc surface.
 
+For invoice and bill matching, use the typed contact-first commands instead of
+inventing the categorization union:
+
+```bash
+bitwave invoice list --contact CONTACT_ID --invoice-number INVOICE_NUMBER --json
+bitwave invoice categorize TXN_ID --contact CONTACT_ID \
+  --invoice-number INVOICE_NUMBER --dry-run --json
+```
+
+Transaction IDs may be supplied in Bitwave's network-qualified form (for
+example `SOL.<signature>`) or as a raw Solana signature. The CLI recognizes a
+raw Solana signature and adds `SOL.` automatically. For ambiguous raw hashes,
+pass the network explicitly, for example `--network ETH` or `--network BSC`.
+
+The second command reads the same transaction state used by the UI and builds
+the complete `invoice-v2` request, including wallet, asset IDs, exchange rates,
+and transaction price version. See `docs/ORGANIZATION_TRANSACTION_MUTATIONS.md`
+for contact-name lookup, validation behavior, and the `--yes` write step.
+
 ### Reports (async run model)
 
 | Op | Endpoint |
