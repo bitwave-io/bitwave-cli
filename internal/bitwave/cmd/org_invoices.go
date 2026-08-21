@@ -115,6 +115,7 @@ type invoiceCategorizeFlags struct {
 	invoiceNumber string
 	contactID     string
 	contactQuery  string
+	network       string
 	paidAmount    string
 	memo          string
 	force         bool
@@ -150,6 +151,7 @@ instead of guessing.`,
 	cmd.Flags().StringVar(&f.invoiceNumber, "invoice-number", "", "Exact invoice number/title (required)")
 	cmd.Flags().StringVar(&f.contactID, "contact", "", "Exact Bitwave contact ID")
 	cmd.Flags().StringVar(&f.contactQuery, "contact-query", "", "Contact name or ID query; must resolve uniquely")
+	cmd.Flags().StringVar(&f.network, "network", "", "Bitwave network prefix for an unqualified transaction hash (Solana signatures are detected automatically)")
 	cmd.Flags().StringVar(&f.paidAmount, "paid-amount", "", "Invoice-currency payment amount (defaults to transaction value when it fully fits the invoice)")
 	cmd.Flags().StringVar(&f.memo, "memo", "", "Categorization memo (defaults to the invoice number)")
 	cmd.Flags().BoolVar(&f.force, "force", false, "Replace an existing transaction categorization")
@@ -169,8 +171,9 @@ type invoiceCategorizationResolution struct {
 
 func runInvoiceCategorize(cmd *cobra.Command, transactionID string, f invoiceCategorizeFlags) error {
 	const operation = "invoice-categorize"
-	if transactionID == "" {
-		return mutationError(cmd, operation, f.jsonOutput, errors.New("transaction ID is required"))
+	transactionID, err := normalizeTransactionID(transactionID, f.network)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
 	}
 	f.invoiceNumber = strings.TrimSpace(f.invoiceNumber)
 	if f.invoiceNumber == "" {

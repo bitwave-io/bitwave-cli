@@ -84,6 +84,11 @@ bitwave invoice categorize TXN_ID --contact CONTACT_ID \
   --invoice-number INVOICE_NUMBER --dry-run --json
 ```
 
+Transaction IDs may be supplied in Bitwave's network-qualified form (for
+example `SOL.<signature>`) or as a raw Solana signature. The CLI recognizes a
+raw Solana signature and adds `SOL.` automatically. For ambiguous raw hashes,
+pass the network explicitly, for example `--network ETH` or `--network BSC`.
+
 The second command reads the same transaction state used by the UI and builds
 the complete `invoice-v2` request, including wallet, asset IDs, exchange rates,
 and transaction price version. See `docs/ORGANIZATION_TRANSACTION_MUTATIONS.md`
