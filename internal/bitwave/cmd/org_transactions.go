@@ -151,28 +151,69 @@ func addTransactionSummaryFlags(cmd *cobra.Command, orgID, from, to *string, pag
 }
 
 func newGetOrgTransactionCmd() *cobra.Command {
-	var orgID string
+	var orgID, network string
+	var accountingDetails bool
 	cmd := &cobra.Command{
 		Use:   "get TRANSACTION_ID",
 		Short: "Get one complete organization transaction for categorization planning",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			transactionID, err := normalizeTransactionID(args[0], network)
+			if err != nil {
+				return err
+			}
 			resolvedOrg, err := resolveReportOrg(orgID)
 			if err != nil {
 				return err
 			}
 			client := orgreports.New(resolveCoreBaseURL(), makeOrgTokenResolver(resolvedOrg))
-			transaction, err := client.Transaction(cmd.Context(), resolvedOrg, args[0])
+			var transaction json.RawMessage
+			if accountingDetails {
+				transaction, err = client.TransactionWithAccountingDetails(cmd.Context(), resolvedOrg, transactionID)
+			} else {
+				transaction, err = client.Transaction(cmd.Context(), resolvedOrg, transactionID)
+			}
 			if err != nil {
-				return fmt.Errorf("get transaction %s: %w", args[0], err)
+				return fmt.Errorf("get transaction %s: %w", transactionID, err)
+			}
+			if accountingDetails {
+				view, err := compactTransactionAccountingDetails(transaction)
+				if err != nil {
+					return fmt.Errorf("compact transaction accounting details: %w", err)
+				}
+				return writeJSON(cmd.OutOrStdout(), view)
 			}
 			_, err = cmd.OutOrStdout().Write(append(transaction, '\n'))
 			return err
 		},
 	}
 	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
+	cmd.Flags().StringVar(&network, "network", "", "Bitwave network prefix for an unqualified transaction hash (Solana signatures are detected automatically)")
+	cmd.Flags().BoolVar(&accountingDetails, "accounting-details", false, "Include saved categorization details, including invoice references")
 	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
 	return cmd
+}
+
+type transactionAccountingDetailsView struct {
+	ID                   string          `json:"id"`
+	CategorizationStatus string          `json:"categorizationStatus,omitempty"`
+	HasMatchedInvoices   bool            `json:"hasMatchedInvoices"`
+	Memo                 string          `json:"memo,omitempty"`
+	AccountingDetails    json.RawMessage `json:"accountingDetails"`
+}
+
+func compactTransactionAccountingDetails(transaction json.RawMessage) (*transactionAccountingDetailsView, error) {
+	var view transactionAccountingDetailsView
+	if err := json.Unmarshal(transaction, &view); err != nil {
+		return nil, err
+	}
+	if view.ID == "" {
+		return nil, errors.New("transaction accounting-details response did not include an id")
+	}
+	if len(view.AccountingDetails) == 0 {
+		view.AccountingDetails = json.RawMessage("[]")
+	}
+	return &view, nil
 }
 
 func newTransactionStateCmd(name, transition string) *cobra.Command {
@@ -270,7 +311,8 @@ func waitForBulkStateWorkflow(ctx context.Context, client *orgreports.Client, or
 
 type categorizeFlags struct {
 	transactionMutationFlags
-	input string
+	input   string
+	network string
 }
 
 func newCategorizeTransactionCmd() *cobra.Command {
@@ -286,13 +328,15 @@ func newCategorizeTransactionCmd() *cobra.Command {
 	}
 	addMutationFlags(cmd, &f.transactionMutationFlags)
 	cmd.Flags().StringVarP(&f.input, "input", "i", "", "Categorization JSON file, or - for stdin (required)")
+	cmd.Flags().StringVar(&f.network, "network", "", "Bitwave network prefix for an unqualified transaction hash (Solana signatures are detected automatically)")
 	return cmd
 }
 
 func runCategorizeTransaction(cmd *cobra.Command, transactionID string, f categorizeFlags) error {
 	operation := "categorize"
-	if strings.TrimSpace(transactionID) == "" {
-		return mutationError(cmd, operation, f.jsonOutput, errors.New("transaction ID is required"))
+	transactionID, err := normalizeTransactionID(transactionID, f.network)
+	if err != nil {
+		return mutationError(cmd, operation, f.jsonOutput, err)
 	}
 	body, err := readJSONObject(f.input, cmd.InOrStdin())
 	if err != nil {

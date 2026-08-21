@@ -53,7 +53,7 @@ where the backend supports them.
 | External cost basis | Import and manage external basis | None | Missing |
 | Wrapping and tax strategy | Configure product treatments | None | Missing |
 | Token filtering | Organization token filtering | None | Missing |
-| Invoices, bills and customers | AR/AP records and categorization support | Invoice-aware categorization payloads only | Partial |
+| Invoices, bills and customers | AR/AP records and categorization support | Contact-scoped invoice/bill discovery plus typed transaction categorization | Supported for single-line payments; advanced allocations use raw JSON |
 | Crypto bills and payments | Bills and bulk payment workflows | None | Missing |
 | Marketplace and onramp | Discover/install integrations and onboarding flows | None | Missing |
 | SSO and SCIM | Enterprise identity configuration | None | Missing |
