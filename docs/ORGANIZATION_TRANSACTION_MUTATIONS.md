@@ -153,6 +153,59 @@ has an `accountingConnectionId` where required. The server remains authoritative
 for transaction-specific line, amount, wallet, exchange-rate, category, and
 contact validation.
 
+## Invoice and bill categorization
+
+Do not guess or hand-author Bitwave's `invoice-v2` JSON for the common case.
+The typed invoice commands follow the same contact-first workflow as the web
+application: select a contact, load only that contact's eligible invoices or
+bills, then match an exact invoice number.
+
+Discover an invoice after resolving a contact:
+
+```bash
+bitwave --quiet invoice list \
+  --org ORG_ID \
+  --contact CONTACT_ID \
+  --direction inflow \
+  --invoice-number KU7OAN8N-0001 \
+  --json
+```
+
+Preview the complete categorization using a human-readable contact name:
+
+```bash
+bitwave --quiet invoice categorize TXN_ID \
+  --org ORG_ID \
+  --contact-query "Customer name" \
+  --invoice-number KU7OAN8N-0001 \
+  --dry-run --json
+```
+
+Apply the verified match by replacing `--dry-run` with `--yes`. Use
+`--contact CONTACT_ID` when the stable contact ID is already known. The command
+automatically reads the transaction's wallet, asset IDs, system exchange rates,
+accounting value, and transaction price version and then creates the complete
+`invoice-v2` request.
+
+`--contact-query` tries Bitwave's indexed name lookup first. If an imported
+contact has not appeared in that index, the CLI falls back to the paginated
+contact list for correctness and reports `contactSearchMode` in JSON. On very
+large organizations, passing the contact ID avoids that slower fallback.
+
+The command validates that:
+
+- the contact resolves uniquely and belongs to the invoice connection;
+- inflows use open receiving invoices and outflows use open paying bills;
+- the invoice is enabled, awaiting payment, and has sufficient amount due;
+- the transaction has one unambiguous non-fee payment line and complete pricing;
+- the allocation uses the transaction's authoritative wallet, asset IDs, and
+  current price version.
+
+It refuses ambiguous contacts, accidental overwrites, partial or multi-line
+allocations, and unsupported foreign-currency differences instead of guessing.
+Use the raw `transaction categorize --input` contract only for those advanced
+cases. `--force` is required to replace any existing categorization.
+
 ## Bulk categorization
 
 The typed form supports Bitwave's bulk `multivalue`, `trade`, and `transfer`

@@ -47,3 +47,33 @@ func TestInvoiceGetsOneRecord(t *testing.T) {
 		t.Fatalf("invoice = %#v", invoice)
 	}
 }
+
+func TestFindInvoiceForContactFollowsPagesAndMatchesExactTitle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("contactId") != "ac-1.contact-1" {
+			t.Fatalf("contactId = %q", r.URL.Query().Get("contactId"))
+		}
+		switch r.URL.Query().Get("lastRef") {
+		case "":
+			_, _ = w.Write([]byte(`{"records":[{"id":"ac-1.other","title":"OTHER","enabled":true}],"nextPageToken":"page-2"}`))
+		case "page-2":
+			_, _ = w.Write([]byte(`{"records":[{"id":"ac-1.target","title":"INV-42","enabled":true}],"nextPageToken":"page-3"}`))
+		case "page-3":
+			_, _ = w.Write([]byte(`{"records":[]}`))
+		default:
+			t.Fatalf("unexpected lastRef %q", r.URL.Query().Get("lastRef"))
+		}
+	}))
+	defer server.Close()
+
+	client := New(server.URL, func() (string, error) { return "token", nil })
+	invoice, err := client.FindInvoiceForContact(context.Background(), "org-1", FindInvoiceInput{
+		ContactID: "ac-1.contact-1", Title: "inv-42", PageSize: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if invoice.ID != "ac-1.target" || invoice.AccountingConnectionID != "ac-1" {
+		t.Fatalf("invoice = %#v", invoice)
+	}
+}
