@@ -116,13 +116,12 @@ Creating a DeFi wallet does not start its position sync. Ask sync-coordinator
 to create the daily schedule (the first run starts immediately):
 
 ```bash
-bitwave org wallets defi-schedule "Monad Staking" --network monad --dry-run --json
-bitwave org wallets defi-schedule "Monad Staking" --network monad --yes --json
+bitwave org wallets defi-schedule "Monad Staking" --dry-run --json
+bitwave org wallets defi-schedule "Monad Staking" --yes --json
 ```
 
-Pass `--network` for DeFi wallets: the Bitwave API does not currently return a
-network on DeFi wallet records, so the CLI cannot infer it (it tries, and asks
-for `--network` when the record has none).
+The network comes from the wallet record. `--network` overrides it (or supplies
+it for wallets created before the API returned a network on DeFi wallets).
 
 The JSON result carries the resolved `protocol` (for example `MonadStaking` or
 `Aerodrome`), the Temporal `scheduleId`, and `status` (`SCHEDULED`, or
