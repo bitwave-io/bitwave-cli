@@ -532,6 +532,21 @@ bitwave rule bulk-run --from-date 2026-01-01 --to-date 2026-06-30 --yes --json
 See [Organization Categorization Rules](docs/ORGANIZATION_RULES.md) for the
 raw contract and lifecycle commands.
 
+Treasury monitoring (wallet balance thresholds, alerts, and alert channels)
+is available under `bitwave treasury`:
+
+```sh
+bitwave treasury monitors list
+bitwave treasury monitors create --wallet WALLET_ID --currency-id 10 \
+  --approaching 5 --breaching 2 --dry-run --json
+bitwave treasury alerts list --status OPEN
+bitwave treasury alerts ack ALERT_ID --yes
+bitwave treasury channels set --channel EMAIL --target ops@example.com --yes
+```
+
+See [Organization treasury monitoring](docs/ORGANIZATION_TREASURY.md) for
+static and dynamic thresholds, re-evaluation, and the endpoint map.
+
 The ongoing mapping between customer-facing web application capabilities and
 organization-mode CLI commands is tracked in
 [Bitwave web application parity](docs/UI_PARITY.md).
