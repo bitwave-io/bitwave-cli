@@ -249,9 +249,13 @@ bitwave --quiet invoice categorize TXN_ID \
   --dry-run --json
 ```
 
-Explorer-style raw Solana signatures are accepted and normalized to Bitwave's
-`SOL.<signature>` identifier automatically. Other raw hashes require
-`--network`; the CLI will not guess between networks that share hash formats.
+Transaction IDs returned by Bitwave are opaque: pass them unchanged, including
+raw hashes and imported/manual IDs. Without `--network`, transaction get,
+categorize, review, and invoice categorize preserve the ID (trimming surrounding
+whitespace only). This also means Solana signatures are no longer automatically
+prefixed. When deliberately looking up an explorer hash as a network-qualified
+Bitwave ID, use `--network SOL` or `--network ETH`; already-qualified IDs are
+never double-prefixed. Do not add a guessed prefix to a search result.
 
 Apply the verified match by replacing `--dry-run` with `--yes`. Use
 `--contact CONTACT_ID` when the stable contact ID is already known. The command

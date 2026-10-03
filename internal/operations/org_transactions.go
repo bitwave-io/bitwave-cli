@@ -189,7 +189,7 @@ func newGetOrgTransactionCmd() *op.Definition {
 		},
 	}
 	cmd.Flags().StringVar(&orgID, "org", "", "Organization ID override")
-	cmd.Flags().StringVar(&network, "network", "", "Bitwave network prefix for an unqualified transaction hash (Solana signatures are detected automatically)")
+	cmd.Flags().StringVar(&network, "network", "", transactionNetworkHelp)
 	cmd.Flags().BoolVar(&accountingDetails, "accounting-details", false, "Include saved categorization details, including invoice references")
 	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
 	return cmd
@@ -329,7 +329,7 @@ func newCategorizeTransactionCmd() *op.Definition {
 	}
 	addMutationFlags(cmd, &f.transactionMutationFlags)
 	cmd.Flags().StringVarP(&f.input, "input", "i", "", "Categorization JSON file, or - for stdin (required)")
-	cmd.Flags().StringVar(&f.network, "network", "", "Bitwave network prefix for an unqualified transaction hash (Solana signatures are detected automatically)")
+	cmd.Flags().StringVar(&f.network, "network", "", transactionNetworkHelp)
 	return cmd
 }
 

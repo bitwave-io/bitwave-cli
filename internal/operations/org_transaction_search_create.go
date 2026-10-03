@@ -64,13 +64,13 @@ an LLM does not need to load the organization's entire transaction history.`,
 
 func runSearchOrgTransactions(cmd *op.Call, f transactionSearchFlags) error {
 	if f.limit < 1 || f.limit > 100 {
-		return errors.New("--limit must be between 1 and 100")
+		return op.NewValidationError("--limit must be between 1 and 100")
 	}
 	if len(uniqueNonEmpty(f.search)) > 5 {
-		return errors.New("--search may be supplied at most five times")
+		return op.NewValidationError("--search may be supplied at most five times")
 	}
 	if (f.from == "") != (f.to == "") {
-		return errors.New("--from and --to must be supplied together")
+		return op.NewValidationError("--from and --to must be supplied together")
 	}
 	if f.from != "" {
 		if err := validateExportDateRange(f.from, f.to, false); err != nil {
@@ -78,7 +78,7 @@ func runSearchOrgTransactions(cmd *op.Call, f transactionSearchFlags) error {
 		}
 	}
 	if f.sortDirection != "asc" && f.sortDirection != "desc" {
-		return errors.New("--sort-direction must be asc or desc")
+		return op.NewValidationError("--sort-direction must be asc or desc")
 	}
 	orgID, err := resolveReportOrg(cmd.Context(), f.orgID)
 	if err != nil {
