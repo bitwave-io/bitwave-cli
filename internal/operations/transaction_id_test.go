@@ -1,8 +1,11 @@
 package operations
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/bitwave-io/bitwave-cli/internal/operation"
 )
 
 func TestNormalizeTransactionID(t *testing.T) {
@@ -15,10 +18,16 @@ func TestNormalizeTransactionID(t *testing.T) {
 		wantErr string
 	}{
 		{name: "qualified", value: "SOL." + solanaSignature, want: "SOL." + solanaSignature},
-		{name: "detect solana", value: solanaSignature, want: "SOL." + solanaSignature},
+		{name: "preserve solana", value: solanaSignature, want: solanaSignature},
+		{name: "explicit solana alias", value: solanaSignature, network: "solana", want: "SOL." + solanaSignature},
 		{name: "explicit ethereum alias", value: "0xabc", network: "ethereum", want: "ETH.0xabc"},
 		{name: "explicit bnb alias", value: "0xabc", network: "bnb", want: "BSC.0xabc"},
-		{name: "ambiguous raw hash", value: "0xabc", wantErr: "pass --network"},
+		{name: "raw hash", value: "0xabc", want: "0xabc"},
+		{name: "opaque imported ID", value: "import-123:row-42", want: "import-123:row-42"},
+		{name: "manual ID", value: "manual-123", want: "manual-123"},
+		{name: "trim surrounding whitespace only", value: " \tMiXeD-ID\n", want: "MiXeD-ID"},
+		{name: "empty network", value: "0xabc", network: " \t", want: "0xabc"},
+		{name: "already qualified", value: "BSC.0xabc", network: "ETH", want: "BSC.0xabc"},
 		{name: "empty", value: " ", wantErr: "transaction ID is required"},
 	}
 	for _, test := range tests {
@@ -27,6 +36,10 @@ func TestNormalizeTransactionID(t *testing.T) {
 			if test.wantErr != "" {
 				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
 					t.Fatalf("normalizeTransactionID() error = %v, want substring %q", err, test.wantErr)
+				}
+				var validation *operation.ValidationError
+				if !errors.As(err, &validation) {
+					t.Fatalf("expected safe validation error, got %T", err)
 				}
 				return
 			}

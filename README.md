@@ -122,6 +122,14 @@ precision, and array elements. `sdk.ParseCommand` and `sdk.ExecuteWithOptions`
 are compatibility adapters for familiar argv syntax; they parse parameters
 into the same structured SDK calls. Empty argv returns SDK help.
 
+Use `errors.As` to distinguish `*sdk.ValidationError` (safe local validation)
+from `*sdk.APIError` (untrusted upstream HTTP failure). Only the matched
+validation error's `Error()` text is safe to publish directly; wrapping error
+text and API messages may contain input values or infrastructure details.
+Validation typing is intentionally incremental, not a claim that every SDK
+error is safe. Transaction IDs are opaque: pass IDs returned by search directly
+to get/categorize/review without adding a network prefix.
+
 Pass organization, credentials, endpoint configuration, and workspace explicitly
 in `sdk.Options`. The SDK never reads CLI credentials/environment settings or
 changes process cwd/environment. Each invocation has independent parameters,

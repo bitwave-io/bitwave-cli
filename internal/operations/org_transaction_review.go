@@ -251,7 +251,7 @@ without selecting an accept or ignore action for the caller.`,
 		},
 	}
 	cmd.Flags().StringVar(&f.orgID, "org", "", "Organization ID override")
-	cmd.Flags().StringVar(&f.network, "network", "", "Bitwave network prefix for unqualified transaction hashes")
+	cmd.Flags().StringVar(&f.network, "network", "", transactionNetworkHelp)
 	cmd.Flags().IntVar(&f.limit, "limit", 25, "Maximum Needs Review transactions to analyze (1-100)")
 	cmd.Flags().StringVar(&f.nextToken, "next-token", "", "Opaque next-page token from the previous analysis")
 	cmd.Flags().Bool("json", true, "Emit machine-readable JSON (the only supported format)")
@@ -421,7 +421,7 @@ func newTransactionReviewResolveCmd(name, action string) *op.Definition {
 		},
 	}
 	addMutationFlags(cmd, &f.transactionMutationFlags)
-	cmd.Flags().StringVar(&f.network, "network", "", "Bitwave network prefix for unqualified transaction hashes")
+	cmd.Flags().StringVar(&f.network, "network", "", transactionNetworkHelp)
 	return cmd
 }
 
