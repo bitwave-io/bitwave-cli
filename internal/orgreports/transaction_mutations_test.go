@@ -108,7 +108,7 @@ func TestTransactionMutationContracts(t *testing.T) {
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				t.Fatal(err)
 			}
-			if len(body) != 1 || body[0].TransactionType != "deposit" {
+			if len(body) != 1 || body[0].TransactionType != "deposit" || body[0].AmountTicker != "USD" {
 				t.Fatalf("body = %#v", body)
 			}
 			_, _ = w.Write([]byte(`{"transactions":[{"transactionId":"txn-created"}]}`))
@@ -218,13 +218,37 @@ func TestTransactionMutationContracts(t *testing.T) {
 	if err != nil || overview.All != 20 || overview.NeedsCategorization != 10 || overview.FirstRecordDate == nil {
 		t.Fatalf("overview = %#v err=%v", overview, err)
 	}
-	created, err := c.CreateTransactions(ctx, "org-1", []CreateTransaction{{SystemID: "source-1", Time: "2026-08-10T10:00:00Z", AccountID: "wallet-a", Amount: "1.25", AmountTicker: "ETH", TransactionType: "deposit"}})
+	created, err := c.CreateTransactions(ctx, "org-1", []CreateTransaction{{SystemID: "source-1", Time: "2026-08-10T10:00:00Z", AccountID: "wallet-a", Amount: "1.25", AmountTicker: "USD", TransactionType: "deposit"}})
 	if err != nil || !json.Valid(created) {
 		t.Fatalf("created = %s err=%v", created, err)
 	}
 	transfer, err := c.CreateInternalTransfer(ctx, "org-1", InternalTransferInput{FromWalletID: "wallet-a", ToWalletID: "wallet-b", Coin: "ETH", Amount: "1", CreatedSEC: 1})
 	if err != nil || !json.Valid(transfer) {
 		t.Fatalf("transfer = %s err=%v", transfer, err)
+	}
+}
+
+func TestCreateTransactionLeavesCurrencyTypeImplicit(t *testing.T) {
+	payload, err := json.Marshal(CreateTransaction{
+		SystemID:        "source-usd",
+		Time:            "2026-08-10T10:00:00Z",
+		AccountID:       "wallet-a",
+		Amount:          "1.25",
+		AmountTicker:    "USD",
+		TransactionType: "deposit",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["amountTicker"] != "USD" {
+		t.Fatalf("amountTicker = %#v", body["amountTicker"])
+	}
+	if _, forcedType := body["type"]; forcedType {
+		t.Fatalf("currency type must be omitted so the API can resolve USD as fiat: %s", payload)
 	}
 }
 
