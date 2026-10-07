@@ -34,9 +34,7 @@ the first run immediately. Re-running reports ALREADY_EXISTS and leaves the
 existing schedule untouched; add --trigger to fire a run now on an existing
 schedule (for example to re-run a failed first pass after a fix).
 
-The Bitwave API does not currently return a network on DeFi wallet records, so
-pass --network for a single wallet (the CLI asks for it when it cannot infer
-one).
+The network comes from the wallet record; --network overrides it.
 
 Use --dry-run to print the exact request. Use --yes to create the schedule.`,
 		Args: op.RangeArgs(0, 1),
