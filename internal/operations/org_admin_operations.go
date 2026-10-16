@@ -85,6 +85,7 @@ func adminOperations() []adminOperation {
 		withInput(adminGraphQLOperation("connections", "netsuite-subsidiary-routing", "netsuite-subsidiary-routing CONNECTION_ID", "Manage invoice and bill subsidiary routing", gqlConnectionUpdate, "connectionId")),
 
 		// System jobs
+		adminGraphQLOperation("system-jobs", "system-job-cancel", "cancel JOB_ID", "Cancel a running system job; in-flight work may finish. Repeat if cancellation is pending", gqlSystemJobCancel, "jobRunId"),
 		adminGraphQLOperation("system-jobs", "system-jobs-list", "list", "List and paginate system jobs with status, parameters, timing, and errors", gqlSystemJobsList),
 		withInput(adminGraphQLOperation("system-jobs", "system-job-run", "run", "Run any Admin System Jobs action with its full filter contract", gqlSystemJobRun)),
 		withDefaults(adminGraphQLOperation("system-jobs", "system-job-delete-transactions", "delete-transactions", "Delete matching transactions", gqlSystemJobRun), bulkTransactionDefaults("delete")),
@@ -244,3 +245,5 @@ const gqlCancelInvitation = `mutation AdminCancelInvitation($orgId: ID!, $invite
 const gqlAPIKeysList = `query AdminAPIKeys($orgId: ID!) { authTokens(orgId: $orgId) { clientId description permissions } }`
 const gqlAPIKeyCreate = `mutation AdminAPIKeyCreate($orgId: ID!, $description: String!, $permissions: [AuthTokenPermissions]!) { createAuthToken(orgId: $orgId, description: $description, permissions: $permissions) { clientId clientSecret } }`
 const gqlAPIKeyDelete = `mutation AdminAPIKeyDelete($orgId: ID!, $clientId: ID!) { deleteAuthToken(orgId: $orgId, clientId: $clientId) }`
+
+const gqlSystemJobCancel = `mutation AdminSystemJobCancel($orgId: ID!, $jobRunId: String!) { cancelSystemJob(orgId: $orgId, jobRunId: $jobRunId) { jobRunId status } }`
