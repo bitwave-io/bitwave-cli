@@ -45,3 +45,46 @@ func TestSystemJobCancellationRequiresJobAndConfirmation(t *testing.T) {
 		}
 	}
 }
+
+func cancelEnvelope(t *testing.T, responseBody string) map[string]any {
+	t.Helper()
+	client := NewClient(Options{OrganizationID: "org-1", Token: "test-token", HTTPClient: &http.Client{Transport: contractTransport(func(r *http.Request) (*http.Response, error) {
+		return contractResponse(r, responseBody), nil
+	})}})
+	result, err := client.Invoke(context.Background(), Request{Operation: "bitwave_org_admin_system_jobs_cancel", Arguments: json.RawMessage(`{"arguments":["run-1"],"yes":true}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(result.Data, &out); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestCancellationStatusIsLiftedToTheEnvelopeSoPendingIsNotMistakenForCancelled(t *testing.T) {
+	cases := map[string]string{
+		"cancelled":             "cloud confirmed",
+		"cancellationRequested": "not confirmed yet",
+		"alreadyFinished":       "nothing was cancelled",
+	}
+	for status, noteFragment := range cases {
+		out := cancelEnvelope(t, `{"data":{"cancelSystemJob":{"jobRunId":"run-1","status":"`+status+`"}}}`)
+		if out["status"] != "success" {
+			t.Fatalf("%s: the transport status is still success: %v", status, out)
+		}
+		if out["cancellationStatus"] != status {
+			t.Fatalf("%s: cancellationStatus = %v", status, out["cancellationStatus"])
+		}
+		if note, _ := out["note"].(string); !strings.Contains(note, noteFragment) {
+			t.Fatalf("%s: note = %q", status, note)
+		}
+	}
+}
+
+func TestUnrecognizedCancellationStatusIsNotLifted(t *testing.T) {
+	out := cancelEnvelope(t, `{"data":{"cancelSystemJob":{"jobRunId":"run-1","status":"somethingNew"}}}`)
+	if _, present := out["cancellationStatus"]; present {
+		t.Fatalf("an unknown status must be left in result for the caller, not asserted: %v", out)
+	}
+}
