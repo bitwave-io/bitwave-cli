@@ -49,6 +49,7 @@ where the backend supports them.
 | Inventory views | List/create/edit/delete, update runs, scenarios and management | List/create/delete, trigger update, list update results | Partial |
 | Gain/loss | Scenario runner and reports | Actions report only | Partial |
 | Reports | Balance, transaction export, journal, expanded, rolled-up, ledger, balance check and export history | Balance, Transaction Export and Actions | Partial |
+| Treasury | Wallet threshold monitors (static and query-backed dynamic tiers), balance history, alerts, alert channels, re-evaluation | Monitor list/get/create/update/delete/history/reevaluate, alert list/acknowledge, channel get/set, treasury template list/get/execute | Supported |
 | Period close | Close configuration and period workflow | Checklist runs/tasks/invocations, templates, certifications/artifacts, inventory-action exports, hard close, and SFTP delivery assignments | Supported |
 | External cost basis | Import and manage external basis | None | Missing |
 | Wrapping and tax strategy | Configure product treatments | None | Missing |

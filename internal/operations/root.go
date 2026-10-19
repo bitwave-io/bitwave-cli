@@ -16,7 +16,7 @@ func NewRoot() *op.Definition {
 	root := &op.Definition{Use: "bitwave", Short: "Bitwave accounting and platform operations"}
 	org := &op.Definition{Use: "org", Short: "Organization operations"}
 	org.AddCommand(newOrgCurrentOperation(), newOrgListOperation(), newOrgWalletsCmd(), newOrgAccountingCmd(), newOrgAdminCmd())
-	root.AddCommand(org, newWorkspaceCmd(), newJournalCmd(), newInitCmd(), newJECmd(), newAcctCmd(), newPriceCmd(), newWalletsCmd(), newExpenseCmd(), newBalCmd(), newRegCmd(), newPrintCmd(), newAccountsCmd(), newContactsCmd(), newCommoditiesCmd(), newEquityCmd(), newClearedCmd(), newCSVCmd(), newStatsCmd(), newOrgReportCmd(), newMigrateCmd(), newOrgTransactionsCmd(), newOrgInvoicesCmd(), newOrgRulesCmd(), newOrgInventoryCmd(), newOrgPricingCmd(), newOrgImportsCmd(), newAPICmd(), newCloseCmd(), newShareCmd(), newSharesCmd(), newStatusOperation(), newVersionOperation())
+	root.AddCommand(org, newWorkspaceCmd(), newJournalCmd(), newInitCmd(), newJECmd(), newAcctCmd(), newPriceCmd(), newWalletsCmd(), newExpenseCmd(), newBalCmd(), newRegCmd(), newPrintCmd(), newAccountsCmd(), newContactsCmd(), newCommoditiesCmd(), newEquityCmd(), newClearedCmd(), newCSVCmd(), newStatsCmd(), newOrgReportCmd(), newMigrateCmd(), newOrgTransactionsCmd(), newOrgInvoicesCmd(), newOrgRulesCmd(), newOrgInventoryCmd(), newOrgPricingCmd(), newOrgImportsCmd(), newTreasuryCmd(), newAPICmd(), newCloseCmd(), newShareCmd(), newSharesCmd(), newStatusOperation(), newVersionOperation())
 	return root
 }
 func newOrgCurrentOperation() *op.Definition {

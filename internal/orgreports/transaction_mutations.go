@@ -164,10 +164,13 @@ type TransactionOverviewResponse struct {
 // Bitwave transaction UI. Numeric quantities remain strings to avoid losing
 // precision in automation and LLM tool calls.
 type CreateTransaction struct {
-	SystemID               string         `json:"systemId"`
-	Time                   string         `json:"time"`
-	AccountID              string         `json:"accountId"`
-	Amount                 string         `json:"amount"`
+	SystemID  string `json:"systemId"`
+	Time      string `json:"time"`
+	AccountID string `json:"accountId"`
+	Amount    string `json:"amount"`
+	// AmountTicker intentionally leaves currency type implicit. The transaction
+	// API resolves tickers such as USD to fiat and BTC to crypto. Do not add a
+	// hard-coded type field here.
 	AmountTicker           string         `json:"amountTicker"`
 	TransactionType        string         `json:"transactionType"`
 	TradeID                string         `json:"tradeId,omitempty"`

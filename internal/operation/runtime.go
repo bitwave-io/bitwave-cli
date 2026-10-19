@@ -15,8 +15,11 @@ type Options struct {
 	TokenResolver                                                func(context.Context, string) (string, error)
 	CoreBaseURL, GLBaseURL, BlockchainQueryBaseURL               string
 	API2BaseURL, TransactionsBaseURL, AppBaseURL, ReportsBaseURL string
-	HTTPClient                                                   *http.Client
-	IdentityEmail                                                string
+	// AddressBaseURL selects the token/address metadata service; empty uses
+	// the public Bitwave address service.
+	AddressBaseURL string
+	HTTPClient     *http.Client
+	IdentityEmail  string
 	// UnrestrictedFiles is for the interactive terminal adapter only. Hosted
 	// adapters must leave it false and supply their managed workspace root.
 	UnrestrictedFiles bool
