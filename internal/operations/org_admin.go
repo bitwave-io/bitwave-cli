@@ -304,6 +304,14 @@ func writeAdminResponse(cmd *op.Call, filename string, operation adminOperation,
 	if etag := response.Header.Get("ETag"); etag != "" {
 		envelope["etag"] = etag
 	}
+	// The top-level status is "success" whether the job was cancelled or the cancel is only pending, so
+	// surface which one it was where callers read the envelope.
+	if operation.Document == gqlSystemJobCancel {
+		if status := cancellationStatus(result); status != "" {
+			envelope["cancellationStatus"] = status
+			envelope["note"] = cancellationStatusNotes[status]
+		}
+	}
 	if filename == "" {
 		return writeJSON(cmd.OutOrStdout(), envelope)
 	}
