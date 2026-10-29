@@ -1,8 +1,11 @@
 package operations
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 
+	"github.com/bitwave-io/bitwave-cli/internal/apierr"
 	"github.com/bitwave-io/bitwave-cli/internal/operation"
 )
 
@@ -44,4 +47,25 @@ func normalizeTransactionNetwork(value string) string {
 	default:
 		return network
 	}
+}
+
+// networkQualified reports whether --network turned the caller's ID into a
+// network-prefixed one.
+func networkQualified(raw, transactionID string) bool {
+	return strings.TrimSpace(raw) != transactionID
+}
+
+func isNotFound(err error) bool {
+	var apiError *apierr.Error
+	return errors.As(err, &apiError) && apiError.Status == 404
+}
+
+// withNetworkPrefixHint explains a 404 for an ID that --network prefixed:
+// organizations can store an explorer hash bare, so the prefixed ID is not
+// found although the transaction exists. The caller's error is kept.
+func withNetworkPrefixHint(err error, raw, transactionID string) error {
+	if err == nil || !networkQualified(raw, transactionID) || !isNotFound(err) {
+		return err
+	}
+	return fmt.Errorf("%w (looked up as %s because of --network; this organization may store it without a network prefix as %s, so retry without --network)", err, transactionID, strings.TrimSpace(raw))
 }
