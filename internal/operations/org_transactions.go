@@ -173,11 +173,26 @@ func newGetOrgTransactionCmd() *op.Definition {
 				return err
 			}
 			client := newReportsClient(cmd.Context(), resolvedOrg)
-			var transaction json.RawMessage
-			if accountingDetails {
-				transaction, err = client.TransactionWithAccountingDetails(cmd.Context(), resolvedOrg, transactionID)
-			} else {
-				transaction, err = client.Transaction(cmd.Context(), resolvedOrg, transactionID)
+			read := func(id string) (json.RawMessage, error) {
+				if accountingDetails {
+					return client.TransactionWithAccountingDetails(cmd.Context(), resolvedOrg, id)
+				}
+				return client.Transaction(cmd.Context(), resolvedOrg, id)
+			}
+			transaction, err := read(transactionID)
+			// An organization can store an explorer hash without a network
+			// prefix. When --network added one and that ID is not found, read
+			// the ID exactly as given: a read never acts on another transaction.
+			if bare := strings.TrimSpace(args[0]); err != nil && networkQualified(args[0], transactionID) && isNotFound(err) {
+				found, bareErr := read(bare)
+				if bareErr == nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "note: %s was not found; returned the transaction stored as %s (without a network prefix)\n", transactionID, bare)
+					transaction, err = found, nil
+				} else if !isNotFound(bareErr) {
+					err = bareErr
+				} else {
+					err = fmt.Errorf("%w (not found as %s or as %s)", err, transactionID, bare)
+				}
 			}
 			if err != nil {
 				return fmt.Errorf("get transaction %s: %w", transactionID, err)
@@ -340,6 +355,7 @@ func newCategorizeTransactionCmd() *op.Definition {
 
 func runCategorizeTransaction(cmd *op.Call, transactionID string, f categorizeFlags) error {
 	operation := "categorize"
+	rawTransactionID := transactionID
 	transactionID, err := normalizeTransactionID(transactionID, f.network)
 	if err != nil {
 		return mutationError(cmd, operation, f.jsonOutput, err)
@@ -364,6 +380,7 @@ func runCategorizeTransaction(cmd *op.Call, transactionID string, f categorizeFl
 	}
 	client := newReportsClient(cmd.Context(), orgID)
 	if err := client.CategorizeTransaction(cmd.Context(), orgID, transactionID, body); err != nil {
+		err = withNetworkPrefixHint(err, rawTransactionID, transactionID)
 		return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("categorize transaction %s: %w", transactionID, err))
 	}
 	envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"transactionId": transactionID}}
