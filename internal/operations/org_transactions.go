@@ -31,6 +31,8 @@ type mutationEnvelope struct {
 	Operation     string       `json:"operation"`
 	Organization  string       `json:"organization"`
 	DryRun        bool         `json:"dryRun,omitempty"`
+	Submitted     *bool        `json:"submitted,omitempty"`
+	Note          string       `json:"note,omitempty"`
 	Request       any          `json:"request,omitempty"`
 	Result        any          `json:"result,omitempty"`
 	Error         *reportError `json:"error,omitempty"`
@@ -52,6 +54,9 @@ method, path, and JSON body without sending a mutation.`,
 	cmd.AddCommand(newGetOrgTransactionCmd())
 	cmd.AddCommand(newSearchOrgTransactionsCmd())
 	cmd.AddCommand(newCountOrgTransactionsCmd())
+	cmd.AddCommand(newDuplicateTransactionsCmd())
+	cmd.AddCommand(newCombineTransactionsCmd())
+	cmd.AddCommand(newUncombineTransactionsCmd())
 	cmd.AddCommand(newTransactionReviewCmd())
 	cmd.AddCommand(newTransactionSummaryCmd())
 	cmd.AddCommand(newCreateOrgTransactionCmd())
@@ -258,7 +263,7 @@ func runTransactionStateMutation(cmd *op.Call, operation, transition string, tra
 		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 	}
 	if !f.yes {
-		return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
+		return mutationError(cmd, operation, f.jsonOutput, op.NewConfirmationRequired("refusing to change the organization without --yes (use --dry-run to preview)"))
 	}
 
 	client := newReportsClient(cmd.Context(), orgID)
@@ -355,7 +360,7 @@ func runCategorizeTransaction(cmd *op.Call, transactionID string, f categorizeFl
 		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 	}
 	if !f.yes {
-		return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
+		return mutationError(cmd, operation, f.jsonOutput, op.NewConfirmationRequired("refusing to change the organization without --yes (use --dry-run to preview)"))
 	}
 	client := newReportsClient(cmd.Context(), orgID)
 	if err := client.CategorizeTransaction(cmd.Context(), orgID, transactionID, body); err != nil {
@@ -422,7 +427,7 @@ func runBulkCategorizeTransactions(cmd *op.Call, f bulkCategorizeFlags) error {
 		return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 	}
 	if !f.yes {
-		return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to change the organization without --yes (use --dry-run to preview)"))
+		return mutationError(cmd, operation, f.jsonOutput, op.NewConfirmationRequired("refusing to change the organization without --yes (use --dry-run to preview)"))
 	}
 	client := newReportsClient(cmd.Context(), orgID)
 	result, err := client.BulkCategorizeTransactions(cmd.Context(), orgID, body)
@@ -606,7 +611,7 @@ func newCategorizationOptionsCmd() *op.Definition {
 		Short: "Return LLM-friendly category, contact, connection, and payload choices",
 		RunE: func(cmd *op.Call, _ []string) error {
 			if limit <= 0 || limit > 500 {
-				return errors.New("--limit must be between 1 and 500")
+				return op.NewValidationError("--limit must be between 1 and 500")
 			}
 			resolvedOrg, err := resolveReportOrg(cmd.Context(), orgID)
 			if err != nil {

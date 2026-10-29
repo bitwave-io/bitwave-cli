@@ -149,6 +149,60 @@ the CLI polls:
 GET /v3/orgs/{orgId}/transactions/bulk-state/{workflowId}
 ```
 
+## Duplicates
+
+```bash
+bitwave --quiet transaction duplicates --org ORG_ID --stage needs-categorization --json
+```
+
+Read-only. Pages `POST /v3/orgs/{orgId}/transactions/search` with the same
+filters as `search` (`--stage` is the UI tab: `needs-categorization`,
+`to-be-synced`, `complete`, `ignored`, `deleted`) and returns groups of ids
+sharing one on-chain hash. Output: `scanned`, `truncated` (+ `nextToken`),
+`skipped`, `summary`, and `groups[]` with `hash`, `kind`, `recommendation`
+(`combine` | `combine-after-review` | `review` | `do-not-combine` |
+`not-duplicates`), `reason`, `blockers`, `nextCommand`, `transactions`.
+`--max-rows` (default 2000) bounds the scan.
+
+## Combine and uncombine
+
+Preview:
+
+```bash
+bitwave --quiet transaction combine TXN_ID_1 TXN_ID_2 \
+  --org ORG_ID --dry-run --json
+```
+
+Execute:
+
+```bash
+bitwave --quiet transaction combine TXN_ID_1 TXN_ID_2 \
+  --org ORG_ID --yes --json
+
+bitwave --quiet transaction uncombine PARENT_TXN_ID \
+  --org ORG_ID --yes --json
+```
+
+Several groups in one call (one request and one result per group; a refused
+group is reported and the rest still run):
+
+```bash
+bitwave --quiet transaction combine --group A1,A2 --group B1,B2 \
+  --org ORG_ID --yes --json
+```
+
+Endpoints:
+
+```text
+PUT /v3/orgs/{orgId}/transactions/combine     {"txnIds": [...]}
+PUT /v3/orgs/{orgId}/transactions/uncombine   {"txnIds": [...]}
+```
+
+Combine returns `combinedTransactionId`; the parent starts uncategorized and
+unreconciled. The server refuses reconciled, already-combined and closed-period
+transactions. Uncombine answers per parent; a rejected parent exits non-zero
+with `partial_failure`.
+
 ## Categorization discovery
 
 ```bash

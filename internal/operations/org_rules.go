@@ -10,6 +10,7 @@ import (
 	"time"
 
 	op "github.com/bitwave-io/bitwave-cli/internal/operation"
+	"github.com/bitwave-io/bitwave-cli/internal/orgreports"
 )
 
 type ruleSummary struct {
@@ -52,25 +53,45 @@ func newRunRulesCmd() *op.Definition {
 	var f transactionMutationFlags
 	cmd := &op.Definition{
 		Use:   "run",
-		Short: "Trigger an asynchronous organization rules run",
+		Short: "Start the organization's standard rules run (the app's Run rules)",
+		Long: `Start the organization's standard categorization rules run: every enabled
+rule over the transactions that still need categorization, the same run the
+Run rules button starts in the app. It needs no feature flag.
+
+The run is started through sync-coordinator (the organization's rules-workflow
+job) with overrideHeartbeat=true, so an explicit request starts a run even
+shortly after the last one finished. The run is asynchronous: the result
+carries the job run id and confirms the start, not the completion. Measure
+the effect by re-reading the uncategorized transaction count once the run
+has had time to finish.
+
+Use rule bulk-run for a run bounded to a date range; it is only available to
+organizations with parallel rule processing enabled.
+
+Use --dry-run to print the exact request. Use --yes to start the run.`,
 		RunE: func(cmd *op.Call, _ []string) error {
 			operation := "run-rules"
 			orgID, err := resolveReportOrg(cmd.Context(), f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
-			preview := map[string]any{"operation": "RunRulesForOrg", "variables": map[string]any{"orgId": orgID}}
+			preview := map[string]any{"method": "POST", "service": "sync-coordinator", "url": resolveCoreBaseURL(cmd.Context()) + orgreports.RulesRunInvokePath(orgID), "body": map[string]any{}}
 			if f.dryRun {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 			}
 			if !f.yes {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to trigger an organization-wide rules run without --yes"))
+				return mutationError(cmd, operation, f.jsonOutput, op.NewConfirmationRequired("refusing to start the organization's rules run without --yes (use --dry-run to preview)"))
 			}
 			client := newReportsClient(cmd.Context(), orgID)
-			if err := client.RunRules(cmd.Context(), orgID); err != nil {
-				return mutationError(cmd, operation, f.jsonOutput, err)
+			started, err := client.StartRulesRun(cmd.Context(), orgID)
+			if err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("start rules run: %w", err))
 			}
-			return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Result: map[string]any{"triggered": true, "asynchronous": true}})
+			envelope := mutationEnvelope{SchemaVersion: "1", Status: "success", Operation: operation, Organization: orgID, Request: preview, Result: map[string]any{
+				"triggered": true, "asynchronous": true, "jobRunId": started.JobRunID, "jobId": started.JobID, "message": started.Message,
+			}}
+			human := fmt.Sprintf("Rules run started for organization %s: job run %s (job %s). The run is asynchronous; re-read the uncategorized count once it has had time to finish.\n", orgID, started.JobRunID, started.JobID)
+			return outputMutation(cmd, f.jsonOutput, envelope, human)
 		},
 	}
 	addMutationFlags(cmd, &f)
@@ -82,12 +103,29 @@ func newBulkRunRulesCmd() *op.Definition {
 	var fromDate, toDate string
 	cmd := &op.Definition{
 		Use:   "bulk-run",
-		Short: "Run enabled rules over an inclusive date range",
+		Short: "Run enabled rules over an explicit, inclusive date range (needs parallel rule processing)",
+		Long: `Run the organization's enabled rules over an explicit date range, inclusive,
+in the organization's timezone. --from-date is required: the server splits the
+range into one unit of work per hour and enqueues all of them in one request,
+so an unbounded range (the organization's whole history) is a load hazard and
+is refused before anything is sent. --to-date defaults to today.
+
+Bulk Run is only available to organizations with parallel rule processing
+enabled; otherwise the API refuses it and the error says so. For the whole
+organization, or when the flag is missing, use rule run (the standard run,
+which needs no dates and no flag).
+
+The run is asynchronous and leaves no job to poll: measure its effect by
+re-reading the uncategorized count for the range once it has had time to
+finish. Use --dry-run to print the exact request. Use --yes to start the run.`,
 		RunE: func(cmd *op.Call, _ []string) error {
 			operation := "bulk-run-rules"
 			orgID, err := resolveReportOrg(cmd.Context(), f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
+			if strings.TrimSpace(fromDate) == "" {
+				return mutationError(cmd, operation, f.jsonOutput, errBulkRunNeedsFromDate)
 			}
 			client := newReportsClient(cmd.Context(), orgID)
 			org, err := client.Org(cmd.Context(), orgID)
@@ -102,9 +140,6 @@ func newBulkRunRulesCmd() *op.Definition {
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, fmt.Errorf("load organization timezone %q: %w", tz, err))
 			}
-			if strings.TrimSpace(fromDate) == "" {
-				fromDate = "2000-01-01"
-			}
 			if strings.TrimSpace(toDate) == "" {
 				toDate = time.Now().In(location).Format("2006-01-02")
 			}
@@ -117,7 +152,7 @@ func newBulkRunRulesCmd() *op.Definition {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: request})
 			}
 			if !f.yes {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to trigger Bulk Run without --yes"))
+				return mutationError(cmd, operation, f.jsonOutput, op.NewConfirmationRequired("refusing to trigger Bulk Run without --yes"))
 			}
 			if err := client.ExecuteBulkRules(cmd.Context(), orgID, after, before); err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
@@ -126,10 +161,15 @@ func newBulkRunRulesCmd() *op.Definition {
 		},
 	}
 	addMutationFlags(cmd, &f)
-	cmd.Flags().StringVar(&fromDate, "from-date", "", "Inclusive start date in the organization timezone (default 2000-01-01)")
+	cmd.Flags().StringVar(&fromDate, "from-date", "", "Inclusive start date in the organization timezone, YYYY-MM-DD (required: a bulk run must be bounded to a period; for the whole organization use rule run)")
 	cmd.Flags().StringVar(&toDate, "to-date", "", "Inclusive end date in the organization timezone (default current date)")
 	return cmd
 }
+
+// errBulkRunNeedsFromDate refuses a bulk run with no start date before
+// anything is sent. The old default, 2000-01-01, made api-svc enqueue one
+// unit of work per hour since then (about 235k) inside one request.
+var errBulkRunNeedsFromDate = op.NewValidationError("--from-date is required: a bulk run must be bounded to a period (YYYY-MM-DD); for the whole organization use rule run")
 
 func resolveRuleDates(fromDate, toDate, timezone string) (int64, int64, error) {
 	location, err := time.LoadLocation(timezone)
@@ -191,7 +231,7 @@ func newToggleRuleCmd(name string, disabled bool) *op.Definition {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: name + "-rule", Organization: orgID, DryRun: true, Request: preview})
 			}
 			if !f.yes {
-				return mutationError(cmd, name+"-rule", f.jsonOutput, errors.New("refusing to change a rule without --yes (use --dry-run to preview)"))
+				return mutationError(cmd, name+"-rule", f.jsonOutput, op.NewConfirmationRequired("refusing to change a rule without --yes (use --dry-run to preview)"))
 			}
 			client := newReportsClient(cmd.Context(), orgID)
 			if err := client.ToggleRule(cmd.Context(), orgID, args[0], disabled); err != nil {
@@ -220,7 +260,7 @@ func newDeleteRuleCmd() *op.Definition {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: "delete-rule", Organization: orgID, DryRun: true, Request: preview})
 			}
 			if !f.yes {
-				return mutationError(cmd, "delete-rule", f.jsonOutput, errors.New("refusing to permanently delete a rule without --yes (use --dry-run to preview)"))
+				return mutationError(cmd, "delete-rule", f.jsonOutput, op.NewConfirmationRequired("refusing to permanently delete a rule without --yes (use --dry-run to preview)"))
 			}
 			client := newReportsClient(cmd.Context(), orgID)
 			if err := client.DeleteRule(cmd.Context(), orgID, args[0]); err != nil {
@@ -353,7 +393,7 @@ func newCreateRawRuleCmd() *op.Definition {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 			}
 			if !f.yes {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to create an organization rule without --yes (use --dry-run to preview)"))
+				return mutationError(cmd, operation, f.jsonOutput, op.NewConfirmationRequired("refusing to create an organization rule without --yes (use --dry-run to preview)"))
 			}
 			client := newReportsClient(cmd.Context(), orgID)
 			result, err := client.CreateRule(cmd.Context(), orgID, rule)
@@ -391,7 +431,7 @@ func newUpdateRawRuleCmd() *op.Definition {
 				return writeJSON(cmd.OutOrStdout(), mutationEnvelope{SchemaVersion: "1", Status: "preview", Operation: operation, Organization: orgID, DryRun: true, Request: preview})
 			}
 			if !f.yes {
-				return mutationError(cmd, operation, f.jsonOutput, errors.New("refusing to update an organization rule without --yes"))
+				return mutationError(cmd, operation, f.jsonOutput, op.NewConfirmationRequired("refusing to update an organization rule without --yes"))
 			}
 			client := newReportsClient(cmd.Context(), orgID)
 			result, err := client.UpdateRule(cmd.Context(), orgID, args[0], rule)
