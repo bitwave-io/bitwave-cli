@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	op "github.com/bitwave-io/bitwave-cli/internal/operation"
 	"github.com/bitwave-io/bitwave-cli/internal/orgreports"
 )
 
@@ -71,6 +72,37 @@ func TestResolveWalletRejectsAmbiguousName(t *testing.T) {
 	_, err := resolveWalletRefs([]string{"Treasury"}, []orgreports.Wallet{{ID: "wallet-1", Name: "Treasury"}, {ID: "wallet-2", Name: "treasury"}})
 	if err == nil || !strings.Contains(err.Error(), "wallet-1, wallet-2") {
 		t.Fatalf("err = %v", err)
+	}
+	var validation *op.ValidationError
+	if !errors.As(err, &validation) || strings.Contains(validation.Error(), "wallet-1") {
+		t.Fatalf("the typed part must be static, without the candidate ids: %v", err)
+	}
+}
+
+// A hosted adapter (actions-svc for Wavie) shows its caller only a typed
+// ValidationError's own text and drops every wrapper: an unknown wallet
+// reference, a label copied from a page, say, must therefore be typed, with
+// the reference itself only in the wrapper a person at a terminal sees.
+func TestResolveWalletAndSubsidiaryNotFoundAreTypedValidationErrors(t *testing.T) {
+	_, err := resolveWalletRefs([]string{"TempSigner P"}, []orgreports.Wallet{{ID: "wallet-1", Name: "TempSigner P-chain 01"}})
+	var validation *op.ValidationError
+	if !errors.As(err, &validation) {
+		t.Fatalf("wallet not found must be a ValidationError, got %T: %v", err, err)
+	}
+	if !strings.Contains(validation.Error(), "wallet id or a wallet's exact name") || strings.Contains(validation.Error(), "TempSigner") {
+		t.Fatalf("the typed text must say what --wallet takes and never echo the reference: %q", validation.Error())
+	}
+	if !strings.Contains(err.Error(), `"TempSigner P"`) {
+		t.Fatalf("the terminal text keeps the reference: %v", err)
+	}
+
+	_, err = resolveSubsidiaryRefs([]string{"Nowhere"}, []orgreports.Subsidiary{{ID: "sub-1", Name: "Parent"}})
+	if !errors.As(err, &validation) || strings.Contains(validation.Error(), "Nowhere") {
+		t.Fatalf("subsidiary not found must be a static ValidationError, got %v", err)
+	}
+	_, err = resolveSubsidiaryRefs([]string{"Parent"}, []orgreports.Subsidiary{{ID: "sub-1", Name: "Parent"}, {ID: "sub-2", Name: "parent"}})
+	if !errors.As(err, &validation) || !strings.Contains(err.Error(), "sub-1, sub-2") {
+		t.Fatalf("an ambiguous subsidiary is typed and still lists the ids for the terminal: %v", err)
 	}
 }
 

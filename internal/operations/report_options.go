@@ -353,16 +353,28 @@ func resolveWalletRefs(refs []string, wallets []orgreports.Wallet) ([]string, er
 				found = matches[0]
 			}
 			if len(matches) > 1 {
-				return nil, fmt.Errorf("wallet name %q is ambiguous; choose one of these IDs: %s", ref, strings.Join(matches, ", "))
+				return nil, fmt.Errorf("%w: %q matches %s", errWalletAmbiguous, ref, strings.Join(matches, ", "))
 			}
 		}
 		if found == "" {
-			return nil, fmt.Errorf("wallet %q not found; run `bitwave report options transaction-export --json`", ref)
+			return nil, fmt.Errorf("%w: %q", errWalletNotFound, ref)
 		}
 		ids = append(ids, found)
 	}
 	return ids, nil
 }
+
+// The typed, static part of a wallet reference failure is what a hosted
+// adapter may show its caller (an agent that passed a label from a page, say);
+// the wrapper adds the reference and the candidate ids for a person at a
+// terminal and is dropped by the adapter, so neither ever echoes input there.
+var (
+	errWalletNotFound  = op.NewValidationError("wallet not found: --wallet takes a wallet id or a wallet's exact name; list the organization's wallets with `bitwave report options transaction-export --json`")
+	errWalletAmbiguous = op.NewValidationError("wallet name matches more than one wallet; pass the wallet id instead (`bitwave report options transaction-export --json` lists them)")
+
+	errSubsidiaryNotFound  = op.NewValidationError("subsidiary not found: --subsidiary takes a subsidiary id or its exact name; list them with `bitwave report options transaction-export --json`")
+	errSubsidiaryAmbiguous = op.NewValidationError("subsidiary name matches more than one subsidiary; pass the subsidiary id instead (`bitwave report options transaction-export --json` lists them)")
+)
 
 func resolveSubsidiaryRefs(refs []string, subsidiaries []orgreports.Subsidiary) ([]string, error) {
 	if len(refs) == 0 {
@@ -388,11 +400,11 @@ func resolveSubsidiaryRefs(refs []string, subsidiaries []orgreports.Subsidiary) 
 				found = matches[0]
 			}
 			if len(matches) > 1 {
-				return nil, fmt.Errorf("subsidiary name %q is ambiguous; choose one of these IDs: %s", ref, strings.Join(matches, ", "))
+				return nil, fmt.Errorf("%w: %q matches %s", errSubsidiaryAmbiguous, ref, strings.Join(matches, ", "))
 			}
 		}
 		if found == "" {
-			return nil, fmt.Errorf("subsidiary %q not found; run `bitwave report options transaction-export --json`", ref)
+			return nil, fmt.Errorf("%w: %q", errSubsidiaryNotFound, ref)
 		}
 		ids = append(ids, found)
 	}
