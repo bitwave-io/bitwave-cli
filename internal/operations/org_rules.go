@@ -422,6 +422,9 @@ func newUpdateRawRuleCmd() *op.Definition {
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
 			}
+			if err := requireRuleDisabledField(rule); err != nil {
+				return mutationError(cmd, operation, f.jsonOutput, err)
+			}
 			orgID, err := resolveReportOrg(cmd.Context(), f.orgID)
 			if err != nil {
 				return mutationError(cmd, operation, f.jsonOutput, err)
@@ -495,6 +498,23 @@ func readRuleObject(ctx context.Context, path string, stdin io.Reader) (json.Raw
 	return json.RawMessage(data), nil
 }
 
+// requireRuleDisabledField refuses an update whose rule omits `disabled`. The
+// Rule input requires it and the server answers 400 without it; an update
+// cannot default it, because either value could switch the rule on or off.
+func requireRuleDisabledField(rule json.RawMessage) error {
+	var root map[string]map[string]json.RawMessage
+	if err := json.Unmarshal(rule, &root); err != nil {
+		return op.NewValidationError("rule input must be a JSON object holding one rule variant object")
+	}
+	for variant, object := range root {
+		var disabled bool
+		if raw, ok := object["disabled"]; !ok || json.Unmarshal(raw, &disabled) != nil {
+			return op.NewValidationError(fmt.Sprintf("rule variant %q requires a boolean `disabled`: the update replaces the whole rule, so set it to the rule's intended state (read it with `bitwave rule get`)", variant))
+		}
+	}
+	return nil
+}
+
 func prepareRuleObject(rule json.RawMessage, allowEnabled bool) (json.RawMessage, error) {
 	var root map[string]any
 	if err := json.Unmarshal(rule, &root); err != nil {
@@ -523,6 +543,10 @@ func prepareRuleObject(rule json.RawMessage, allowEnabled bool) (json.RawMessage
 				return nil, errors.New("input contains an enabled rule; pass --enabled explicitly or set `disabled` to true")
 			}
 			object["disabled"] = true
+		} else if !present {
+			// The Rule input requires `disabled`; without it the server answers
+			// 400. --enabled asks for an enabled rule, so say so explicitly.
+			object["disabled"] = false
 		}
 		root[variant] = object
 	}
