@@ -99,7 +99,9 @@ func New(baseURL string, tokenResolver func() (string, error)) *Client {
 	if parsed, err := url.Parse(baseURL); err == nil && parsed.Hostname() == "api.bitwave.io" {
 		api2URL = "https://api2.bitwave.io"
 		rulesQueryURL = "https://api4.bitwave.io/graphql-reports"
-		rulesMutationURL = "https://api-app.bitwave.io/graphql"
+		// Mutations stay on the gateway (baseURL + /graphql): it routes each one to
+		// the org's cluster by variables.orgId. api-app.bitwave.io was the Cloud Run
+		// bitwave-api service, which only held us-1 orgs and is being retired.
 	}
 	return &Client{
 		BaseURL:          baseURL,

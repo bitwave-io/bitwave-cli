@@ -46,7 +46,7 @@ func TestRawEndpointSelectsServiceOrigins(t *testing.T) {
 	tests := map[string]string{
 		APIServiceCore:     "https://api.bitwave.io/v3/orgs/one",
 		APIServiceAPI2:     "https://api2.bitwave.io/v2/orgs/one/rate-tables",
-		APIServiceApp:      "https://api-app.bitwave.io/graphql",
+		APIServiceApp:      "https://api.bitwave.io/graphql",
 		APIServicePlatform: "https://api4.bitwave.io/orgs/one",
 		APIServiceReports:  "https://api4.bitwave.io/graphql-reports",
 		// The retired transactions host must never be dialed; the gateway serves its paths.

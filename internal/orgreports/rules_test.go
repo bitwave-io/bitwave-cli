@@ -128,7 +128,7 @@ func TestProductionRuleEndpoints(t *testing.T) {
 	if client.RulesQueryURL != "https://api4.bitwave.io/graphql-reports" {
 		t.Fatalf("query URL = %s", client.RulesQueryURL)
 	}
-	if client.RulesMutationURL != "https://api-app.bitwave.io/graphql" {
+	if client.RulesMutationURL != "https://api.bitwave.io/graphql" {
 		t.Fatalf("mutation URL = %s", client.RulesMutationURL)
 	}
 }

@@ -65,7 +65,7 @@ Backend operations:
 
 ```text
 POST https://api4.bitwave.io/graphql-reports  # list
-POST https://api-app.bitwave.io/graphql       # create/update/status/delete
+POST https://api.bitwave.io/graphql           # create/update/status/delete
 ```
 
 ## Validate and execute
