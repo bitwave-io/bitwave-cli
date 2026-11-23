@@ -1,5 +1,6 @@
 // Package shares is a thin HTTP client for the cloud ledger journal-share
-// endpoints under /v1/workspaces/{workspaceId}/journals/{journalId}/shares.
+// endpoints under
+// /v1/orgs/{orgId}/workspaces/{workspaceId}/journals/{journalId}/shares.
 // It backs the bitwave `journal share` subcommands.
 package shares
 
@@ -7,9 +8,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/bitwave-io/bitwave-cli/internal/apierr"
@@ -44,22 +47,44 @@ type CreateResponse struct {
 
 type Client struct {
 	BaseURL       string
+	OrgId         string
 	WorkspaceId   string
 	TokenResolver func() (string, error)
 	HTTPClient    *http.Client
 }
 
-func New(baseURL, workspaceId string, tokenResolver func() (string, error)) *Client {
+func New(baseURL, orgId, workspaceId string, tokenResolver func() (string, error)) *Client {
 	return &Client{
 		BaseURL:       baseURL,
+		OrgId:         orgId,
 		WorkspaceId:   workspaceId,
 		TokenResolver: tokenResolver,
 		HTTPClient:    &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
+// sharesPath builds the journal's shares path inside the client's org and
+// workspace, followed by the escaped parts.
+func (c *Client) sharesPath(journalId string, parts ...string) (string, error) {
+	if c.OrgId == "" {
+		return "", errors.New("share requests need an org id")
+	}
+	if c.WorkspaceId == "" {
+		return "", errors.New("share requests need a workspace id")
+	}
+	path := "/v1/orgs/" + url.PathEscape(c.OrgId) + "/workspaces/" + url.PathEscape(c.WorkspaceId) +
+		"/journals/" + url.PathEscape(journalId) + "/shares"
+	for _, part := range parts {
+		path += "/" + url.PathEscape(part)
+	}
+	return path, nil
+}
+
 func (c *Client) Create(ctx context.Context, journalId string, req CreateRequest) (*CreateResponse, error) {
-	path := fmt.Sprintf("/v1/workspaces/%s/journals/%s/shares", c.WorkspaceId, journalId)
+	path, err := c.sharesPath(journalId)
+	if err != nil {
+		return nil, err
+	}
 	body, err := c.do(ctx, http.MethodPost, path, req)
 	if err != nil {
 		return nil, err
@@ -72,7 +97,10 @@ func (c *Client) Create(ctx context.Context, journalId string, req CreateRequest
 }
 
 func (c *Client) List(ctx context.Context, journalId string) ([]Share, error) {
-	path := fmt.Sprintf("/v1/workspaces/%s/journals/%s/shares", c.WorkspaceId, journalId)
+	path, err := c.sharesPath(journalId)
+	if err != nil {
+		return nil, err
+	}
 	body, err := c.do(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -85,7 +113,10 @@ func (c *Client) List(ctx context.Context, journalId string) ([]Share, error) {
 }
 
 func (c *Client) Revoke(ctx context.Context, journalId, shareId string) (*Share, error) {
-	path := fmt.Sprintf("/v1/workspaces/%s/journals/%s/shares/%s/revoke", c.WorkspaceId, journalId, shareId)
+	path, err := c.sharesPath(journalId, shareId, "revoke")
+	if err != nil {
+		return nil, err
+	}
 	body, err := c.do(ctx, http.MethodPost, path, nil)
 	if err != nil {
 		return nil, err

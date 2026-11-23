@@ -19,12 +19,14 @@ import (
 )
 
 // Cloud is the cloud-backed implementation of Store. It uses gl-svc's current
-// workspace-scoped /v1 surface. Do not route cloud operations through the
-// accounting SDK's legacy /api/v1/orgs/{org}/ledger/workspaces surface: the
-// gateway no longer registers those item routes.
+// /v1/orgs/{orgId}/workspaces/{workspaceId} surface. Do not route cloud
+// operations through the accounting SDK's legacy
+// /api/v1/orgs/{org}/ledger/workspaces surface: the gateway no longer
+// registers those item routes.
 type Cloud struct {
 	workspaces *workspaces.Client
 	baseURL    string
+	orgId      string
 	wsId       string
 	token      func() (string, error)
 	httpClient *http.Client
@@ -35,6 +37,7 @@ func NewCloud(baseURL, orgId, workspaceId string, tokenResolver func() (string, 
 	return &Cloud{
 		workspaces: workspaces.New(baseURL, orgId, tokenResolver),
 		baseURL:    strings.TrimRight(baseURL, "/"),
+		orgId:      orgId,
 		wsId:       workspaceId,
 		token:      tokenResolver,
 		httpClient: &http.Client{Timeout: 60 * time.Second},
@@ -190,7 +193,7 @@ func (c *Cloud) Import(ctx context.Context, journalId string, p *model.Project) 
 }
 
 func (c *Cloud) workspacePath(parts ...string) string {
-	path := "/v1/workspaces/" + url.PathEscape(c.wsId)
+	path := "/v1/orgs/" + url.PathEscape(c.orgId) + "/workspaces/" + url.PathEscape(c.wsId)
 	for _, part := range parts {
 		path += "/" + url.PathEscape(part)
 	}
@@ -214,6 +217,9 @@ func (c *Cloud) postURL(ctx context.Context, requestURL string, body, out any) e
 }
 
 func (c *Cloud) do(ctx context.Context, method, requestURL string, body, out any) error {
+	if c.orgId == "" {
+		return workspaces.ErrMissingOrg
+	}
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)

@@ -77,9 +77,9 @@ func TestTerminalCloudWorkspaceUsesBoundOrgAndMatchingToken(t *testing.T) {
 					t.Error("workspace request did not use the bound organization's token")
 				}
 				switch r.URL.Path {
-				case "/v1/workspaces/ws-bound/ledger/journals":
+				case "/v1/orgs/workspace-org/workspaces/ws-bound/ledger/journals":
 					fmt.Fprint(w, `[{"id":"journal-bound","name":"bound journal"}]`)
-				case "/v1/workspaces/ws-bound":
+				case "/v1/orgs/workspace-org/workspaces/ws-bound":
 					fmt.Fprint(w, `{"id":"ws-bound","orgId":"workspace-org","url":"https://ledger.example/workspace"}`)
 				default:
 					t.Errorf("unexpected ledger path: %s", r.URL.Path)
@@ -161,5 +161,42 @@ func TestTerminalWorkspaceSelectionDoesNotOverridePlatformOrCreationOrg(t *testi
 	opts, err := terminalSDKOptionsForOperation(cmd, d)
 	if err != nil || opts.OrganizationID != "explicit-org" {
 		t.Fatalf("explicit platform org changed: %+v %v", opts, err)
+	}
+}
+
+func TestTerminalCloudWorkspaceWithoutOrgFailsWithFixBeforeAnyRequest(t *testing.T) {
+	for _, activeOrg := range []string{"", "active-org"} {
+		t.Run("active="+activeOrg, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("BITWAVE_ORG_ID", activeOrg)
+			t.Setenv("BITWAVE_TOKEN", "test-token")
+			t.Setenv("BITWAVE_AGENT_TOKEN", "")
+			dir := setupWorkspace(t)
+			if err := config.Save(dir, &config.Config{Mode: config.ModeCloud, WorkspaceId: "ws-legacy"}); err != nil {
+				t.Fatal(err)
+			}
+			ledger := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				t.Errorf("org-less workspace reached the ledger: %s %s", r.Method, r.URL.Path)
+				http.NotFound(w, r)
+			}))
+			defer ledger.Close()
+			t.Setenv("BITWAVE_BASE_URL_GL", ledger.URL)
+			for _, path := range [][]string{{"journal", "list"}, {"workspace", "url"}, {"bal"}, {"shares", "list"}} {
+				cmd := sdkCommand(sdkDefinition(path...))
+				cmd.SetArgs(nil)
+				var out bytes.Buffer
+				cmd.SetOut(&out)
+				cmd.SetErr(&out)
+				err := cmd.ExecuteContext(context.Background())
+				if err == nil {
+					t.Fatalf("%v: expected an error for a cloud workspace without org_id", path)
+				}
+				for _, want := range []string{"org_id", "ws-legacy", "bitwave org use", "bitwave workspace use ws-legacy"} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("%v: error %q does not mention %q", path, err, want)
+					}
+				}
+			}
+		})
 	}
 }

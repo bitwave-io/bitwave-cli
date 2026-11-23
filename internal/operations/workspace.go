@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -31,7 +32,8 @@ later commands (bitwave je, bitwave bal, ...) target the right workspace.`,
 }
 
 // newWorkspaceURLCmd prints the browser URL for the cwd's bound cloud
-// workspace, fetched fresh from GET /v1/workspaces/{id}.
+// workspace, fetched fresh from GET /v1/orgs/{orgId}/workspaces/{workspaceId}
+// using the org recorded in .bitwave.toml.
 func newWorkspaceURLCmd() *operation.Definition {
 	return &operation.Definition{
 		Use:   "url",
@@ -50,11 +52,7 @@ workspaces have no online URL.`,
 			if cfg.WorkspaceId == "" {
 				return fmt.Errorf("no workspace_id in .bitwave.toml — run `bitwave workspace use`")
 			}
-			active, err := requireActiveOrg(cmd.Context())
-			if err != nil {
-				return err
-			}
-			c := newWorkspaceClient(cmd.Context(), active.OrgID)
+			c := newWorkspaceClient(cmd.Context(), cfg.OrgId)
 			w, err := c.GetWorkspace(cfg.WorkspaceId)
 			if err != nil {
 				return fmt.Errorf("get workspace: %w", err)
@@ -239,16 +237,34 @@ which creates the workspace and binds the directory in one step.`,
 	return cmd
 }
 
-// loadCwdConfig finds the nearest .bitwave.toml from cwd and returns it.
+// loadCwdConfig finds the nearest .bitwave.toml from cwd and returns it. A
+// cloud workspace must record its org: the workspace ledger only serves a
+// workspace inside its org.
 func loadCwdConfig(ctx context.Context) (*config.Config, string, error) {
 	cfg, dir, err := readCwdConfig(ctx)
 	if err != nil {
 		return nil, dir, err
 	}
+	if cfg.Mode == config.ModeCloud && cfg.OrgId == "" {
+		return nil, dir, missingWorkspaceOrgError(cfg, dir)
+	}
 	if cfg.Mode == config.ModeCloud && cfg.OrgId != operation.RuntimeFrom(ctx).Options.OrganizationID {
 		return nil, dir, fmt.Errorf("cloud workspace organization %q does not match request organization %q", cfg.OrgId, operation.RuntimeFrom(ctx).Options.OrganizationID)
 	}
 	return cfg, dir, nil
+}
+
+// missingWorkspaceOrgError tells the user how to record the org of a cloud
+// workspace bound without one.
+func missingWorkspaceOrgError(cfg *config.Config, dir string) error {
+	marker := filepath.Join(dir, config.FileName)
+	use := "bitwave workspace use"
+	if cfg.WorkspaceId != "" {
+		use += " " + cfg.WorkspaceId
+	}
+	return fmt.Errorf("cloud workspace %s in %s has no org_id, and the workspace ledger only serves a workspace inside its org; "+
+		"rebind it with `bitwave org use <orgId>` then `%s`, or add org_id = \"<orgId>\" to %s",
+		cfg.WorkspaceId, marker, use, marker)
 }
 
 // readCwdConfig reads only the local marker through the request filesystem.
