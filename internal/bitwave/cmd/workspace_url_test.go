@@ -57,7 +57,7 @@ func TestWorkspaceURL_CloudMode_PrintsURL(t *testing.T) {
 	if execErr != nil {
 		t.Fatalf("execute: %v\n%s", execErr, errBuf.String())
 	}
-	if gotPath != "/v1/workspaces/ws-1" {
+	if gotPath != "/v1/orgs/org-1/workspaces/ws-1" {
 		t.Errorf("path: %s", gotPath)
 	}
 	if got := strings.TrimSpace(out.String()); got != "https://api.bitwave.io/ui/workspaces/ws-1" {

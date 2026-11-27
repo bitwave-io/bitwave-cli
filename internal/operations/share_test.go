@@ -64,10 +64,11 @@ func TestJournalShare_CloudMode_OmitsSnapshot(t *testing.T) {
 	}
 
 	var gotBody map[string]any
+	var gotSharePath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Cloud store may probe /v1/orgs/{org}/journals/{id} for EnsureJournal.
 		// Return a minimal stub response for any GET; for the share POST capture the body.
 		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/shares") {
+			gotSharePath = r.URL.Path
 			body, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(body, &gotBody)
 			_, _ = w.Write([]byte(`{
@@ -79,8 +80,8 @@ func TestJournalShare_CloudMode_OmitsSnapshot(t *testing.T) {
 			}`))
 			return
 		}
-		// Stub the journals listing (GET /v1/workspaces/{id}/ledger/journals).
-		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/ledger/journals") {
+		// Stub the journals listing (GET /v1/orgs/{orgId}/workspaces/{workspaceId}/ledger/journals).
+		if r.Method == http.MethodGet && r.URL.Path == "/v1/orgs/org-1/workspaces/ws-1/ledger/journals" {
 			_, _ = w.Write([]byte(`[{"id":"default","name":"default"}]`))
 			return
 		}
@@ -103,6 +104,9 @@ func TestJournalShare_CloudMode_OmitsSnapshot(t *testing.T) {
 
 	if gotBody == nil {
 		t.Fatal("share POST not received")
+	}
+	if gotSharePath != "/v1/orgs/org-1/workspaces/ws-1/journals/default/shares" {
+		t.Errorf("share path: %s", gotSharePath)
 	}
 	if _, hasSnapshot := gotBody["snapshot"]; hasSnapshot {
 		t.Errorf("cloud mode should not include snapshot, got: %v", gotBody["snapshot"])

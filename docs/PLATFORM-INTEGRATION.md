@@ -8,7 +8,7 @@ conflate them:
 | Service | `api-svc` | `gl-svc` |
 | Data model | Transactions, categorization, inventory views / lots / cost basis, report runs, wallets, connections | Workspaces → journals → plain-text-compatible journal entries (hledger/ledger/beancount) |
 | Auth | **Client id / client key** → 1-hour Bearer JWT (see below); also user JWTs from the web app | OAuth PKCE session (auth-svc), agent tokens, `BITWAVE_TOKEN` |
-| Routes | `/txns/…`, `/v2/orgs/{orgId}/report-runs`, `/orgs/{orgId}/inventory-views`, `/v3/orgs/{orgId}/transactions`, … | `/api/v1/orgs/{orgId}/ledger/workspaces/…`, `/v1/workspaces/…` |
+| Routes | `/txns/…`, `/v2/orgs/{orgId}/report-runs`, `/orgs/{orgId}/inventory-views`, `/v3/orgs/{orgId}/transactions`, … | `/api/v1/orgs/{orgId}/ledger/workspaces/…`, `/v1/orgs/{orgId}/workspaces/…` |
 | CLI today | **Not integrated at all** | Everything the CLI calls "cloud mode" (`init --cloud`, `je`, `bal`, `migrate`, `share`) |
 
 Everything in this CLI that currently says "cloud" — cloud workspaces,

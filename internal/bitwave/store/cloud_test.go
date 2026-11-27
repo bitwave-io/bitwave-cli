@@ -21,18 +21,18 @@ func TestCloudProjectUsesCurrentWorkspaceRoutes(t *testing.T) {
 		seen[r.URL.Path] = true
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/v1/workspaces/ws-1":
+		case "/v1/orgs/org-1/workspaces/ws-1":
 			_, _ = w.Write([]byte(`{"id":"ws-1","name":"Cloud Books","baseCurrency":"USD"}`))
-		case "/v1/workspaces/ws-1/ledger/accounts":
+		case "/v1/orgs/org-1/workspaces/ws-1/ledger/accounts":
 			_, _ = w.Write([]byte(`[
 				{"id":"a-cash","name":"Assets:Cash","type":"ASSET"},
 				{"id":"a-sales","name":"Income:Sales","type":"INCOME"}
 			]`))
-		case "/v1/workspaces/ws-1/ledger/commodities":
+		case "/v1/orgs/org-1/workspaces/ws-1/ledger/commodities":
 			_, _ = w.Write([]byte(`[{"symbol":"USD","default":true}]`))
-		case "/v1/workspaces/ws-1/ledger/entries":
+		case "/v1/orgs/org-1/workspaces/ws-1/ledger/entries":
 			_, _ = w.Write([]byte(`[{"id":"e-1","entryDate":"2026-06-30","payee":"Customer","status":"CLEARED","postings":[{"accountId":"a-cash","quantity":"100","asset":"USD"},{"accountId":"a-sales","quantity":"-100","asset":"USD"}]}]`))
-		case "/v1/workspaces/ws-1/ledger/prices":
+		case "/v1/orgs/org-1/workspaces/ws-1/ledger/prices":
 			_, _ = w.Write([]byte(`[{"priceDate":"2026-06-30","asset":"BTC","quoteCurrency":"USD","price":"60000"}]`))
 		default:
 			t.Fatalf("unexpected route: %s", r.URL.Path)
@@ -55,26 +55,90 @@ func TestCloudProjectUsesCurrentWorkspaceRoutes(t *testing.T) {
 		t.Fatalf("posting account = %q, want Assets:Cash", got)
 	}
 	for _, path := range []string{
-		"/v1/workspaces/ws-1",
-		"/v1/workspaces/ws-1/ledger/accounts",
-		"/v1/workspaces/ws-1/ledger/commodities",
-		"/v1/workspaces/ws-1/ledger/entries",
-		"/v1/workspaces/ws-1/ledger/prices",
+		"/v1/orgs/org-1/workspaces/ws-1",
+		"/v1/orgs/org-1/workspaces/ws-1/ledger/accounts",
+		"/v1/orgs/org-1/workspaces/ws-1/ledger/commodities",
+		"/v1/orgs/org-1/workspaces/ws-1/ledger/entries",
+		"/v1/orgs/org-1/workspaces/ws-1/ledger/prices",
 	} {
 		if !seen[path] {
 			t.Errorf("route %s was not called", path)
 		}
 	}
 	for path := range seen {
-		if strings.HasPrefix(path, "/api/v1/orgs/") {
+		if strings.HasPrefix(path, "/api/v1/orgs/") || strings.HasPrefix(path, "/v1/workspaces") {
 			t.Errorf("legacy route was called: %s", path)
 		}
 	}
 }
 
+func TestCloudJournalsUseOrgScopedRoutes(t *testing.T) {
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/orgs/org-1/workspaces/ws-1/ledger/journals":
+			_, _ = w.Write([]byte(`[{"id":"default","name":"Default"}]`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/orgs/org-1/workspaces/ws-1/ledger/journals":
+			_, _ = w.Write([]byte(`{"id":"ops"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/orgs/org-1/workspaces/ws-1/ledger/journals/ops/entries":
+			_, _ = w.Write([]byte(`{"id":"e-1"}`))
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/orgs/org-1/workspaces/ws-1/ledger/import":
+			if r.URL.Query().Get("journalId") != "ops" {
+				t.Errorf("import journalId = %q", r.URL.Query().Get("journalId"))
+			}
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected route: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	cloud := NewCloud(server.URL, "org-1", "ws-1", func() (string, error) { return "test-token", nil })
+	ctx := context.Background()
+	if ids, err := cloud.Journals(ctx); err != nil || len(ids) != 1 || ids[0] != "default" {
+		t.Fatalf("Journals = %v, %v", ids, err)
+	}
+	if err := cloud.EnsureJournal(ctx, "ops"); err != nil {
+		t.Fatalf("EnsureJournal: %v", err)
+	}
+	if _, err := cloud.AddEntry(ctx, "ops", model.Entry{}); err != nil {
+		t.Fatalf("AddEntry: %v", err)
+	}
+	if err := cloud.Import(ctx, "ops", &model.Project{BaseCurrency: "USD"}); err != nil {
+		t.Fatalf("Import: %v", err)
+	}
+	if len(requests) != 5 {
+		t.Fatalf("requests = %v", requests)
+	}
+}
+
+func TestCloudWithoutOrgRefusesBeforeAnyRequest(t *testing.T) {
+	called := false
+	server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { called = true }))
+	defer server.Close()
+
+	cloud := NewCloud(server.URL, "", "ws-1", func() (string, error) { return "test-token", nil })
+	ctx := context.Background()
+	if _, err := cloud.Project(ctx); err == nil {
+		t.Error("Project: expected a missing-org error")
+	}
+	if _, err := cloud.Journals(ctx); err == nil {
+		t.Error("Journals: expected a missing-org error")
+	}
+	if err := cloud.AddAccount(ctx, model.Account{Name: "Assets:Cash"}); err == nil {
+		t.Error("AddAccount: expected a missing-org error")
+	}
+	if called {
+		t.Fatal("a workspace request without an org reached the server")
+	}
+}
+
 func TestCloudAddAccountUsesCurrentWorkspaceRoute(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/workspaces/ws-1/ledger/accounts" {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/orgs/org-1/workspaces/ws-1/ledger/accounts" {
 			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.Path)
 		}
 		var body accountDTO

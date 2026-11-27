@@ -1,6 +1,6 @@
 // Package workspaces is a thin HTTP client for the cloud ledger workspace
-// + journal endpoints (workspace-scoped /v1/workspaces surface, with the
-// org-scoped /v1/orgs/{orgId}/workspaces read views). It backs the bitwave
+// + journal endpoints. Every workspace is addressed inside its org:
+// /v1/orgs/{orgId}/workspaces[/{workspaceId}/...]. It backs the bitwave
 // workspace + journal commands.
 package workspaces
 
@@ -8,9 +8,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/bitwave-io/bitwave-cli/internal/apierr"
@@ -34,7 +36,12 @@ type Journal struct {
 	Description string `json:"description"`
 }
 
-// Client wraps the cloud ledger workspace + journal HTTP endpoints.
+// ErrMissingOrg is returned when a workspace request is attempted without an
+// org: the workspace ledger only serves workspaces inside their org.
+var ErrMissingOrg = errors.New("workspace ledger requests need an org id")
+
+// Client wraps the cloud ledger workspace + journal HTTP endpoints. OrgId is
+// the org every request is addressed to.
 type Client struct {
 	BaseURL       string
 	OrgId         string
@@ -91,6 +98,18 @@ func (c *Client) do(method, path string, body any) ([]byte, error) {
 	return data, nil
 }
 
+// orgPath builds /v1/orgs/{orgId}/workspaces followed by the escaped parts.
+func (c *Client) orgPath(parts ...string) (string, error) {
+	if c.OrgId == "" {
+		return "", ErrMissingOrg
+	}
+	path := "/v1/orgs/" + url.PathEscape(c.OrgId) + "/workspaces"
+	for _, part := range parts {
+		path += "/" + url.PathEscape(part)
+	}
+	return path, nil
+}
+
 // parseList accepts both a bare JSON array and a `{"<key>": [...]}` wrapper,
 // so the client tolerates either response framing.
 func parseList[T any](data []byte, key string) ([]T, error) {
@@ -111,7 +130,10 @@ func parseList[T any](data []byte, key string) ([]T, error) {
 
 // ListWorkspaces returns all workspaces in the active org.
 func (c *Client) ListWorkspaces() ([]Workspace, error) {
-	path := fmt.Sprintf("/v1/orgs/%s/workspaces", c.OrgId)
+	path, err := c.orgPath()
+	if err != nil {
+		return nil, err
+	}
 	data, err := c.do("GET", path, nil)
 	if err != nil {
 		return nil, err
@@ -119,11 +141,10 @@ func (c *Client) ListWorkspaces() ([]Workspace, error) {
 	return parseList[Workspace](data, "workspaces")
 }
 
-// CreateWorkspaceRequest is the body for POST /v1/workspaces.
+// CreateWorkspaceRequest is the body for POST /v1/orgs/{orgId}/workspaces.
 type CreateWorkspaceRequest struct {
 	Name         string `json:"name"`
 	BaseCurrency string `json:"baseCurrency"`
-	OrgId        string `json:"orgId,omitempty"`
 	// NotifyEmail, when set, asks the server to email the creator a link to
 	// the new workspace. Omitted from the request when empty (e.g. agent
 	// identities with no resolvable email).
@@ -137,12 +158,14 @@ type CreateWorkspaceResult struct {
 	URL string
 }
 
-// CreateWorkspace creates a new workspace and returns its id and URL.
+// CreateWorkspace creates a new workspace in the client's org and returns its
+// id and URL.
 func (c *Client) CreateWorkspace(req CreateWorkspaceRequest) (CreateWorkspaceResult, error) {
-	if req.OrgId == "" {
-		req.OrgId = c.OrgId
+	path, err := c.orgPath()
+	if err != nil {
+		return CreateWorkspaceResult{}, err
 	}
-	data, err := c.do("POST", "/v1/workspaces", req)
+	data, err := c.do("POST", path, req)
 	if err != nil {
 		return CreateWorkspaceResult{}, err
 	}
@@ -156,9 +179,13 @@ func (c *Client) CreateWorkspace(req CreateWorkspaceRequest) (CreateWorkspaceRes
 	return CreateWorkspaceResult{Id: resp.Id, URL: resp.URL}, nil
 }
 
-// GetWorkspace fetches a single workspace by id via GET /v1/workspaces/{id}.
+// GetWorkspace fetches a single workspace via
+// GET /v1/orgs/{orgId}/workspaces/{workspaceId}.
 func (c *Client) GetWorkspace(workspaceId string) (Workspace, error) {
-	path := fmt.Sprintf("/v1/workspaces/%s", workspaceId)
+	path, err := c.orgPath(workspaceId)
+	if err != nil {
+		return Workspace{}, err
+	}
 	data, err := c.do("GET", path, nil)
 	if err != nil {
 		return Workspace{}, err
@@ -172,7 +199,10 @@ func (c *Client) GetWorkspace(workspaceId string) (Workspace, error) {
 
 // ListJournals returns the journals in a workspace.
 func (c *Client) ListJournals(workspaceId string) ([]Journal, error) {
-	path := fmt.Sprintf("/v1/workspaces/%s/ledger/journals", workspaceId)
+	path, err := c.orgPath(workspaceId, "ledger", "journals")
+	if err != nil {
+		return nil, err
+	}
 	data, err := c.do("GET", path, nil)
 	if err != nil {
 		return nil, err
@@ -189,7 +219,10 @@ type CreateJournalRequest struct {
 
 // CreateJournal creates a journal and returns its id.
 func (c *Client) CreateJournal(workspaceId string, req CreateJournalRequest) (string, error) {
-	path := fmt.Sprintf("/v1/workspaces/%s/ledger/journals", workspaceId)
+	path, err := c.orgPath(workspaceId, "ledger", "journals")
+	if err != nil {
+		return "", err
+	}
 	data, err := c.do("POST", path, req)
 	if err != nil {
 		return "", err

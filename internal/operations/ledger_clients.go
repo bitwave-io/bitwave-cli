@@ -25,7 +25,7 @@ func newCloudStore(ctx context.Context, orgID, workspaceID string) *store.Cloud 
 }
 
 func newShareClient(ctx context.Context, orgID, workspaceID string) *shares.Client {
-	c := shares.New(resolveGLBaseURL(ctx), workspaceID, makeOrgTokenResolver(ctx, orgID))
+	c := shares.New(resolveGLBaseURL(ctx), orgID, workspaceID, makeOrgTokenResolver(ctx, orgID))
 	if client := operation.RuntimeFrom(ctx).Options.HTTPClient; client != nil {
 		c.HTTPClient = client
 	}
